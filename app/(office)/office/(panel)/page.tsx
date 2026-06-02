@@ -2,14 +2,17 @@ import Link from "next/link";
 import { UserCheck, Home, Clock, ShieldCheck } from "lucide-react";
 
 import { getMyOffice } from "@/lib/queries-office";
+import { getMyAgent } from "@/lib/queries-agent";
 import { Badge } from "@/components/ui/badge";
+import { MyAgentRoleToggle } from "@/components/office/MyAgentRoleToggle";
 
 export const metadata = { title: "Оффисын самбар — Нэми" };
 
 export default async function OfficeOverview() {
-  const data = await getMyOffice();
+  const [data, myAgent] = await Promise.all([getMyOffice(), getMyAgent()]);
   if (!data) return null; // layout-аар хамгаалагдсан
   const { office, agents, listings } = data;
+  const isAgentActive = myAgent?.status === "active";
   const pending = agents.filter((a) => a.status === "pending").length;
   const active = agents.filter((a) => a.status === "active").length;
   const color = (office.color as string) ?? "#C2410C";
@@ -50,6 +53,8 @@ export default async function OfficeOverview() {
           <Clock className="size-5" /> {pending} агент таны баталгаажуулалтыг хүлээж байна →
         </Link>
       )}
+
+      <MyAgentRoleToggle active={isAgentActive} />
     </div>
   );
 }
