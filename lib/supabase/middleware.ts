@@ -54,9 +54,10 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Оффисын портал (/office) — тусдаа нэвтрэлт (/office/login).
-  // /office-signup нь нийтийн хуудас тул хасна.
-  if (path.startsWith("/office") && path !== "/office/login" && !path.startsWith("/office-signup") && !user) {
+  // Оффисын портал (/office, /office/*) — тусдаа нэвтрэлт (/office/login).
+  // ТЭМДЭГЛЭЛ: "/office/" (зураастай) ашиглана — нийтийн "/offices", "/office-signup"-ийг барихгүй.
+  const inOfficeArea = path === "/office" || path.startsWith("/office/");
+  if (inOfficeArea && path !== "/office/login" && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/office/login";
     url.searchParams.set("next", path);

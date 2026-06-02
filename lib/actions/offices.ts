@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendOfficeApproved } from "@/lib/email/resend";
 
 async function requireRole(role: "admin" | "office_admin" | "any") {
   const supabase = await createClient();
@@ -88,8 +89,22 @@ export async function approveOfficeRequest(requestId: string) {
     link: "/office",
   });
 
+  // Хүсэгчийн и-мэйл рүү оффисоор нэвтрэх линктэй имэйл илгээх
+  let emailed = false;
+  const { data: requester } = await admin.auth.admin.getUserById(req.requester_id);
+  const to = requester?.user?.email;
+  if (to) {
+    const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.nemi.mn";
+    const res = await sendOfficeApproved({
+      to,
+      officeName: req.name,
+      loginUrl: `${site}/office/login`,
+    });
+    emailed = res.sent;
+  }
+
   revalidatePath("/admin");
-  return { ok: true };
+  return { ok: true, emailed };
 }
 
 export async function rejectOfficeRequest(requestId: string) {

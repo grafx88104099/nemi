@@ -1,9 +1,8 @@
 import Link from "next/link";
-import { Search, ShieldCheck, Sparkles, TrendingUp, Building2, ArrowRight, Home as HomeIcon, Tag, KeyRound } from "lucide-react";
+import { Search, ShieldCheck, Sparkles, TrendingUp, ArrowRight, Home as HomeIcon, Tag, KeyRound } from "lucide-react";
 
 import { getFeaturedListings } from "@/lib/queries";
 import { ListingCard } from "@/components/listings/ListingCard";
-import { ButtonLink } from "@/components/ui/button";
 
 export default async function Home() {
   const featured = await getFeaturedListings(8);
@@ -133,21 +132,6 @@ export default async function Home() {
               <p className="text-sm text-muted">{f.d}</p>
             </div>
           ))}
-        </div>
-      </section>
-
-      {/* Agent CTA */}
-      <section className="mx-auto max-w-7xl px-4 py-14">
-        <div className="flex flex-col items-center gap-4 rounded-3xl bg-ink px-8 py-12 text-center text-white">
-          <Building2 className="size-10 text-brand-logo" />
-          <h2 className="text-2xl font-extrabold">Үл хөдлөхийн оффис уу?</h2>
-          <p className="max-w-lg text-white/70">
-            Оффисоо Нэми дээр нээж, агентуудаа бүртгэн, зар оруулж, AI хэрэгслүүдээр
-            борлуулалтаа өсгө.
-          </p>
-          <ButtonLink href="/office-signup" variant="primary" size="lg">
-            Оффис болж нэгдэх <ArrowRight className="size-5" />
-          </ButtonLink>
         </div>
       </section>
     </>

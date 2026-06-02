@@ -101,20 +101,83 @@ export type AgentListItem = {
   specialty: string | null;
   areas: string[];
   languages: string[];
+  office_id: string | null;
   office: { name: string; color: string | null } | null;
 };
 
-export async function getAgents(): Promise<AgentListItem[]> {
+export async function getAgents(officeId?: string): Promise<AgentListItem[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  let q = supabase
     .from("agents")
     .select(
-      "id, display_name, avatar, avatar_url, rating, reviews_count, sold, years, verified, premier, specialty, areas, languages, office:offices(name, color)"
+      "id, display_name, avatar, avatar_url, rating, reviews_count, sold, years, verified, premier, specialty, areas, languages, office_id, office:offices(name, color)"
     )
-    .eq("status", "active")
+    .eq("status", "active");
+  if (officeId) q = q.eq("office_id", officeId);
+  const { data } = await q
     .order("premier", { ascending: false })
     .order("rating", { ascending: false });
   return (data ?? []) as unknown as AgentListItem[];
+}
+
+export type OfficeListItem = {
+  id: string;
+  name: string;
+  logo: string | null;
+  logo_url: string | null;
+  color: string | null;
+  verified: boolean;
+  agents_count: number;
+  listings_count: number;
+  specialties: string[];
+};
+
+/** Нийтэд харагдах оффисуудын жагсаалт. */
+export async function getOffices(): Promise<OfficeListItem[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("offices")
+    .select("id, name, logo, logo_url, color, verified, agents_count, listings_count, specialties")
+    .order("verified", { ascending: false })
+    .order("agents_count", { ascending: false });
+  return (data ?? []) as unknown as OfficeListItem[];
+}
+
+export type OfficeProfile = {
+  id: string;
+  name: string;
+  logo: string | null;
+  logo_url: string | null;
+  cover_url: string | null;
+  color: string | null;
+  verified: boolean;
+  agents_count: number;
+  listings_count: number;
+  about: string | null;
+  description: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  website: string | null;
+  founded_year: number | null;
+  license_no: string | null;
+  facebook: string | null;
+  instagram: string | null;
+  specialties: string[];
+  service_areas: string[];
+};
+
+/** Нэг оффисын нийтийн профайл. */
+export async function getOfficeProfile(id: string): Promise<OfficeProfile | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("offices")
+    .select(
+      "id, name, logo, logo_url, cover_url, color, verified, agents_count, listings_count, about, description, phone, email, address, website, founded_year, license_no, facebook, instagram, specialties, service_areas"
+    )
+    .eq("id", id)
+    .maybeSingle();
+  return (data as unknown as OfficeProfile) ?? null;
 }
 
 export async function getAgentById(id: string) {
