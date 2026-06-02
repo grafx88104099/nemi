@@ -1,0 +1,3117 @@
+<!doctype html>
+<html lang="mn">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Дансны тохиргоо — Нэми</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<!--nemi:css:start-->
+<style>
+/* ============ Нэми Design System ============ */
+:root {
+  /* Brand orange palette derived from logo #FFA52E */
+  --brand-50:#FFF7ED;
+  --brand-100:#FFEDD5;
+  --brand-200:#FED7AA;
+  --brand-500:#F97316;
+  --brand-600:#EA580C;
+  --brand-700:#C2410C;
+  --brand-800:#9A3412;
+  --brand-900:#7C2D12;
+  --brand-logo:#FFA52E;
+
+  /* Secondary accent — deep slate for trust */
+  --accent-400:#22D3EE;
+  --accent-500:#06B6D4;
+  --accent-600:#0891B2;
+
+  --bg:#F6F8FA;
+  --surface:#FFFFFF;
+  --surface-2:#FAFBFC;
+  --border:#E5E7EB;
+  --border-strong:#CBD5E1;
+
+  --text:#0F172A;
+  --text-muted:#64748B;
+  --text-subtle:#94A3B8;
+
+  --danger:#DC2626;
+  --warning:#F59E0B;
+  --success:#10B981;
+  --info:#0EA5E9;
+
+  --shadow-sm: 0 1px 2px rgba(15,23,42,.04), 0 1px 1px rgba(15,23,42,.03);
+  --shadow-md: 0 4px 14px rgba(15,23,42,.06), 0 2px 4px rgba(15,23,42,.04);
+  --shadow-lg: 0 20px 40px rgba(15,23,42,.08);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+
+/* Default inline-icon SVG sizing — prevents huge fallback when no width/height set.
+   Specific container rules below (.logo, .ai-icon svg, .feature-icon-lg svg, etc.) override. */
+svg{width:1em;height:1em;flex-shrink:0;vertical-align:middle}
+.logo{width:auto;height:24px}
+.ai-icon svg{width:20px;height:20px}
+.feature-icon-lg svg{width:24px;height:24px}
+.role-card .role-ic svg{width:16px;height:16px}
+body{
+  font-family: "Inter", "SF Pro Display", "Helvetica Neue", system-ui, -apple-system, "Segoe UI", "Noto Sans Mongolian", sans-serif;
+  color:var(--text);
+  background:var(--bg);
+  -webkit-font-smoothing:antialiased;
+  font-size:14px;
+  line-height:1.5;
+}
+a{color:inherit;text-decoration:none}
+img{max-width:100%;display:block}
+button{font-family:inherit;cursor:pointer;border:0;background:transparent;color:inherit}
+input,select,textarea{font-family:inherit}
+
+/* layout */
+.container{max-width:1280px;margin:0 auto;padding:0 24px}
+.container-wide{max-width:1440px;margin:0 auto;padding:0 24px}
+
+/* topbar */
+.topbar{
+  position:sticky;top:0;z-index:50;
+  background:rgba(255,255,255,.92);
+  backdrop-filter:saturate(160%) blur(10px);
+  border-bottom:1px solid var(--border);
+}
+.topbar-inner{display:flex;align-items:center;gap:24px;height:64px}
+.brand{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:-.01em;font-size:18px}
+.logo{height:24px;width:auto;display:block}
+.logo.logo-sm{height:20px}
+.logo.logo-md{height:26px}
+.logo.logo-lg{height:34px}
+.logo.logo-xl{height:48px}
+/* legacy support */
+.brand-mark{
+  width:30px;height:30px;border-radius:8px;
+  background:linear-gradient(135deg,var(--brand-logo),var(--brand-600));
+  color:#fff;display:grid;place-items:center;font-weight:800;font-size:14px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.25);
+}
+.nav{display:flex;gap:4px;margin-left:8px}
+.nav a{
+  padding:8px 12px;border-radius:8px;color:var(--text-muted);font-weight:500;font-size:13.5px;
+}
+.nav a:hover{color:var(--text);background:var(--surface-2)}
+.nav a.active{color:var(--brand-700);background:var(--brand-50)}
+.topbar-actions{margin-left:auto;display:flex;align-items:center;gap:10px}
+
+/* buttons */
+.btn{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:9px 14px;border-radius:10px;font-weight:600;font-size:13.5px;
+  transition:all .15s ease; border:1px solid transparent;
+  white-space:nowrap;
+}
+.btn:hover{transform:translateY(-1px)}
+.btn:active{transform:none}
+.btn-primary{background:var(--brand-700);color:#fff;box-shadow:var(--shadow-sm)}
+.btn-primary:hover{background:var(--brand-800)}
+.btn-secondary{background:#fff;color:var(--text);border-color:var(--border)}
+.btn-secondary:hover{border-color:var(--border-strong);background:var(--surface-2)}
+.btn-ghost{color:var(--text-muted)}
+.btn-ghost:hover{background:var(--surface-2);color:var(--text)}
+.btn-accent{background:var(--accent-500);color:#000}
+.btn-accent:hover{background:var(--accent-600);color:#fff}
+.btn-danger{background:#FEE2E2;color:#991B1B;border-color:#FECACA}
+.btn-sm{padding:6px 10px;font-size:12.5px;border-radius:8px}
+.btn-lg{padding:12px 18px;font-size:14.5px;border-radius:12px}
+.btn-xl{padding:16px 22px;font-size:16px;border-radius:14px;font-weight:700;letter-spacing:.01em}
+.btn-xl svg{width:18px;height:18px}
+.btn-block{width:100%;justify-content:center}
+
+/* badges & chips */
+.badge{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-radius:999px;font-weight:600;font-size:11.5px;background:var(--surface-2);color:var(--text-muted);border:1px solid var(--border)}
+.badge-brand{background:var(--brand-50);color:var(--brand-700);border-color:var(--brand-100)}
+.badge-amber{background:#FFFBEB;color:#92400E;border-color:#FEF3C7}
+.badge-rose{background:#FFF1F2;color:#9F1239;border-color:#FFE4E6}
+.badge-blue{background:#EFF6FF;color:#1D4ED8;border-color:#DBEAFE}
+.badge-violet{background:#F5F3FF;color:#6D28D9;border-color:#EDE9FE}
+.badge-green{background:#ECFDF5;color:#047857;border-color:#D1FAE5}
+.badge-gray{background:#F1F5F9;color:#475569;border-color:#E2E8F0}
+.badge-dot{width:6px;height:6px;border-radius:999px;background:currentColor;display:inline-block}
+
+.chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:#fff;border:1px solid var(--border);font-size:12.5px;font-weight:500;color:var(--text-muted)}
+.chip:hover{border-color:var(--border-strong);color:var(--text)}
+.chip.active{background:var(--brand-50);color:var(--brand-700);border-color:var(--brand-200)}
+
+/* card */
+.card{background:#fff;border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow-sm)}
+.card-pad{padding:20px}
+.card-hover{transition:all .2s ease}
+.card-hover:hover{transform:translateY(-2px);box-shadow:var(--shadow-md);border-color:var(--border-strong)}
+
+/* form */
+.field{display:block;font-size:12.5px;font-weight:600;color:var(--text-muted);margin-bottom:6px;letter-spacing:.01em}
+.input,.select,.textarea{
+  width:100%;padding:10px 12px;border:1px solid var(--border);background:#fff;border-radius:10px;font-size:13.5px;color:var(--text);
+  transition:border-color .15s ease, box-shadow .15s ease;
+}
+.input:focus,.select:focus,.textarea:focus{outline:none;border-color:var(--brand-600);box-shadow:0 0 0 3px rgba(194,65,12,.12)}
+.input-icon{position:relative}
+.input-icon .input{padding-left:38px}
+.input-icon .input-icon-el{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-subtle);width:18px;height:18px}
+
+/* table */
+.table{width:100%;border-collapse:separate;border-spacing:0}
+.table th,.table td{padding:12px 14px;text-align:left;font-size:13.5px}
+.table thead th{
+  background:var(--surface-2);
+  font-weight:600;color:var(--text-muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em;
+  border-bottom:1px solid var(--border)
+}
+.table tbody tr{border-bottom:1px solid var(--border)}
+.table tbody tr:hover{background:#FAFBFC}
+.table tbody tr:last-child{border-bottom:0}
+
+/* misc */
+.divider{height:1px;background:var(--border)}
+.grid{display:grid;gap:20px}
+.stack-sm > * + *{margin-top:8px}
+.stack-md > * + *{margin-top:16px}
+.stack-lg > * + *{margin-top:24px}
+.text-muted{color:var(--text-muted)}
+.text-subtle{color:var(--text-subtle)}
+.text-brand{color:var(--brand-700)}
+.text-danger{color:var(--danger)}
+.text-success{color:var(--success)}
+.text-warning{color:var(--warning)}
+.font-mono{font-family:"JetBrains Mono","Menlo",ui-monospace,monospace}
+.muted-bg{background:var(--surface-2)}
+
+/* hero */
+.hero{
+  position:relative;
+  background:
+    radial-gradient(900px 320px at 80% -10%, rgba(255,165,46,.14), transparent 60%),
+    radial-gradient(700px 280px at -10% 10%, rgba(194,65,12,.10), transparent 50%),
+    linear-gradient(180deg,#FFF8F0 0%,#F6F8FA 100%);
+  padding:48px 0 56px;
+  border-bottom:1px solid var(--border);
+}
+.hero h1{font-size:44px;line-height:1.1;letter-spacing:-.02em;margin:0 0 14px;font-weight:800}
+.hero p.lead{font-size:16px;color:var(--text-muted);max-width:620px;margin:0 0 24px}
+
+/* search bar */
+.searchbar{
+  background:#fff;border:1px solid var(--border);border-radius:16px;
+  display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr auto;gap:0;
+  box-shadow:var(--shadow-md);
+  overflow:hidden;
+}
+.searchbar > div{padding:12px 16px;border-right:1px solid var(--border)}
+.searchbar > div:last-child{border-right:0}
+.searchbar label{display:block;font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--text-subtle);text-transform:uppercase;margin-bottom:2px}
+.searchbar input, .searchbar select{
+  border:0;outline:none;padding:0;background:transparent;width:100%;font-size:14px;font-weight:600;color:var(--text)
+}
+.searchbar .submit{display:grid;place-items:center;padding:0 22px;background:var(--brand-700)}
+.searchbar .submit:hover{background:var(--brand-800)}
+.searchbar .submit svg{color:#fff;width:22px;height:22px}
+
+/* listing card */
+.listing-card{
+  background:#fff;border:1px solid var(--border);border-radius:16px;overflow:hidden;
+  display:flex;flex-direction:column;transition:all .2s ease;
+}
+.listing-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-md);border-color:var(--border-strong)}
+.listing-photo{position:relative;aspect-ratio:4/3;overflow:hidden;background:#E5E7EB}
+.listing-photo img{width:100%;height:100%;object-fit:cover;transition:transform .4s ease}
+.listing-card:hover .listing-photo img{transform:scale(1.04)}
+.listing-photo .photo-tags{position:absolute;top:10px;left:10px;display:flex;gap:6px;flex-wrap:wrap;max-width:calc(100% - 60px)}
+.listing-photo .photo-tags .badge{
+  background:rgba(255,255,255,.96);backdrop-filter:blur(8px);
+  padding:4px 8px;font-size:10.5px;font-weight:700;letter-spacing:.01em;
+  box-shadow:0 2px 6px rgba(0,0,0,.08);
+}
+.listing-photo .photo-tags .badge svg{width:11px;height:11px}
+.listing-photo .heart{
+  position:absolute;top:8px;right:8px;background:rgba(255,255,255,.96);
+  width:32px;height:32px;border-radius:999px;display:grid;place-items:center;
+  color:var(--text-muted);box-shadow:0 2px 6px rgba(0,0,0,.12);transition:.15s;
+}
+.listing-photo .heart svg{width:16px;height:16px}
+.listing-photo .heart:hover{color:#E11D48;transform:scale(1.06)}
+.listing-photo .heart.active{color:#E11D48;background:#fff}
+.listing-body{padding:14px 16px 16px}
+.listing-price{font-size:18px;font-weight:800;letter-spacing:-.01em;white-space:nowrap}
+.listing-title{font-size:13.5px;font-weight:600;color:var(--text);margin:4px 0 8px;line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:1;line-clamp:1;-webkit-box-orient:vertical}
+.listing-specs{display:flex;color:var(--text-muted);font-size:12.5px;font-weight:500;flex-wrap:wrap;gap:0}
+.listing-specs span{display:inline-flex;align-items:center;white-space:nowrap}
+.listing-specs span:not(:last-child)::after{content:"·";margin:0 8px;color:var(--text-subtle);font-weight:700}
+.listing-agent{display:flex;align-items:center;gap:10px;padding-top:12px;margin-top:12px;border-top:1px solid var(--border)}
+
+/* AI score pill — subtle */
+.ai-score-pill{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:11.5px;font-weight:700;
+  padding:3px 8px;border-radius:999px;
+  background:#FFFBEB;color:#92400E;border:1px solid #FEF3C7;
+  white-space:nowrap;flex-shrink:0;
+}
+.avatar{width:32px;height:32px;border-radius:999px;background:#E5E7EB;object-fit:cover;flex-shrink:0}
+.avatar-sm{width:24px;height:24px}
+.avatar-lg{width:48px;height:48px}
+.avatar-xl{width:72px;height:72px}
+.agent-name{font-size:12.5px;font-weight:600}
+.agent-office{font-size:11.5px;color:var(--text-subtle)}
+
+/* AI insight card */
+.ai-card{
+  background: linear-gradient(135deg,#FFF7ED 0%,#FFEDD5 100%);
+  border:1px solid #FED7AA;border-radius:14px;padding:14px 16px;
+  display:flex;gap:12px;
+}
+.ai-icon{
+  width:36px;height:36px;border-radius:10px;
+  background:linear-gradient(135deg,var(--brand-600),var(--brand-800));
+  color:#fff;display:grid;place-items:center;flex-shrink:0;
+  box-shadow:0 4px 14px rgba(194,65,12,.25);
+}
+.ai-title{font-size:12.5px;font-weight:700;color:var(--brand-800);text-transform:uppercase;letter-spacing:.06em;margin:0 0 4px}
+
+/* dashboard layout */
+.app-shell{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
+.sidebar{
+  background:#fff;border-right:1px solid var(--border);padding:18px 14px;position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;
+}
+.sidebar .brand{margin:4px 6px 18px}
+.side-section{margin-top:14px}
+.side-section-title{font-size:10.5px;font-weight:700;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.08em;padding:0 8px;margin-bottom:6px}
+.side-nav a{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;color:var(--text-muted);font-size:13.5px;font-weight:500}
+.side-nav a:hover{background:var(--surface-2);color:var(--text)}
+.side-nav a.active{background:var(--brand-50);color:var(--brand-700);font-weight:600}
+.side-nav a svg{width:18px;height:18px}
+.side-nav .badge{margin-left:auto}
+.main{padding:24px 28px 56px;min-width:0}
+.page-head{display:flex;align-items:center;gap:16px;margin-bottom:22px;flex-wrap:wrap}
+.page-head h1{font-size:22px;margin:0;letter-spacing:-.01em;font-weight:700}
+.page-head .subtitle{color:var(--text-muted);font-size:13.5px;margin-top:2px}
+.page-head .right{margin-left:auto;display:flex;gap:10px}
+
+/* kpi cards */
+.kpi{padding:18px 18px;border-radius:14px;background:#fff;border:1px solid var(--border)}
+.kpi-label{font-size:12px;color:var(--text-muted);font-weight:600;letter-spacing:.02em;text-transform:uppercase}
+.kpi-value{font-size:24px;font-weight:800;letter-spacing:-.01em;margin-top:4px}
+.kpi-trend{font-size:12px;margin-top:6px;font-weight:600}
+.kpi-trend.up{color:#047857}
+.kpi-trend.down{color:#B91C1C}
+
+/* progress */
+.bar{height:8px;background:#F1F5F9;border-radius:999px;overflow:hidden}
+.bar > span{display:block;height:100%;background:linear-gradient(90deg,var(--brand-600),var(--brand-500));border-radius:999px}
+
+/* footer */
+.footer{margin-top:80px;padding:36px 0 28px;background:#0F172A;color:#94A3B8}
+.footer .brand{color:#fff}
+.footer-grid{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:32px;padding:24px 0}
+.footer h4{color:#fff;font-size:13.5px;margin:0 0 12px}
+.footer a{display:block;padding:4px 0;font-size:13px;color:#94A3B8}
+.footer a:hover{color:#fff}
+.footer-cta{
+  display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:10px;
+  background:rgba(255,165,46,.12);border:1px solid rgba(255,165,46,.3);color:#FFA52E !important;
+  font-weight:600;font-size:13px;transition:.15s;width:fit-content;
+}
+.footer-cta:hover{background:rgba(255,165,46,.2);border-color:rgba(255,165,46,.5);color:#FFC56E !important}
+.footer-cta svg{width:14px;height:14px}
+
+/* New extended footer */
+.footer-main{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:32px;padding:32px 0 24px}
+@media (max-width:960px){.footer-main{grid-template-columns:1fr 1fr;gap:24px}}
+@media (max-width:560px){.footer-main{grid-template-columns:1fr}}
+
+.footer-brand-col{display:flex;flex-direction:column;gap:14px}
+.footer-brand-col p.t{margin:0;color:#94A3B8;font-size:13px;line-height:1.55;max-width:300px}
+.footer-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;padding-top:14px;border-top:1px solid #1E293B;max-width:340px}
+.footer-stats > div b{display:block;color:#fff;font-size:18px;font-weight:800;letter-spacing:-.01em}
+.footer-stats > div span{font-size:11px;color:#64748B}
+
+/* Strip (apps + banks + lang) */
+.footer-strip{
+  border-top:1px solid #1E293B;
+  padding:20px 0;
+  display:grid;grid-template-columns:auto auto 1fr auto;gap:32px;align-items:center;
+}
+@media (max-width:1100px){.footer-strip{grid-template-columns:1fr;gap:18px}}
+.footer-strip .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:#64748B;font-weight:700;margin-right:8px}
+
+.apps-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.app-badge{
+  display:inline-flex;align-items:center;gap:8px;
+  background:#1E293B;border:1px solid #334155;padding:6px 14px;
+  border-radius:8px;color:#fff !important;text-decoration:none;
+  transition:.15s;
+}
+.app-badge:hover{background:#334155;border-color:#475569}
+.app-badge .store{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#94A3B8;display:block;line-height:1;margin-bottom:2px}
+.app-badge .nm{font-size:13px;font-weight:700;display:block;line-height:1}
+.app-badge svg{width:16px;height:16px;color:#fff}
+
+.banks-row{display:flex;align-items:center;gap:18px;flex-wrap:wrap;font-size:12.5px;font-weight:700}
+
+.lang-row{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.lang-row a{font-size:12px;color:#64748B;padding:5px 10px;border-radius:6px;border:1px solid transparent}
+.lang-row a:hover{background:#1E293B;color:#fff}
+.lang-row a.active{background:#1E293B;color:#fff;border-color:#334155}
+
+/* Bottom row */
+.footer-bottom{
+  border-top:1px solid #1E293B;padding-top:18px;margin-top:8px;
+  display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;
+  font-size:12px;color:#64748B;
+}
+.footer-bottom .fb-left{font-size:12px}
+.footer-bottom .fb-right{display:flex;gap:14px;flex-wrap:wrap}
+.footer-bottom .fb-right a{color:#94A3B8 !important;padding:2px 0;display:inline-flex;align-items:center;gap:4px}
+.footer-bottom .fb-right a:hover{color:#fff !important}
+.footer-bottom .fb-right a.dns{color:#FFA52E !important;font-weight:600}
+.footer-bottom .fb-right a.dns:hover{color:#FFD089 !important}
+
+/* status pill */
+.status{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px}
+.status .dot{width:6px;height:6px;border-radius:999px;background:currentColor}
+.status.active{color:#047857;background:#ECFDF5}
+.status.draft{color:#64748B;background:#F1F5F9}
+.status.review{color:#92400E;background:#FFFBEB}
+.status.sold{color:#1D4ED8;background:#EFF6FF}
+.status.hot{color:#9F1239;background:#FFF1F2}
+
+/* utility */
+.flex{display:flex}
+.flex-col{flex-direction:column}
+.items-center{align-items:center}
+.items-start{align-items:flex-start}
+.justify-between{justify-content:space-between}
+.gap-2{gap:8px}.gap-3{gap:12px}.gap-4{gap:16px}.gap-6{gap:24px}
+.mt-1{margin-top:4px}.mt-2{margin-top:8px}.mt-3{margin-top:12px}.mt-4{margin-top:16px}.mt-6{margin-top:24px}.mt-8{margin-top:32px}
+.mb-1{margin-bottom:4px}.mb-2{margin-bottom:8px}.mb-3{margin-bottom:12px}.mb-4{margin-bottom:16px}.mb-6{margin-bottom:24px}
+.text-xs{font-size:11.5px}
+.text-sm{font-size:12.5px}
+.text-base{font-size:13.5px}
+.text-md{font-size:15px}
+.text-lg{font-size:17px}
+.text-xl{font-size:20px}
+.text-2xl{font-size:24px}
+.text-3xl{font-size:30px}
+.font-medium{font-weight:500}
+.font-semibold{font-weight:600}
+.font-bold{font-weight:700}
+.font-extrabold{font-weight:800}
+.w-full{width:100%}
+.rounded-md{border-radius:8px}
+.rounded-lg{border-radius:12px}
+.rounded-xl{border-radius:16px}
+.rounded-2xl{border-radius:20px}
+.rounded-full{border-radius:999px}
+.shadow-sm{box-shadow:var(--shadow-sm)}
+.shadow-md{box-shadow:var(--shadow-md)}
+.shadow-lg{box-shadow:var(--shadow-lg)}
+.border{border:1px solid var(--border)}
+.border-t{border-top:1px solid var(--border)}
+.bg-white{background:#fff}
+.bg-surface{background:var(--surface-2)}
+
+/* responsive */
+@media (max-width: 1100px){
+  .app-shell{grid-template-columns:64px 1fr}
+  .sidebar{padding:14px 8px}
+  .sidebar .nav-label,.sidebar .side-section-title,.sidebar .brand span{display:none}
+  .side-nav a{justify-content:center;padding:10px}
+  .side-nav .badge{display:none}
+}
+@media (max-width: 860px){
+  .searchbar{grid-template-columns:1fr 1fr;gap:1px;background:var(--border)}
+  .searchbar > div{background:#fff}
+  .searchbar > div:nth-child(3),.searchbar > div:nth-child(4){border-right:0}
+  .searchbar .submit{grid-column:1 / -1}
+  .hero h1{font-size:32px}
+}
+
+/* ===== News & Articles ===== */
+
+/* News landing hero */
+.news-hero-grid{display:grid;grid-template-columns:1.5fr 1fr;gap:20px;margin-bottom:24px}
+@media (max-width:960px){.news-hero-grid{grid-template-columns:1fr}}
+
+.featured-article{
+  background:#fff;border:1px solid var(--border);border-radius:16px;overflow:hidden;
+  display:grid;grid-template-columns:1.2fr 1fr;text-decoration:none;color:inherit;transition:.18s;
+}
+.featured-article:hover{box-shadow:var(--shadow-md);transform:translateY(-2px);border-color:var(--border-strong)}
+.featured-article .photo{aspect-ratio:auto;background-size:cover;background-position:center;min-height:300px}
+.featured-article .body{padding:28px;display:flex;flex-direction:column;justify-content:center}
+.featured-article .cat-tag{display:inline-block;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:800;color:var(--brand-700);margin-bottom:8px}
+.featured-article h2{font-size:26px;letter-spacing:-.015em;margin:0 0 10px;line-height:1.2;font-weight:800}
+.featured-article p{font-size:14px;color:var(--text-muted);line-height:1.55;margin:0 0 16px}
+
+.byline{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--text-muted)}
+.byline .av{width:24px;height:24px;border-radius:999px;color:#fff;font-weight:800;font-size:9px;display:grid;place-items:center;flex-shrink:0}
+.byline b{color:var(--text);font-weight:700}
+
+/* Side featured */
+.side-articles{display:flex;flex-direction:column;gap:10px}
+.side-article{display:flex;gap:12px;padding:12px;background:#fff;border:1px solid var(--border);border-radius:12px;text-decoration:none;color:inherit;transition:.15s}
+.side-article:hover{box-shadow:var(--shadow-sm);border-color:var(--border-strong)}
+.side-article .thumb{width:88px;height:68px;border-radius:8px;background-size:cover;background-position:center;flex-shrink:0}
+.side-article .body{flex:1;min-width:0}
+.side-article .body .cat-tag{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--brand-700);font-weight:800;margin-bottom:2px;display:block}
+.side-article .body b{font-size:13px;display:block;line-height:1.35;letter-spacing:-.01em}
+.side-article .body .meta{font-size:11px;color:var(--text-muted);margin-top:4px}
+
+/* Category nav */
+.news-cat-nav{position:sticky;top:64px;z-index:30;background:#fff;border-bottom:1px solid var(--border);padding:10px 0;margin-bottom:24px}
+.news-cat-nav .row{display:flex;gap:4px;overflow-x:auto;align-items:center;padding:0 24px;max-width:1440px;margin:0 auto}
+.news-cat-nav .row::-webkit-scrollbar{display:none}
+.news-cat-nav a{
+  padding:8px 16px;font-size:13px;font-weight:600;color:var(--text-muted);
+  border-radius:999px;text-decoration:none;white-space:nowrap;transition:.15s;
+}
+.news-cat-nav a:hover{background:var(--surface-2);color:var(--text)}
+.news-cat-nav a.active{background:var(--brand-700);color:#fff}
+
+/* Article card */
+.article-card{display:block;text-decoration:none;color:inherit;background:#fff;border:1px solid var(--border);border-radius:14px;overflow:hidden;transition:.18s}
+.article-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-md);border-color:var(--border-strong)}
+.article-card .photo{aspect-ratio:16/10;background-size:cover;background-position:center}
+.article-card .body{padding:16px}
+.article-card .cat-tag{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--brand-700);font-weight:800;margin-bottom:6px;display:block}
+.article-card h3{font-size:15px;letter-spacing:-.01em;margin:0 0 6px;line-height:1.35;font-weight:700;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.article-card .excerpt{font-size:12.5px;color:var(--text-muted);line-height:1.5;margin:0 0 10px;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+/* Newsletter banner */
+.newsletter-banner{
+  background:radial-gradient(700px 400px at 80% 30%, rgba(255,165,46,.22), transparent 60%),
+             linear-gradient(135deg,#0F172A,#7C2D12);
+  color:#fff;border-radius:18px;padding:32px;text-align:center;margin:32px 0;
+}
+.newsletter-banner h3{color:#fff;font-size:22px;letter-spacing:-.01em;margin:0 0 6px;font-weight:800}
+.newsletter-banner p{color:rgba(255,255,255,.72);margin:0 0 18px;font-size:14px;max-width:480px;margin-left:auto;margin-right:auto;line-height:1.5}
+.newsletter-form{display:flex;gap:8px;max-width:440px;margin:0 auto}
+.newsletter-form input{flex:1;padding:12px 14px;border-radius:10px;border:0;font-size:14px;outline:none}
+
+/* Market report card */
+.market-report{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;gap:12px;align-items:center;text-decoration:none;color:inherit;transition:.15s}
+.market-report:hover{border-color:var(--brand-200);background:var(--brand-50)}
+.market-report .pdf-ic{width:44px;height:52px;background:linear-gradient(135deg,#FEE2E2,#FCA5A5);border-radius:6px;display:grid;place-items:center;font-size:10px;flex-shrink:0;font-weight:800;color:#B91C1C}
+.market-report .info{flex:1;min-width:0}
+.market-report .info b{display:block;font-size:13px;letter-spacing:-.01em}
+.market-report .info .meta{font-size:11px;color:var(--text-muted);margin-top:2px}
+.market-report .dl{color:var(--brand-700);font-weight:700;font-size:11.5px}
+
+/* ===== Article detail ===== */
+.article-detail{max-width:760px;margin:0 auto;padding:24px 24px 60px}
+.article-detail .breadcrumbs{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-muted);margin-bottom:14px}
+.article-detail .breadcrumbs a{color:var(--text-muted)}
+.article-detail .breadcrumbs b{color:var(--text)}
+.article-detail .cat-tag-big{display:inline-block;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#fff;font-weight:800;background:var(--brand-700);padding:4px 12px;border-radius:6px;margin-bottom:14px}
+.article-detail h1{font-size:36px;letter-spacing:-.02em;line-height:1.18;margin:0 0 14px;font-weight:800}
+.article-detail .lead{font-size:18px;color:var(--text-muted);line-height:1.55;margin:0 0 22px}
+.article-meta-row{display:flex;align-items:center;gap:14px;padding:16px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.article-meta-row .av{width:42px;height:42px;border-radius:999px;color:#fff;font-weight:800;font-size:13px;display:grid;place-items:center;flex-shrink:0}
+.article-meta-row .author-info{flex:1}
+.article-meta-row .author-info b{font-size:14px;display:block}
+.article-meta-row .author-info .sub{font-size:11.5px;color:var(--text-muted);margin-top:2px}
+.article-meta-row .share-btns{display:flex;gap:6px}
+.article-meta-row .share-btns button{width:36px;height:36px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:14px;color:var(--text-muted)}
+.article-meta-row .share-btns button:hover{color:var(--brand-700);border-color:var(--brand-200)}
+.article-cover{aspect-ratio:16/9;border-radius:14px;background-size:cover;background-position:center;margin:24px 0;box-shadow:var(--shadow-sm)}
+
+.article-body{font-size:16.5px;line-height:1.75;color:var(--text)}
+.article-body p{margin:0 0 18px}
+.article-body h2{font-size:24px;letter-spacing:-.01em;margin:36px 0 14px;font-weight:800}
+.article-body h3{font-size:19px;letter-spacing:-.01em;margin:24px 0 10px;font-weight:700}
+.article-body blockquote{border-left:4px solid var(--brand-700);padding:12px 20px;margin:24px 0;background:var(--surface-2);font-style:italic;color:var(--text);font-size:18px;line-height:1.55;border-radius:0 8px 8px 0}
+.article-body ul, .article-body ol{padding-left:22px;margin:0 0 18px}
+.article-body li{margin:6px 0}
+.article-body .stat-callout{
+  background:linear-gradient(135deg,#FFF7ED,#fff);border:1px solid #FED7AA;
+  border-radius:14px;padding:24px;margin:28px 0;text-align:center;
+}
+.article-body .stat-callout .num{font-size:42px;font-weight:800;letter-spacing:-.02em;color:var(--brand-700);line-height:1}
+.article-body .stat-callout .lbl{font-size:13px;color:var(--text-muted);margin-top:6px}
+.article-body .article-img{width:100%;border-radius:12px;margin:20px 0}
+.article-body .article-img figcaption{font-size:12px;color:var(--text-muted);text-align:center;margin-top:8px;font-style:italic}
+
+.author-bio{display:flex;gap:14px;padding:24px;background:var(--surface-2);border-radius:14px;margin-top:40px}
+.author-bio .av{width:64px;height:64px;border-radius:999px;color:#fff;font-weight:800;font-size:20px;display:grid;place-items:center;flex-shrink:0}
+
+/* ===== Account Settings (Zillow MyZillow Account) ===== */
+
+.acc-layout{display:grid;grid-template-columns:240px 1fr;gap:32px;align-items:flex-start}
+@media (max-width:960px){.acc-layout{grid-template-columns:1fr}}
+
+.acc-nav{position:sticky;top:80px;padding:8px 0}
+.acc-nav .nav-item{
+  display:flex;align-items:center;gap:10px;padding:10px 14px;
+  font-size:13.5px;color:var(--text-muted);font-weight:600;
+  border-radius:8px;cursor:pointer;text-decoration:none;transition:.12s;
+}
+.acc-nav .nav-item:hover{color:var(--text);background:var(--surface-2)}
+.acc-nav .nav-item.active{color:var(--brand-700);background:var(--brand-50)}
+.acc-nav .nav-item svg{width:16px;height:16px;flex-shrink:0}
+
+.acc-section{
+  background:#fff;border:1px solid var(--border);border-radius:14px;padding:24px;
+  margin-bottom:18px;scroll-margin-top:80px;
+}
+.acc-section h2{font-size:18px;margin:0 0 4px;letter-spacing:-.01em;font-weight:800}
+.acc-section > .sub{font-size:13px;color:var(--text-muted);margin:0 0 18px}
+
+.acc-row{display:grid;grid-template-columns:200px 1fr auto;gap:14px;align-items:center;padding:12px 0;border-bottom:1px solid var(--border)}
+.acc-row:last-child{border-bottom:0}
+.acc-row .lbl{font-size:13px;color:var(--text-muted);font-weight:600}
+.acc-row .val{font-size:13.5px;color:var(--text);font-weight:600}
+.acc-row .val .meta{font-size:11.5px;color:var(--text-muted);font-weight:500;margin-top:2px;display:block}
+.acc-row .verified-mini{display:inline-flex;align-items:center;gap:3px;color:#047857;font-size:11px;font-weight:700;margin-left:6px}
+
+/* Profile photo uploader */
+.profile-photo-row{display:flex;align-items:center;gap:18px;padding:8px 0 20px;border-bottom:1px solid var(--border);margin-bottom:14px}
+.profile-photo-row .photo{width:80px;height:80px;border-radius:999px;background:linear-gradient(135deg,var(--brand-600),var(--brand-800));color:#fff;display:grid;place-items:center;font-size:30px;font-weight:800}
+
+/* Notification matrix */
+.notif-matrix{width:100%;border-collapse:collapse;margin-top:6px}
+.notif-matrix th{padding:10px 8px;font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;font-weight:700;text-align:center;border-bottom:1px solid var(--border)}
+.notif-matrix th:first-child{text-align:left}
+.notif-matrix td{padding:14px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
+.notif-matrix td:first-child{font-size:13.5px;font-weight:600}
+.notif-matrix td:first-child .desc{font-size:11.5px;color:var(--text-muted);font-weight:500;margin-top:2px;display:block}
+.notif-matrix tr:last-child td{border-bottom:0}
+.notif-matrix td.center{text-align:center}
+
+/* Connected service / payment / session rows */
+.conn-card,.pm-card{display:flex;align-items:center;gap:14px;padding:14px;border:1px solid var(--border);border-radius:12px;margin-bottom:10px}
+.conn-card .ic{width:44px;height:44px;border-radius:10px;display:grid;place-items:center;color:#fff;flex-shrink:0}
+.conn-card .info{flex:1}
+.conn-card .info b{display:block;font-size:13.5px}
+.conn-card .info .meta{font-size:11.5px;color:var(--text-muted);margin-top:2px}
+
+.pm-card .ic{width:50px;height:32px;border-radius:6px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:10px;flex-shrink:0;letter-spacing:.04em}
+.pm-card .info{flex:1}
+.pm-card .info b{display:block;font-size:13px;font-family:'Menlo',monospace;letter-spacing:.5px}
+.pm-card .info .meta{font-size:11.5px;color:var(--text-muted);margin-top:2px}
+.default-tag{font-size:10px;font-weight:800;padding:2px 7px;border-radius:5px;background:#ECFDF5;color:#047857;letter-spacing:.06em;text-transform:uppercase}
+
+.session-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+.session-row:last-child{border-bottom:0}
+.session-row .ic{width:40px;height:40px;border-radius:10px;background:var(--surface-2);display:grid;place-items:center;font-size:18px;flex-shrink:0}
+.session-row .info{flex:1}
+.session-row .info b{display:block;font-size:13.5px}
+.session-row .info .meta{font-size:11.5px;color:var(--text-muted);margin-top:1px}
+
+/* Subscription card */
+.sub-card{display:flex;align-items:center;gap:14px;padding:14px;background:linear-gradient(135deg,#FFF7ED,#fff);border:1px solid #FED7AA;border-radius:12px;margin-bottom:10px}
+.sub-card .ic{width:42px;height:42px;border-radius:10px;background:var(--brand-700);color:#fff;display:grid;place-items:center;flex-shrink:0}
+.sub-card .info{flex:1}
+.sub-card .info b{display:block;font-size:13.5px}
+.sub-card .info .meta{font-size:11.5px;color:var(--text-muted);margin-top:2px}
+.sub-card .amt{font-weight:800;color:var(--brand-800);font-size:14px}
+
+/* Danger zone */
+.danger-zone{background:#FEF2F2;border:1px solid #FECACA;border-radius:14px;padding:24px}
+.danger-zone h2{color:#B91C1C;margin:0 0 4px;font-size:18px;letter-spacing:-.01em;font-weight:800}
+.danger-zone > .sub{font-size:13px;color:#991B1B;margin:0 0 14px}
+.danger-zone .danger-item{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid #FECACA;gap:14px}
+.danger-zone .danger-item:last-child{border-bottom:0}
+.danger-zone .danger-item .info{flex:1}
+.danger-zone .danger-item .info b{display:block;font-size:13.5px;color:#991B1B}
+.danger-zone .danger-item .info .meta{font-size:12px;color:#7F1D1D;margin-top:2px;line-height:1.5}
+.danger-zone .btn-danger{border:1px solid #FCA5A5;background:#fff;color:#B91C1C}
+.danger-zone .btn-danger:hover{background:#FEE2E2;color:#7F1D1D}
+
+/* ===== Your Rental (renter dashboard) ===== */
+
+/* Hero */
+.yr-hero{
+  background:linear-gradient(135deg,#FFFBEB,#fff);
+  border-bottom:1px solid var(--border);padding:28px 0;
+}
+.yr-hero-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:24px;align-items:stretch}
+@media (max-width:960px){.yr-hero-grid{grid-template-columns:1fr}}
+.yr-photo{aspect-ratio:16/9;border-radius:16px;background-size:cover;background-position:center;box-shadow:var(--shadow-md);position:relative}
+.yr-photo .lease-badge{position:absolute;top:14px;left:14px;background:rgba(255,255,255,.95);padding:6px 12px;border-radius:999px;font-size:11.5px;font-weight:700;color:var(--text);display:inline-flex;gap:5px;align-items:center;backdrop-filter:blur(6px)}
+
+/* Big payment card */
+.pay-card{
+  background:
+    radial-gradient(600px 280px at 90% 10%, rgba(255,165,46,.25), transparent 60%),
+    linear-gradient(135deg,var(--brand-700),var(--brand-900));
+  color:#fff;border-radius:18px;padding:24px;position:relative;overflow:hidden;
+}
+.pay-card .due-label{font-size:11.5px;text-transform:uppercase;letter-spacing:.08em;opacity:.7;font-weight:700}
+.pay-card .due-amount{font-size:36px;font-weight:800;letter-spacing:-.02em;line-height:1;margin:8px 0;color:#fff}
+.pay-card .due-meta{font-size:13px;opacity:.85}
+.pay-card .due-meta b{color:#FFA52E}
+.pay-card .pay-actions{display:flex;gap:8px;margin-top:18px;flex-wrap:wrap}
+.pay-card .pay-actions a,.pay-card .pay-actions button{flex:1;min-width:130px;height:44px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;border:0;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none}
+.pay-card .pay-actions .qp{background:#fff;color:var(--brand-800)}
+.pay-card .pay-actions .qp:hover{background:#FFF7ED}
+.pay-card .pay-actions .bank{background:rgba(255,255,255,.13);color:#fff;border:1px solid rgba(255,255,255,.22)}
+.pay-card .pay-actions .bank:hover{background:rgba(255,255,255,.2)}
+.pay-card .autopay-row{display:flex;justify-content:space-between;align-items:center;padding-top:14px;margin-top:14px;border-top:1px solid rgba(255,255,255,.18);font-size:12.5px}
+
+/* Maintenance ticket */
+.tk-card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px}
+.tk-card.progress{border-left:4px solid #F59E0B}
+.tk-card.completed{border-left:4px solid #047857;opacity:.78}
+.tk-card.submitted{border-left:4px solid #1D4ED8}
+.tk-head{display:grid;grid-template-columns:50px 1fr auto;gap:14px;align-items:center}
+.tk-head .tk-ic{width:50px;height:50px;border-radius:10px;background:var(--surface-2);display:grid;place-items:center;font-size:24px;flex-shrink:0}
+.tk-head .tk-body b{font-size:14px;display:block}
+.tk-head .tk-body .meta{font-size:12px;color:var(--text-muted);margin-top:2px}
+.tk-head .tk-status{font-size:10.5px;font-weight:800;padding:3px 8px;border-radius:5px;letter-spacing:.06em;text-transform:uppercase}
+.tk-head .tk-status.submitted{background:#EFF6FF;color:#1D4ED8;border:1px solid #DBEAFE}
+.tk-head .tk-status.progress{background:#FFFBEB;color:#92400E;border:1px solid #FEF3C7}
+.tk-head .tk-status.completed{background:#ECFDF5;color:#047857;border:1px solid #A7F3D0}
+
+/* Pipeline */
+.tk-pipeline{display:flex;align-items:flex-start;gap:0;margin-top:16px}
+.tk-pipeline .step{flex:1;text-align:center;position:relative}
+.tk-pipeline .step::after{content:'';position:absolute;left:50%;right:-50%;top:8px;height:2px;background:var(--border);z-index:0}
+.tk-pipeline .step:last-child::after{display:none}
+.tk-pipeline .step .dot{width:18px;height:18px;border-radius:999px;background:#fff;border:2px solid var(--border);margin:0 auto;position:relative;z-index:1;display:grid;place-items:center;font-size:10px;color:#fff;font-weight:800;line-height:1}
+.tk-pipeline .step.active .dot{background:var(--brand-700);border-color:var(--brand-700);box-shadow:0 0 0 4px rgba(194,65,12,.15)}
+.tk-pipeline .step.done .dot{background:#047857;border-color:#047857}
+.tk-pipeline .step.done .dot::before{content:'✓'}
+.tk-pipeline .step.done::after{background:#047857}
+.tk-pipeline .step .label{font-size:10.5px;color:var(--text-muted);margin-top:6px;display:block;font-weight:600}
+.tk-pipeline .step.active .label, .tk-pipeline .step.done .label{color:var(--text);font-weight:700}
+
+/* Lease countdown card */
+.lease-card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px}
+.lease-progress{height:8px;background:#F1F5F9;border-radius:999px;overflow:hidden;margin:12px 0 6px}
+.lease-progress > span{display:block;height:100%;background:linear-gradient(90deg,var(--brand-500),var(--brand-700));border-radius:999px;transition:width .6s}
+.lease-row{display:flex;justify-content:space-between;font-size:12.5px;padding:5px 0}
+.lease-row span{color:var(--text-muted)}
+.lease-row b{color:var(--text)}
+
+/* Roommate split */
+.roomate-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.roomate-row:last-child{border-bottom:0}
+.roomate-row .av{width:36px;height:36px;border-radius:999px;color:#fff;font-weight:800;font-size:12px;display:grid;place-items:center;flex-shrink:0}
+.roomate-row .info{flex:1;min-width:0}
+.roomate-row .info b{display:block;font-size:13.5px}
+.roomate-row .info .meta{font-size:11px;color:var(--text-muted);margin-top:1px}
+.roomate-row .right{text-align:right}
+.roomate-row .amt{font-weight:800;color:var(--text);font-size:13px}
+.roomate-row .pill{font-size:10px;font-weight:800;padding:2px 6px;border-radius:5px;letter-spacing:.04em;text-transform:uppercase;display:inline-block;margin-top:3px}
+.roomate-row .pill.paid{background:#ECFDF5;color:#047857}
+.roomate-row .pill.due {background:#FFFBEB;color:#92400E}
+
+/* Payment history row */
+.ph-row{display:grid;grid-template-columns:auto 1fr auto auto;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);font-size:12.5px}
+.ph-row:last-child{border-bottom:0}
+.ph-row .month{font-weight:700;color:var(--text);min-width:80px}
+.ph-row .method{color:var(--text-muted);font-size:11.5px}
+.ph-row .amt{font-weight:700}
+.ph-row .pill{font-size:10px;font-weight:800;padding:2px 6px;border-radius:5px;background:#ECFDF5;color:#047857;text-transform:uppercase;letter-spacing:.04em}
+
+/* ===== Tours Manage (Zillow Tours) ===== */
+
+/* Tour card */
+.tour-card{
+  background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px;
+  display:grid;grid-template-columns:90px 1fr auto;gap:18px;align-items:center;transition:.18s;
+}
+.tour-card:hover{box-shadow:var(--shadow-sm);border-color:var(--border-strong)}
+.tour-card.upcoming{border-left:4px solid var(--brand-700)}
+.tour-card.pending{border-left:4px solid #F59E0B}
+.tour-card.cancelled{border-left:4px solid #94A3B8;opacity:.72}
+.tour-card.past{border-left:4px solid #047857}
+@media (max-width:680px){.tour-card{grid-template-columns:1fr}}
+
+.tour-date-block{
+  text-align:center;background:var(--surface-2);border-radius:10px;padding:10px 6px;
+  border:1px solid var(--border);
+}
+.tour-date-block .month{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);font-weight:700}
+.tour-date-block .day-num{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1;color:var(--text);margin:2px 0}
+.tour-date-block .weekday{font-size:10.5px;color:var(--text-muted);font-weight:600}
+.tour-date-block .time-pill{font-size:12.5px;font-weight:800;color:var(--brand-700);margin-top:6px;border-top:1px dashed var(--border-strong);padding-top:6px}
+
+.tour-info{min-width:0;display:flex;gap:14px;align-items:flex-start}
+.tour-info .photo{width:64px;height:48px;border-radius:8px;background-size:cover;background-position:center;flex-shrink:0}
+.tour-info .body{flex:1;min-width:0}
+.tour-info .body b{font-size:14px;display:block;letter-spacing:-.01em}
+.tour-info .body .addr{font-size:11.5px;color:var(--text-muted);margin-top:2px;display:flex;align-items:center;gap:4px}
+.tour-info .body .tags-row{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.tour-info .body .agent-line{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:var(--text-muted)}
+.tour-info .body .agent-line .av{width:22px;height:22px;border-radius:999px;font-size:10px;font-weight:800;color:#fff;display:grid;place-items:center;flex-shrink:0}
+
+.tour-type-badge{
+  font-size:10.5px;font-weight:800;padding:3px 7px;border-radius:5px;letter-spacing:.06em;text-transform:uppercase;
+  display:inline-flex;align-items:center;gap:3px;
+}
+.tour-type-badge.inperson{background:#FFF7ED;color:#C2410C;border:1px solid #FED7AA}
+.tour-type-badge.virtual{background:#EFF6FF;color:#1D4ED8;border:1px solid #DBEAFE}
+.tour-type-badge.self{background:#F5F3FF;color:#6D28D9;border:1px solid #EDE9FE}
+
+.tour-status-pill{font-size:10.5px;font-weight:800;padding:3px 7px;border-radius:5px;letter-spacing:.06em;text-transform:uppercase}
+.tour-status-pill.confirmed{background:#ECFDF5;color:#047857;border:1px solid #A7F3D0}
+.tour-status-pill.pending  {background:#FFFBEB;color:#92400E;border:1px solid #FEF3C7}
+.tour-status-pill.completed{background:#EFF6FF;color:#1D4ED8;border:1px solid #DBEAFE}
+.tour-status-pill.cancelled{background:#F1F5F9;color:#475569;border:1px solid #E2E8F0}
+
+.tour-actions{display:flex;gap:6px;flex-direction:column;flex-shrink:0}
+.tour-actions .btn{padding:7px 11px;font-size:12px;white-space:nowrap}
+
+/* Notes block for past tours */
+.tour-notes{
+  margin-top:14px;padding:14px;background:var(--surface-2);border-radius:10px;
+  border:1px dashed var(--border-strong);
+}
+.tour-notes .rating-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.tour-notes .rating-row .stars{color:#F59E0B;font-size:16px;letter-spacing:2px}
+.tour-notes .rating-row .stars .empty{color:#E5E7EB}
+.tour-notes .pros-cons{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px}
+.tour-notes .pc-col h5{font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 6px;color:var(--text-muted);font-weight:700}
+.tour-notes .pc-col label{display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12.5px}
+
+/* Mini calendar */
+.tour-cal{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px}
+.tour-cal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.tour-cal-head b{font-size:13.5px;letter-spacing:-.01em}
+.tour-cal-head button{background:transparent;border:0;cursor:pointer;width:28px;height:28px;border-radius:6px;color:var(--text-muted);font-size:14px}
+.tour-cal-head button:hover{background:var(--surface-2);color:var(--text)}
+.tour-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center;font-size:12px}
+.tour-cal-grid .dn{color:var(--text-muted);font-weight:700;padding:4px 0;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em}
+.tour-cal-grid .dy{
+  position:relative;aspect-ratio:1;border-radius:7px;display:grid;place-items:center;
+  cursor:pointer;font-weight:500;
+}
+.tour-cal-grid .dy:hover{background:var(--surface-2)}
+.tour-cal-grid .dy.muted{color:var(--text-subtle)}
+.tour-cal-grid .dy.has-tour{background:var(--brand-50);color:var(--brand-700);font-weight:800}
+.tour-cal-grid .dy.has-tour::after{content:'';position:absolute;bottom:3px;left:50%;transform:translateX(-50%);width:5px;height:5px;border-radius:999px;background:var(--brand-700)}
+.tour-cal-grid .dy.today{border:2px solid var(--brand-700);color:var(--brand-700);font-weight:800}
+
+/* Preference row */
+.pref-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-size:12.5px}
+.pref-row .lbl{color:var(--text-muted);font-weight:600}
+.pref-row .val{font-weight:700;color:var(--text)}
+
+/* ===== Recently Viewed (Zillow MyZillow Recently Viewed) ===== */
+
+/* Day group with sticky header */
+.day-group{margin-bottom:32px}
+.day-group .day-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 0 10px;margin-bottom:14px;border-bottom:1px solid var(--border);
+}
+.day-group .day-head h3{font-size:15px;margin:0;letter-spacing:-.01em;font-weight:700;color:var(--text)}
+.day-group .day-head h3 .relative{color:var(--text-muted);font-weight:500;margin-left:6px;font-size:12.5px}
+.day-group .day-head .count{color:var(--text-muted);font-size:12.5px;font-weight:600}
+
+/* Viewed-card overlay metadata */
+.viewed-card{position:relative}
+.viewed-card .vc-count{
+  position:absolute;top:46px;right:10px;
+  background:rgba(15,23,42,.78);color:#fff;font-size:10.5px;font-weight:700;
+  padding:3px 7px;border-radius:5px;backdrop-filter:blur(8px);
+  display:inline-flex;align-items:center;gap:3px;
+}
+.viewed-card .price-tag{
+  position:absolute;top:46px;left:10px;
+  font-size:10.5px;font-weight:800;padding:4px 8px;border-radius:5px;letter-spacing:.04em;
+  display:inline-flex;align-items:center;gap:4px;backdrop-filter:blur(6px);
+}
+.viewed-card .price-tag.down{background:rgba(254,226,226,.96);color:#B91C1C;border:1px solid #FCA5A5}
+.viewed-card .price-tag.up{background:rgba(236,253,245,.96);color:#047857;border:1px solid #A7F3D0}
+.viewed-card .status-overlay{
+  position:absolute;top:10px;right:10px;font-size:10.5px;font-weight:800;
+  padding:3px 8px;border-radius:5px;letter-spacing:.04em;text-transform:uppercase;
+}
+.viewed-card .status-overlay.pending{background:rgba(245,158,11,.95);color:#fff}
+.viewed-card .status-overlay.sold{background:rgba(15,118,110,.95);color:#fff}
+.viewed-card .status-overlay.off{background:rgba(100,116,139,.95);color:#fff}
+.viewed-card .vc-foot{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:8px 14px;border-top:1px solid var(--border);font-size:11.5px;color:var(--text-muted);
+}
+.viewed-card .vc-foot b{color:var(--text);font-weight:700}
+.viewed-card .vc-foot .actions{display:flex;gap:4px}
+.viewed-card .vc-foot .actions button{
+  background:transparent;border:0;padding:4px;cursor:pointer;color:var(--text-muted);font-size:13px;border-radius:5px;
+  width:24px;height:24px;display:grid;place-items:center;
+}
+.viewed-card .vc-foot .actions button:hover{background:var(--surface-2);color:var(--text)}
+
+/* Continue card (large pickup card) */
+.continue-card{
+  display:grid;grid-template-columns:240px 1fr;gap:18px;
+  background:linear-gradient(135deg,#FFF7ED,#fff);border:1px solid #FED7AA;
+  border-radius:18px;padding:18px;overflow:hidden;align-items:center;margin-bottom:24px;
+}
+.continue-card .cc-photo{aspect-ratio:4/3;border-radius:12px;background-size:cover;background-position:center;box-shadow:var(--shadow-sm)}
+.continue-card .cc-body h3{font-size:20px;margin:6px 0 4px;letter-spacing:-.01em;font-weight:800}
+.continue-card .cc-body .sub{font-size:13.5px;color:var(--text-muted);margin-bottom:14px;line-height:1.5}
+@media (max-width:640px){.continue-card{grid-template-columns:1fr}}
+
+/* Analytics card */
+.analytics-card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px}
+.analytics-card h4{font-size:11px;margin:0 0 12px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-weight:700}
+.an-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;font-size:12.5px}
+.an-row .lbl{flex-shrink:0;width:90px;color:var(--text-muted)}
+.an-row .bar{flex:1;height:8px;background:#F1F5F9;border-radius:999px;overflow:hidden;min-width:60px}
+.an-row .bar > i{display:block;height:100%;background:linear-gradient(90deg,#FFA52E,var(--brand-700));border-radius:999px;transition:width .8s ease}
+.an-row .pct{flex-shrink:0;width:36px;text-align:right;font-weight:700;color:var(--text)}
+
+/* Search in history bar */
+.history-search{
+  display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--border);
+  border-radius:10px;padding:0 12px;height:38px;
+}
+.history-search input{border:0;outline:none;flex:1;font-size:13px;background:transparent}
+.history-search svg{width:16px;height:16px;color:var(--text-muted)}
+
+/* ===== My Team (Zillow Your Team style) ===== */
+
+/* Team member card */
+.team-card{
+  background:#fff;border:1px solid var(--border);border-radius:16px;padding:18px;
+  display:flex;flex-direction:column;transition:.18s;
+}
+.team-card:hover{box-shadow:var(--shadow-sm);border-color:var(--border-strong)}
+.team-card .top{display:flex;gap:12px}
+.team-card .photo{width:54px;height:54px;border-radius:999px;background-size:cover;flex-shrink:0;display:grid;place-items:center;color:#fff;font-weight:800;font-size:16px}
+.team-card .info{flex:1;min-width:0}
+.team-card .name-row{display:flex;align-items:center;gap:8px;margin-bottom:2px;flex-wrap:wrap}
+.team-card .name-row b{font-size:14.5px;letter-spacing:-.01em}
+.team-card .name-row .verified{color:#047857}
+.team-card .name-row .verified svg{width:12px;height:12px}
+.team-card .role-tag{font-size:10px;font-weight:800;padding:2px 7px;border-radius:5px;text-transform:uppercase;letter-spacing:.06em;display:inline-block;margin-top:2px}
+.team-card .role-tag.agent     {background:#FFF7ED;color:#C2410C;border:1px solid #FED7AA}
+.team-card .role-tag.loan      {background:#ECFDF5;color:#047857;border:1px solid #D1FAE5}
+.team-card .role-tag.legal     {background:#EFF6FF;color:#1D4ED8;border:1px solid #DBEAFE}
+.team-card .role-tag.eval      {background:#F5F3FF;color:#6D28D9;border:1px solid #EDE9FE}
+.team-card .role-tag.insurance {background:#FFFBEB;color:#92400E;border:1px solid #FEF3C7}
+.team-card .role-tag.contractor{background:#F1F5F9;color:#475569;border:1px solid #E2E8F0}
+.team-card .office{font-size:12px;color:var(--text-muted);margin-top:4px}
+.team-card .stars{font-size:11.5px;color:var(--text-muted);margin-top:4px}
+.team-card .stars b{color:var(--text)}
+.team-card .menu-btn{background:transparent;border:0;color:var(--text-subtle);cursor:pointer;padding:4px 8px;font-size:18px;line-height:1;align-self:flex-start;border-radius:6px}
+.team-card .menu-btn:hover{background:var(--surface-2);color:var(--text)}
+.team-card .last-msg{
+  background:var(--surface-2);border-radius:10px;padding:10px 12px;margin-top:12px;
+  font-size:12.5px;color:var(--text);display:flex;justify-content:space-between;gap:8px;
+}
+.team-card .last-msg .preview{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.team-card .last-msg .time{font-size:10.5px;color:var(--text-subtle);font-weight:600;flex-shrink:0}
+.team-card .actions{display:flex;gap:6px;margin-top:12px}
+.team-card .actions button, .team-card .actions a{
+  flex:1;height:36px;border:1px solid var(--border);background:#fff;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;gap:5px;cursor:pointer;color:var(--text-muted);font-size:12.5px;font-weight:600;text-decoration:none;
+}
+.team-card .actions button:hover, .team-card .actions a:hover{background:var(--surface-2);color:var(--text)}
+.team-card .actions .primary{background:var(--brand-700);color:#fff;border-color:var(--brand-700)}
+.team-card .actions .primary:hover{background:var(--brand-800);color:#fff}
+.team-card .actions svg{width:14px;height:14px}
+
+/* Task item */
+.task-item{
+  display:flex;gap:10px;align-items:flex-start;
+  padding:12px 14px;border-bottom:1px solid var(--border);
+}
+.task-item:last-child{border-bottom:0}
+.task-item input[type="checkbox"]{margin-top:3px;cursor:pointer;width:16px;height:16px}
+.task-item.done b{text-decoration:line-through;color:var(--text-muted)}
+.task-item.done .meta{opacity:.6}
+.task-item .body{flex:1;min-width:0}
+.task-item .body b{font-size:13.5px;display:block}
+.task-item .body .meta{font-size:11.5px;color:var(--text-muted);margin-top:3px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.task-item .assigned-to{display:inline-flex;align-items:center;gap:5px;font-weight:600;color:var(--text)}
+.task-item .assigned-to .avatar-tiny{width:18px;height:18px;border-radius:999px;font-size:8.5px;font-weight:800;color:#fff;display:grid;place-items:center}
+.task-item .due-pill{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:5px;letter-spacing:.02em}
+.task-item .due-pill.today{background:#FEE2E2;color:#B91C1C}
+.task-item .due-pill.week{background:#FFFBEB;color:#92400E}
+.task-item .due-pill.later{background:#F1F5F9;color:#475569}
+.task-item .due-pill.done{background:#ECFDF5;color:#047857}
+
+/* Doc item */
+.doc-item{display:flex;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)}
+.doc-item:last-child{border-bottom:0}
+.doc-item .doc-ic{width:36px;height:36px;border-radius:8px;display:grid;place-items:center;font-size:13px;flex-shrink:0;font-weight:800}
+.doc-item .doc-ic.pdf{background:#FEE2E2;color:#B91C1C}
+.doc-item .doc-ic.img{background:#EFF6FF;color:#1D4ED8}
+.doc-item .doc-ic.doc{background:#F5F3FF;color:#6D28D9}
+.doc-item .info{flex:1;min-width:0}
+.doc-item .info b{font-size:13px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.doc-item .info .meta{font-size:11px;color:var(--text-muted);margin-top:1px}
+.doc-item .dl-btn{background:transparent;border:0;color:var(--text-muted);cursor:pointer;padding:4px 8px}
+.doc-item .dl-btn:hover{color:var(--text)}
+
+/* Timeline */
+.tl-item{display:flex;gap:10px;padding:10px 0 10px 24px;position:relative}
+.tl-item::before{content:'';position:absolute;left:6px;top:14px;bottom:-8px;width:2px;background:var(--border)}
+.tl-item:last-child::before{display:none}
+.tl-item .dot{position:absolute;left:0;top:12px;width:14px;height:14px;border-radius:999px;background:#fff;border:2px solid var(--text-muted)}
+.tl-item .dot.chat{border-color:#1D4ED8}
+.tl-item .dot.doc{border-color:#047857}
+.tl-item .dot.task{border-color:#D97706}
+.tl-item .dot.added{border-color:var(--brand-700)}
+.tl-item .body b{font-size:13px;display:block}
+.tl-item .body .meta{font-size:11.5px;color:var(--text-muted);margin-top:1px}
+
+/* Find a pro tile */
+.pro-tile{
+  display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);
+  border-radius:10px;background:#fff;cursor:pointer;transition:.15s;text-decoration:none;color:inherit;
+}
+.pro-tile:hover{border-color:var(--brand-200);background:var(--brand-50);transform:translateY(-1px)}
+.pro-tile .ic{width:38px;height:38px;border-radius:9px;background:var(--brand-50);color:var(--brand-700);display:grid;place-items:center;flex-shrink:0;font-size:16px}
+.pro-tile .meta{flex:1;min-width:0}
+.pro-tile .meta b{font-size:13px;display:block;letter-spacing:-.01em}
+.pro-tile .meta span{font-size:11.5px;color:var(--text-muted)}
+.pro-tile .arrow{margin-left:auto;color:var(--text-subtle)}
+
+/* ===== My Home (Zillow Your Home style) ===== */
+
+/* Hero — homeowner big value */
+.mh-hero{
+  background:
+    radial-gradient(700px 380px at 92% 8%, rgba(255,165,46,.18), transparent 60%),
+    linear-gradient(180deg,#FFFBEB 0%,#fff 100%);
+  border-bottom:1px solid var(--border);padding:32px 0;
+}
+.mh-hero-grid{display:grid;grid-template-columns:1.3fr .7fr;gap:28px;align-items:flex-start}
+@media (max-width:960px){.mh-hero-grid{grid-template-columns:1fr}}
+
+.mh-address-card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:18px;display:flex;gap:14px;align-items:center;margin-bottom:18px}
+.mh-address-card .photo{width:76px;height:60px;border-radius:10px;background-size:cover;background-position:center;flex-shrink:0}
+.mh-address-card .verified{display:inline-flex;align-items:center;gap:4px;color:#047857;font-size:11px;font-weight:700;background:#ECFDF5;padding:2px 7px;border-radius:5px;border:1px solid #D1FAE5}
+
+.mh-value-card{background:#fff;border:1px solid var(--border);border-radius:18px;padding:24px;box-shadow:var(--shadow-sm)}
+.mh-z-amount{font-size:48px;font-weight:800;letter-spacing:-.02em;color:var(--text);line-height:1;margin-top:4px}
+.mh-z-trend{font-size:14px;font-weight:700;margin-top:8px;display:inline-flex;align-items:center;gap:6px}
+.mh-z-trend.up{color:#047857}
+.mh-z-trend.down{color:#B91C1C}
+.mh-z-range{color:var(--text-muted);font-size:13px;margin-top:4px}
+.mh-z-tag{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:700}
+
+/* Value chart (inline SVG) */
+.mh-chart{width:100%;height:140px;margin-top:14px}
+.mh-chart .area{fill:url(#brandGrad);opacity:.2}
+.mh-chart .line{fill:none;stroke:var(--brand-700);stroke-width:2.5}
+.mh-chart .dot{fill:var(--brand-700);stroke:#fff;stroke-width:2}
+.mh-chart text{font-size:10px;fill:var(--text-subtle)}
+
+/* Equity ring */
+.eq-ring-wrap{display:flex;align-items:center;gap:14px}
+.eq-ring{
+  --p:54;
+  width:96px;height:96px;border-radius:999px;flex-shrink:0;
+  background:conic-gradient(var(--brand-700) calc(var(--p)*1%), #E5E7EB 0);
+  display:grid;place-items:center;position:relative;
+}
+.eq-ring-inner{
+  width:72px;height:72px;background:#fff;border-radius:999px;display:grid;place-items:center;
+  text-align:center;
+}
+.eq-ring-inner b{font-size:18px;letter-spacing:-.01em;font-weight:800;color:var(--brand-700);display:block;line-height:1}
+.eq-ring-inner span{font-size:9.5px;color:var(--text-muted);margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
+
+/* Stat tile */
+.mh-stat{background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px}
+.mh-stat .label{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:700}
+.mh-stat .value{font-size:22px;font-weight:800;letter-spacing:-.01em;margin-top:4px;line-height:1.1}
+.mh-stat .sub{font-size:11.5px;color:var(--text-muted);margin-top:6px}
+.mh-stat .delta{font-size:11.5px;font-weight:700;margin-top:6px}
+.mh-stat .delta.up{color:#047857}
+.mh-stat .delta.down{color:#B91C1C}
+
+/* AI insight card variants */
+.ai-insight{
+  background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px;
+  display:flex;gap:14px;align-items:flex-start;transition:.18s;
+}
+.ai-insight:hover{border-color:var(--border-strong);transform:translateY(-2px);box-shadow:var(--shadow-sm)}
+.ai-insight .ai-mark{
+  width:40px;height:40px;border-radius:11px;display:grid;place-items:center;flex-shrink:0;
+  background:linear-gradient(135deg,var(--brand-50),#fff);color:var(--brand-700);border:1px solid var(--brand-100);
+}
+.ai-insight.urgent .ai-mark{background:linear-gradient(135deg,#FEE2E2,#fff);border-color:#FECACA;color:#B91C1C}
+.ai-insight.good .ai-mark{background:linear-gradient(135deg,#ECFDF5,#fff);border-color:#D1FAE5;color:#047857}
+.ai-insight h4{font-size:14px;margin:0 0 4px;letter-spacing:-.01em;font-weight:700}
+.ai-insight p{margin:0;font-size:12.5px;color:var(--text-muted);line-height:1.5}
+.ai-insight .cta{margin-top:8px;font-size:12px;font-weight:700;color:var(--brand-700)}
+
+/* Refinance opportunity banner */
+.refi-card{
+  background:
+    radial-gradient(600px 280px at 92% 20%, rgba(255,165,46,.25), transparent 60%),
+    linear-gradient(135deg,#0F172A 0%,#7C2D12 100%);
+  color:#fff;border-radius:18px;padding:28px;position:relative;overflow:hidden;
+}
+.refi-card h3{color:#fff;font-size:20px;letter-spacing:-.01em;margin:0 0 6px;font-weight:800}
+.refi-card .savings-big{font-size:42px;font-weight:800;letter-spacing:-.02em;color:#FFA52E;line-height:1;margin-top:14px}
+.refi-card .compare{display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:center;margin-top:18px;padding:14px;background:rgba(255,255,255,.08);border-radius:12px}
+.refi-card .compare .label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;opacity:.7;font-weight:700}
+.refi-card .compare .num{font-size:18px;font-weight:800;letter-spacing:-.01em;margin-top:2px}
+.refi-card .compare .arrow{font-size:22px;opacity:.7}
+
+/* Improvement timeline */
+.impr-item{display:flex;gap:14px;padding:14px;border-bottom:1px solid var(--border)}
+.impr-item:last-child{border-bottom:0}
+.impr-item .date-block{width:62px;flex-shrink:0;text-align:center;color:var(--text-muted)}
+.impr-item .date-block b{display:block;font-size:18px;color:var(--text);font-weight:800;line-height:1}
+.impr-item .date-block span{font-size:11px}
+.impr-item .body{flex:1;min-width:0}
+.impr-item .body b{font-size:14px;font-weight:700;display:block}
+.impr-item .body .meta{font-size:12px;color:var(--text-muted);margin-top:2px}
+.impr-item .body .roi{display:inline-block;font-size:11.5px;font-weight:700;color:#047857;margin-top:6px;background:#ECFDF5;padding:2px 8px;border-radius:5px}
+.impr-item .photo{width:64px;height:48px;border-radius:8px;background-size:cover;background-position:center;flex-shrink:0}
+
+/* Comparable sale row */
+.comp-row{
+  display:grid;grid-template-columns:60px 1fr auto;gap:12px;align-items:center;
+  padding:12px 14px;border-bottom:1px solid var(--border);
+}
+.comp-row:last-child{border-bottom:0}
+.comp-row .thumb{width:60px;height:48px;border-radius:8px;background-size:cover;background-position:center}
+.comp-row .info b{font-size:13.5px;display:block}
+.comp-row .info .sub{font-size:11.5px;color:var(--text-muted);margin-top:2px}
+.comp-row .price-col{text-align:right}
+.comp-row .price-col .p{font-size:14.5px;font-weight:800}
+.comp-row .price-col .delta{font-size:11px;font-weight:700;margin-top:2px}
+.comp-row .price-col .delta.higher{color:#047857}
+.comp-row .price-col .delta.lower{color:#B91C1C}
+
+/* Claim flow (when home not yet claimed) */
+.claim-cta{
+  background:linear-gradient(135deg,#FFF7ED,#fff);border:1px dashed #FED7AA;
+  border-radius:18px;padding:32px;text-align:center;
+}
+
+/* ===== MyZillow Favorites style ===== */
+
+/* Page tabs (Zillow tab bar) */
+.fav-tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:24px;overflow-x:auto}
+.fav-tabs button{
+  padding:14px 18px;font-size:14px;font-weight:600;color:var(--text-muted);
+  border:0;background:transparent;cursor:pointer;border-bottom:3px solid transparent;
+  margin-bottom:-1px;display:inline-flex;align-items:center;gap:8px;white-space:nowrap;transition:.15s;
+}
+.fav-tabs button:hover{color:var(--text)}
+.fav-tabs button.active{color:var(--brand-700);border-bottom-color:var(--brand-700)}
+.fav-tabs button .count{
+  background:var(--surface-2);color:var(--text);font-size:11px;font-weight:700;
+  padding:1px 7px;border-radius:999px;min-width:18px;text-align:center;
+}
+.fav-tabs button.active .count{background:var(--brand-50);color:var(--brand-700)}
+
+.fav-pane{display:none}
+.fav-pane.active{display:block;animation:fadeIn .15s ease}
+
+/* Saved card extra metadata */
+.saved-card{position:relative}
+.saved-card .saved-meta{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:8px 16px;border-top:1px solid var(--border);
+  font-size:11.5px;color:var(--text-muted);
+}
+.saved-card .saved-meta .compare-cb{display:flex;align-items:center;gap:6px;cursor:pointer}
+.saved-card .saved-meta .pchange{font-weight:700}
+.saved-card .saved-meta .pchange.up{color:#047857}
+.saved-card .saved-meta .pchange.down{color:#B91C1C}
+
+/* Price change banner (inside photo) */
+.price-change-banner{
+  position:absolute;left:10px;bottom:10px;
+  background:rgba(255,255,255,.95);padding:4px 8px;border-radius:6px;
+  font-size:11px;font-weight:700;display:flex;align-items:center;gap:4px;
+  backdrop-filter:blur(8px);
+}
+.price-change-banner.down{color:#B91C1C}
+.price-change-banner.up{color:#047857}
+
+/* Notes section per saved listing */
+.saved-notes{
+  background:var(--surface-2);padding:10px 12px;font-size:12px;color:var(--text);
+  border-top:1px dashed var(--border);display:flex;gap:8px;align-items:flex-start;
+}
+.saved-notes .notes-text{flex:1;color:var(--text-muted);font-style:italic}
+.saved-notes button{
+  background:transparent;border:0;color:var(--brand-700);font-weight:600;font-size:11.5px;
+  cursor:pointer;padding:2px 6px;border-radius:4px;
+}
+.saved-notes button:hover{background:var(--brand-50)}
+
+/* Compare floating bar */
+.compare-bar{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+  background:#fff;border:1px solid var(--border);border-radius:16px;
+  box-shadow:0 20px 40px rgba(15,23,42,.18);padding:14px 18px;
+  z-index:60;display:none;align-items:center;gap:14px;
+  min-width:520px;
+}
+.compare-bar.show{display:flex;animation:fadeIn .2s ease}
+.compare-bar .cb-items{display:flex;gap:6px;flex:1}
+.compare-bar .cb-item{
+  width:48px;height:36px;border-radius:8px;background-size:cover;background-position:center;
+  position:relative;border:2px solid var(--border);
+}
+.compare-bar .cb-item button{
+  position:absolute;top:-6px;right:-6px;background:#fff;border:1px solid var(--border);
+  width:18px;height:18px;border-radius:999px;display:grid;place-items:center;
+  font-size:11px;cursor:pointer;line-height:1;
+}
+.compare-bar .cb-empty{
+  width:48px;height:36px;border-radius:8px;border:2px dashed var(--border);
+}
+
+/* Status pill on saved card */
+.status-pill{
+  position:absolute;top:10px;left:10px;
+  font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:5px;letter-spacing:.04em;
+  text-transform:uppercase;backdrop-filter:blur(6px);
+}
+.status-pill.pending{background:rgba(245,158,11,.95);color:#fff}
+.status-pill.sold{background:rgba(15,118,110,.95);color:#fff}
+.status-pill.off{background:rgba(100,116,139,.95);color:#fff}
+
+/* Empty state */
+.empty-state{text-align:center;padding:48px 24px;color:var(--text-muted)}
+.empty-state .ic{
+  width:64px;height:64px;border-radius:999px;background:var(--surface-2);
+  display:grid;place-items:center;margin:0 auto 14px;color:var(--text-subtle);
+}
+.empty-state .ic svg{width:28px;height:28px}
+.empty-state h3{font-size:16px;color:var(--text);margin:0 0 6px;font-weight:700}
+.empty-state p{font-size:13px;margin:0 0 16px;max-width:340px;margin-left:auto;margin-right:auto}
+
+/* Compare modal table */
+.compare-table{width:100%;border-collapse:collapse;background:#fff}
+.compare-table td, .compare-table th{padding:14px;font-size:13.5px;border-bottom:1px solid var(--border);vertical-align:top}
+.compare-table th{text-align:left;width:160px;color:var(--text-muted);font-weight:600;font-size:12px;letter-spacing:.04em;text-transform:uppercase;background:var(--surface-2)}
+.compare-table td.highlight{background:var(--brand-50);color:var(--brand-700);font-weight:700}
+
+/* Sub-toolbar in tab */
+.fav-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.fav-toolbar .left{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fav-toolbar .left h2{font-size:18px;letter-spacing:-.01em;margin:0;font-weight:700}
+
+/* ===== Listings search (Zillow split-screen style) ===== */
+
+/* Sticky search toolbar */
+.search-toolbar{
+  position:sticky;top:64px;z-index:40;
+  background:#fff;border-bottom:1px solid var(--border);
+  padding:10px 0;
+}
+.search-toolbar .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.search-toolbar .loc-input{
+  display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--border);
+  border-radius:10px;padding:0 12px;height:38px;min-width:220px;
+}
+.search-toolbar .loc-input input{border:0;outline:none;flex:1;font-size:13.5px;width:100%}
+.search-toolbar .loc-input svg{color:var(--text-muted);width:16px;height:16px}
+.search-toolbar .intent-toggle{padding:3px}
+.search-toolbar .intent-toggle button{padding:6px 14px;font-size:12.5px}
+
+/* Filter pill chip with dropdown */
+.filter-pill{
+  display:inline-flex;align-items:center;gap:6px;padding:0 12px;height:38px;
+  background:#fff;border:1px solid var(--border);border-radius:10px;
+  font-size:13px;font-weight:600;cursor:pointer;color:var(--text);
+  position:relative;transition:.12s;white-space:nowrap;
+}
+.filter-pill:hover{border-color:var(--border-strong);background:var(--surface-2)}
+.filter-pill.active{border:1.5px solid var(--brand-700);background:var(--brand-50);color:var(--brand-700);padding:0 11px}
+.filter-pill .caret{font-size:9px;opacity:.6}
+.filter-pill .count-dot{
+  background:var(--brand-700);color:#fff;font-size:10px;font-weight:700;
+  width:18px;height:18px;border-radius:999px;display:grid;place-items:center;
+}
+
+/* Filter popover */
+.fp-popover{
+  position:absolute;top:calc(100% + 6px);left:0;
+  background:#fff;border:1px solid var(--border);border-radius:12px;
+  box-shadow:var(--shadow-lg);padding:18px;min-width:280px;z-index:50;
+  display:none;cursor:default;
+}
+.filter-pill.open .fp-popover{display:block}
+.fp-popover label.fp-label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-weight:700;display:block;margin-bottom:8px}
+.fp-popover .price-inputs{display:flex;gap:8px;align-items:center}
+.fp-popover .price-inputs input{flex:1;height:36px;border:1px solid var(--border);border-radius:8px;padding:0 10px;font-size:13px;outline:none}
+.fp-popover .price-inputs span{color:var(--text-muted)}
+.fp-popover .bed-buttons{display:flex;gap:4px;flex-wrap:wrap}
+.fp-popover .bed-buttons button{
+  height:34px;min-width:44px;border-radius:8px;border:1px solid var(--border);
+  background:#fff;font-size:13px;font-weight:600;cursor:pointer;padding:0 10px;
+  transition:.12s;
+}
+.fp-popover .bed-buttons button.active{background:var(--brand-700);color:#fff;border-color:var(--brand-700)}
+.fp-popover .types-list{display:flex;flex-direction:column;gap:8px}
+.fp-popover .types-list label{display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer}
+.fp-popover .fp-foot{display:flex;justify-content:space-between;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
+.fp-popover .fp-foot a{color:var(--text-muted);font-size:12.5px;cursor:pointer;font-weight:600}
+.fp-popover .fp-foot a:hover{color:var(--text)}
+
+/* Active filter pill */
+.active-filter{
+  display:inline-flex;align-items:center;gap:4px;padding:4px 4px 4px 10px;
+  background:var(--brand-50);color:var(--brand-700);border:1px solid var(--brand-200);
+  border-radius:999px;font-size:12px;font-weight:600;
+}
+.active-filter button{
+  background:transparent;border:0;color:var(--brand-700);
+  width:18px;height:18px;border-radius:999px;cursor:pointer;
+  display:grid;place-items:center;font-weight:800;font-size:13px;line-height:1;
+}
+.active-filter button:hover{background:var(--brand-200)}
+
+/* Split layout */
+.split-results{
+  display:grid;grid-template-columns:1.3fr 1fr;gap:0;
+  min-height:calc(100vh - 64px);
+}
+.list-pane{padding:18px 24px 40px;overflow-y:auto}
+.map-pane{
+  position:sticky;top:114px;height:calc(100vh - 114px);
+  border-left:1px solid var(--border);
+  overflow:hidden;
+}
+@media (max-width:1100px){.split-results{grid-template-columns:1fr}.map-pane{display:none}}
+
+/* Map canvas */
+.map-canvas{
+  position:relative;width:100%;height:100%;overflow:hidden;
+  background:
+    radial-gradient(700px 500px at 30% 30%, rgba(34,197,94,.18), transparent 60%),
+    radial-gradient(800px 600px at 80% 70%, rgba(59,130,246,.14), transparent 60%),
+    linear-gradient(135deg,#F0F9FF 0%,#ECFDF5 50%,#FFFBEB 100%);
+}
+.map-canvas::before{
+  content:'';position:absolute;inset:0;
+  background-image:
+    linear-gradient(rgba(255,255,255,.4) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.4) 1px, transparent 1px);
+  background-size:48px 48px;pointer-events:none;
+}
+.map-canvas .road{
+  position:absolute;background:rgba(255,255,255,.7);
+  box-shadow:0 0 0 1px rgba(0,0,0,.04);pointer-events:none;
+}
+
+/* Map pin (price label) */
+.map-pin{
+  position:absolute;transform:translate(-50%, -100%);
+  background:#fff;border:1.5px solid var(--brand-700);color:var(--brand-700);
+  padding:4px 9px;border-radius:14px;font-size:12px;font-weight:800;
+  cursor:pointer;white-space:nowrap;letter-spacing:-.01em;
+  box-shadow:0 6px 14px rgba(0,0,0,.18);
+  transition:.15s;z-index:1;
+}
+.map-pin:hover, .map-pin.hover{
+  background:var(--brand-700);color:#fff;z-index:5;transform:translate(-50%, -100%) scale(1.1);
+  box-shadow:0 10px 20px rgba(194,65,12,.4);
+}
+.map-pin::after{
+  content:'';position:absolute;bottom:-7px;left:50%;transform:translateX(-50%);
+  width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;
+  border-top:7px solid var(--brand-700);
+}
+.map-pin.saved::before{
+  content:'❤';position:absolute;top:-6px;right:-6px;background:#fff;border:1px solid #FCA5A5;
+  color:#E11D48;font-size:9px;width:14px;height:14px;border-radius:999px;display:grid;place-items:center;
+}
+
+/* Map controls (zoom, layers) */
+.map-controls{
+  position:absolute;top:14px;right:14px;display:flex;flex-direction:column;gap:6px;z-index:5;
+}
+.map-controls button{
+  width:36px;height:36px;border-radius:8px;background:#fff;border:1px solid var(--border);
+  display:grid;place-items:center;cursor:pointer;color:var(--text);box-shadow:var(--shadow-sm);
+  font-size:14px;font-weight:700;
+}
+.map-controls button:hover{background:var(--surface-2)}
+.map-search-here{
+  position:absolute;top:14px;left:50%;transform:translateX(-50%);
+  background:#fff;color:var(--text);font-weight:600;font-size:12.5px;
+  padding:8px 14px;border-radius:999px;border:1px solid var(--border);
+  box-shadow:var(--shadow-sm);cursor:pointer;z-index:5;display:flex;align-items:center;gap:6px;
+}
+.map-search-here:hover{background:var(--surface-2)}
+
+/* Map preview card (hover/click on pin) */
+.map-preview{
+  position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
+  background:#fff;border:1px solid var(--border);border-radius:14px;
+  box-shadow:var(--shadow-lg);width:300px;padding:0;overflow:hidden;z-index:6;
+  display:none;
+}
+.map-preview.show{display:block;animation:fadeIn .15s ease}
+.map-preview .mp-photo{aspect-ratio:16/9;background-size:cover;background-position:center}
+.map-preview .mp-body{padding:12px 14px}
+.map-preview .mp-price{font-size:18px;font-weight:800;letter-spacing:-.01em}
+.map-preview .mp-title{font-size:12.5px;color:var(--text-muted);margin-top:2px}
+.map-preview .mp-specs{font-size:11.5px;color:var(--text-muted);margin-top:4px}
+
+/* Result toolbar (above list) */
+.result-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.result-toolbar h1{font-size:20px;letter-spacing:-.01em;margin:0;font-weight:700}
+.result-toolbar h1 b{font-weight:800;color:var(--brand-700)}
+.result-toolbar .sub{font-size:12.5px;color:var(--text-muted);margin-top:2px}
+
+/* Alert banner */
+.search-alert{
+  background:linear-gradient(135deg,#FFF7ED,#fff);border:1px solid #FED7AA;
+  border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:12px;
+  margin-bottom:14px;
+}
+
+/* Hovered card highlight */
+.list-pane.has-hover .listing-card{opacity:.45;transition:opacity .15s}
+.list-pane.has-hover .listing-card.hover{opacity:1;border-color:var(--brand-700);transform:translateY(-2px)}
+
+/* More filters modal */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:90;
+  display:none;align-items:center;justify-content:center;padding:24px;
+}
+.modal-overlay.open{display:flex;animation:fadeIn .15s}
+.modal-card{
+  background:#fff;border-radius:16px;max-width:720px;width:100%;max-height:88vh;
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.modal-head{display:flex;justify-content:space-between;align-items:center;padding:18px 24px;border-bottom:1px solid var(--border)}
+.modal-head h2{font-size:18px;margin:0;letter-spacing:-.01em;font-weight:700}
+.modal-head button{background:transparent;border:0;font-size:24px;color:var(--text-muted);cursor:pointer;width:36px;height:36px;border-radius:8px}
+.modal-head button:hover{background:var(--surface-2);color:var(--text)}
+.modal-body{padding:24px;overflow-y:auto;flex:1}
+.modal-foot{padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:8px;align-items:center}
+.modal-section{margin-bottom:24px}
+.modal-section h4{font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-weight:700;margin:0 0 10px}
+
+/* Save search popover */
+.save-popover{
+  position:absolute;top:calc(100% + 8px);right:0;
+  background:#fff;border:1px solid var(--border);border-radius:12px;
+  box-shadow:var(--shadow-lg);padding:18px;min-width:300px;z-index:50;
+  display:none;
+}
+.save-popover.open{display:block}
+
+/* ===== Home Loans (Zillow Home Loans-style) ===== */
+
+/* Hero */
+.hl-hero{
+  position:relative;overflow:hidden;
+  background:
+    radial-gradient(900px 480px at 92% 10%, rgba(255,165,46,.18), transparent 60%),
+    linear-gradient(180deg,#FFF7ED 0%,#fff 100%);
+  padding:48px 0 40px;border-bottom:1px solid var(--border);
+}
+.hl-hero h1{font-size:44px;line-height:1.05;letter-spacing:-.02em;margin:12px 0 12px;font-weight:800}
+.hl-hero .lead{font-size:16px;color:var(--text-muted);max-width:520px;margin:0 0 22px;line-height:1.55}
+.hl-hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
+@media (max-width:960px){.hl-hero-grid{grid-template-columns:1fr;gap:28px}.hl-hero h1{font-size:32px}}
+
+/* Slider input — looks clean */
+.hl-slider{display:block;width:100%;-webkit-appearance:none;height:6px;border-radius:999px;background:#E2E8F0;outline:none;cursor:pointer}
+.hl-slider::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:999px;background:var(--brand-700);cursor:pointer;border:3px solid #fff;box-shadow:0 2px 6px rgba(194,65,12,.3)}
+.hl-slider::-moz-range-thumb{width:22px;height:22px;border-radius:999px;background:var(--brand-700);cursor:pointer;border:3px solid #fff;box-shadow:0 2px 6px rgba(194,65,12,.3)}
+.hl-slider-row{display:flex;justify-content:space-between;font-size:11.5px;color:var(--text-muted);margin-top:4px}
+
+/* Mortgage calculator card */
+.calc-card{background:#fff;border:1px solid var(--border);border-radius:18px;padding:24px;box-shadow:var(--shadow-sm)}
+.calc-card h3{font-size:18px;letter-spacing:-.01em;margin:0 0 14px;font-weight:700}
+.calc-result{background:linear-gradient(135deg,#FFF7ED,#fff);border:1px solid var(--brand-100);border-radius:14px;padding:18px;margin-top:14px}
+.calc-result .label{font-size:11.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+.calc-result .amount{font-size:32px;font-weight:800;letter-spacing:-.02em;color:var(--brand-800);margin-top:2px}
+
+/* Rates table */
+.rates-table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.rates-table thead th{background:var(--surface-2);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);padding:12px 14px;text-align:left;border-bottom:1px solid var(--border)}
+.rates-table tbody td{padding:14px;border-bottom:1px solid var(--border);font-size:13.5px;vertical-align:middle}
+.rates-table tbody tr:last-child td{border-bottom:0}
+.rates-table tbody tr:hover{background:var(--surface-2)}
+.rates-table .bank-cell{display:flex;align-items:center;gap:10px}
+.rates-table .bank-logo{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:11px;flex-shrink:0}
+.rates-table .rate-big{font-size:18px;font-weight:800;letter-spacing:-.01em;color:var(--brand-700)}
+.rates-table .rate-meta{font-size:11.5px;color:var(--text-muted)}
+.rates-table .badge-govt{background:#ECFDF5;color:#047857;font-size:10.5px;padding:2px 6px;border-radius:5px;font-weight:700;letter-spacing:.04em}
+
+/* Loan type cards */
+.loan-card{background:#fff;border:1px solid var(--border);border-radius:18px;padding:24px;display:flex;flex-direction:column;transition:.18s}
+.loan-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-md);border-color:var(--border-strong)}
+.loan-card.popular{border:2px solid var(--brand-700);box-shadow:0 12px 30px rgba(194,65,12,.12)}
+.loan-card .lc-rate{font-size:36px;font-weight:800;letter-spacing:-.02em;color:var(--brand-700);line-height:1}
+.loan-card .lc-name{font-size:14px;font-weight:700;letter-spacing:-.01em;margin-top:8px}
+.loan-card .lc-desc{font-size:12.5px;color:var(--text-muted);margin-top:4px;line-height:1.5;flex:1}
+.loan-card .lc-feat{font-size:12.5px;display:flex;align-items:center;gap:6px;margin-top:6px}
+.loan-card .lc-feat svg{color:var(--brand-700);width:14px;height:14px}
+.loan-card .lc-badge{position:absolute;top:-12px;right:18px;background:var(--brand-700);color:#fff;padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:.04em}
+
+/* Payment chart placeholder */
+.pay-chart{height:120px;display:flex;align-items:flex-end;gap:4px;padding:0 2px}
+.pay-chart > i{flex:1;background:linear-gradient(180deg,var(--brand-700),var(--brand-500));border-radius:3px 3px 0 0;display:block;min-height:8px;opacity:.8}
+
+/* ===== Agent Directory (Zillow Agent Finder-style) ===== */
+
+/* Agent card */
+.agent-card{
+  background:#fff;border:1px solid var(--border);border-radius:16px;overflow:hidden;
+  transition:.2s;display:flex;flex-direction:column;text-decoration:none;color:inherit;position:relative;
+}
+.agent-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-md);border-color:var(--border-strong)}
+.agent-card.is-premier{border-color:var(--brand-200)}
+.agent-card .premier-tag{
+  position:absolute;top:12px;right:12px;
+  background:linear-gradient(135deg,#FFA52E,#EA580C);color:#fff;
+  font-size:10px;font-weight:800;letter-spacing:.08em;padding:3px 8px;border-radius:6px;
+  text-transform:uppercase;box-shadow:0 4px 10px rgba(234,88,12,.25);z-index:2;
+}
+.agent-card .agent-photo{
+  height:140px;
+  background:linear-gradient(135deg,var(--brand-50),#fff);
+  position:relative;display:flex;align-items:flex-end;padding:14px;
+}
+.agent-card .agent-photo .avatar{width:88px;height:88px;border-radius:999px;border:4px solid #fff;font-size:24px;font-weight:800;flex-shrink:0;box-shadow:var(--shadow-sm)}
+.agent-card .agent-body{padding:18px;flex:1;display:flex;flex-direction:column}
+.agent-card .agent-name{font-size:16px;font-weight:700;letter-spacing:-.01em;display:block}
+.agent-card .agent-office-line{font-size:12.5px;color:var(--text-muted);margin-top:2px}
+.agent-card .agent-rating-row{display:flex;align-items:center;gap:6px;margin-top:10px}
+.agent-card .agent-rating-row .stars{color:#F59E0B;font-size:13px;letter-spacing:1px}
+.agent-card .agent-rating-row b{font-size:13.5px}
+.agent-card .agent-rating-row .count{font-size:12px;color:var(--text-muted)}
+.agent-card .agent-stats{display:flex;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:11.5px;color:var(--text-muted)}
+.agent-card .agent-stats > div{flex:1}
+.agent-card .agent-stats > div b{display:block;color:var(--text);font-size:13.5px;font-weight:700}
+.agent-card .agent-areas{display:flex;gap:4px;margin-top:10px;flex-wrap:wrap}
+.agent-card .agent-areas span{font-size:10.5px;background:var(--surface-2);color:var(--text-muted);padding:2px 7px;border-radius:6px;font-weight:600}
+.agent-card .agent-contact-btn{margin-top:auto;padding-top:12px}
+
+/* Sort / view toolbar */
+.dir-toolbar{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.dir-toolbar .left-result{flex:1;min-width:200px}
+.dir-toolbar .left-result h1{font-size:20px;letter-spacing:-.01em;margin:0;font-weight:700}
+.dir-toolbar .left-result .sub{font-size:13px;color:var(--text-muted);margin-top:2px}
+
+/* Profile hero */
+.ap-hero{
+  background:linear-gradient(135deg,var(--surface-2) 0%,#fff 100%);
+  border-bottom:1px solid var(--border);padding:32px 0;
+}
+.ap-hero-grid{display:grid;grid-template-columns:auto 1fr auto;gap:28px;align-items:center}
+@media (max-width:760px){.ap-hero-grid{grid-template-columns:1fr;text-align:center}}
+.ap-hero .avatar-xxl{width:120px;height:120px;border-radius:999px;font-size:36px;font-weight:800;flex-shrink:0;box-shadow:var(--shadow-md);border:4px solid #fff}
+.ap-hero h1{font-size:28px;letter-spacing:-.01em;margin:0 0 4px;font-weight:800}
+.ap-hero .office-row{font-size:14px;color:var(--text-muted);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ap-hero .rating-row{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap}
+.ap-hero .rating-row .stars{color:#F59E0B;font-size:18px;letter-spacing:2px}
+.ap-hero .rating-row b{font-size:18px}
+.ap-hero .rating-row .count{font-size:13px;color:var(--text-muted)}
+.ap-hero .badges-row{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+
+/* Stats panel (sticky right) */
+.stats-panel{background:#fff;border:1px solid var(--border);border-radius:16px;padding:20px}
+.stats-panel h4{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin:0 0 10px;font-weight:700}
+.stats-panel .stat-rows{display:flex;flex-direction:column;gap:10px}
+.stats-panel .stat-rows > div{display:flex;justify-content:space-between;font-size:13.5px}
+.stats-panel .stat-rows > div span{color:var(--text-muted)}
+.stats-panel .stat-rows > div b{font-weight:700}
+
+/* Rating breakdown (5★ → 1★ histogram) */
+.rating-breakdown{display:flex;flex-direction:column;gap:6px}
+.rating-breakdown .rb-row{display:grid;grid-template-columns:32px 1fr 38px;align-items:center;gap:8px;font-size:12px}
+.rating-breakdown .rb-row .rb-bar{height:6px;background:#F1F5F9;border-radius:999px;overflow:hidden}
+.rating-breakdown .rb-row .rb-bar > i{display:block;height:100%;background:#F59E0B;border-radius:999px}
+.rating-breakdown .rb-row .rb-cnt{text-align:right;color:var(--text-muted)}
+
+/* Sub-rating (categories) */
+.sub-ratings{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.sub-ratings > div{background:var(--surface-2);border-radius:10px;padding:12px}
+.sub-ratings > div .lbl{font-size:11.5px;color:var(--text-muted);font-weight:600}
+.sub-ratings > div .val{font-size:18px;font-weight:800;letter-spacing:-.01em;margin-top:2px}
+.sub-ratings > div .bar{height:5px;background:#E5E7EB;border-radius:999px;margin-top:6px;overflow:hidden}
+.sub-ratings > div .bar > span{display:block;height:100%;background:linear-gradient(90deg,#F59E0B,#FFA52E);border-radius:999px}
+
+/* Review card */
+.review-card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px}
+.review-card .rc-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:10px}
+.review-card .rc-head .avatar{width:42px;height:42px;border-radius:999px;font-size:13px;font-weight:700;flex-shrink:0}
+.review-card .rc-meta{flex:1}
+.review-card .rc-meta b{display:block;font-size:14px}
+.review-card .rc-meta .who-sub{font-size:11.5px;color:var(--text-muted)}
+.review-card .stars{color:#F59E0B;font-size:13px;letter-spacing:1px}
+.review-card .rc-text{font-size:13.5px;line-height:1.6;color:var(--text);margin:6px 0}
+.review-card .rc-foot{display:flex;align-items:center;gap:12px;padding-top:10px;border-top:1px dashed var(--border);font-size:12px;color:var(--text-muted)}
+.review-card .rc-foot button{padding:4px 8px;font-size:12px;color:var(--text-muted);background:transparent;border:1px solid var(--border);border-radius:6px;cursor:pointer}
+.review-card .rc-foot button:hover{background:var(--surface-2);color:var(--text)}
+
+/* Verified review tick */
+.verified-tick{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:700;color:#047857;background:#ECFDF5;border:1px solid #D1FAE5;padding:2px 6px;border-radius:5px}
+
+/* Contact form (sticky) */
+.contact-form{background:#fff;border:1px solid var(--border);border-radius:16px;padding:20px}
+.contact-form h4{font-size:15px;letter-spacing:-.01em;margin:0 0 4px;font-weight:700}
+.contact-form p{font-size:12.5px;color:var(--text-muted);margin:0 0 14px;line-height:1.5}
+
+/* ===== Nemi Premier (Zillow Premier Agent-style) ===== */
+
+/* Hero gradient (dark) */
+.pr-hero{
+  position:relative;overflow:hidden;
+  background:
+    radial-gradient(900px 500px at 92% 10%, rgba(255,165,46,.28), transparent 60%),
+    radial-gradient(700px 500px at -10% 100%, rgba(194,65,12,.32), transparent 65%),
+    linear-gradient(135deg,#0F172A 0%,#1F0F08 60%,#3D1E0A 100%);
+  color:#fff;padding:56px 0 64px;
+}
+.pr-hero h1{font-size:46px;line-height:1.05;letter-spacing:-.02em;margin:14px 0 14px;color:#fff;font-weight:800}
+.pr-hero .lead{color:rgba(255,255,255,.78);font-size:16px;max-width:520px;margin:0 0 22px;line-height:1.55}
+.pr-hero .stat-row{border-color:rgba(255,255,255,.18)}
+.pr-hero .stat-row .num{color:#fff}
+.pr-hero .stat-row .lbl{color:rgba(255,255,255,.6)}
+.pr-hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
+@media (max-width:960px){.pr-hero-grid{grid-template-columns:1fr;gap:28px}.pr-hero h1{font-size:34px}}
+
+/* District bid grid — agents can see/buy district placements */
+.bid-tile{
+  background:#fff;border:1px solid var(--border);border-radius:14px;padding:14px;
+  display:flex;flex-direction:column;gap:6px;transition:.18s;cursor:pointer;
+}
+.bid-tile:hover{border-color:var(--brand-700);box-shadow:var(--shadow-md);transform:translateY(-2px)}
+.bid-tile.taken{opacity:.55;cursor:not-allowed}
+.bid-tile.taken:hover{transform:none;box-shadow:none;border-color:var(--border)}
+.bid-tile .bt-head{display:flex;justify-content:space-between;align-items:center}
+.bid-tile .bt-name{font-weight:700;font-size:14.5px;letter-spacing:-.01em}
+.bid-tile .bt-status{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px}
+.bid-tile .bt-status.free{background:#ECFDF5;color:#047857}
+.bid-tile .bt-status.bid{background:#FFFBEB;color:#92400E}
+.bid-tile .bt-status.taken{background:#F1F5F9;color:#475569}
+.bid-tile .bt-meta{font-size:11.5px;color:var(--text-muted)}
+.bid-tile .bt-price{display:flex;justify-content:space-between;align-items:flex-end;padding-top:6px;border-top:1px dashed var(--border);margin-top:auto}
+.bid-tile .bt-price .amount{font-weight:800;font-size:16px;letter-spacing:-.01em}
+.bid-tile .bt-price .per{font-size:10.5px;color:var(--text-muted);margin-left:2px}
+
+/* Branded placement preview (mock listing with agent overlay) */
+.placement-preview{
+  background:#fff;border:1px solid var(--border);border-radius:16px;overflow:hidden;
+  display:grid;grid-template-columns:1fr 240px;gap:0;
+}
+.placement-preview .pp-listing{padding:16px 18px;display:flex;gap:14px}
+.placement-preview .pp-thumb{width:120px;height:90px;border-radius:10px;background-size:cover;background-position:center;flex-shrink:0}
+.placement-preview .pp-info{flex:1;min-width:0}
+.placement-preview .pp-info b{font-size:14.5px;display:block}
+.placement-preview .pp-info .meta{font-size:12px;color:var(--text-muted);margin-top:2px}
+.placement-preview .pp-info .price{font-size:18px;font-weight:800;margin-top:6px}
+.placement-preview .pp-agent{
+  background:linear-gradient(135deg,var(--brand-700) 0%,var(--brand-800) 100%);
+  color:#fff;padding:16px;display:flex;flex-direction:column;gap:8px;position:relative;
+}
+.placement-preview .pp-agent::before{
+  content:'';position:absolute;left:-8px;top:50%;transform:translateY(-50%);
+  width:0;height:0;border-top:8px solid transparent;border-bottom:8px solid transparent;
+  border-right:8px solid var(--brand-700);
+}
+.placement-preview .pp-agent .pp-tag{
+  font-size:10px;letter-spacing:.08em;text-transform:uppercase;opacity:.7;font-weight:700;
+}
+.placement-preview .pp-agent .pp-name{font-size:14px;font-weight:700;letter-spacing:-.01em}
+.placement-preview .pp-agent .pp-rating{font-size:11.5px;opacity:.85}
+.placement-preview .pp-agent .pp-btn{
+  margin-top:auto;background:#fff;color:var(--brand-800);
+  padding:7px 10px;border-radius:8px;font-size:11.5px;font-weight:700;text-align:center;
+}
+@media (max-width:680px){.placement-preview{grid-template-columns:1fr}.placement-preview .pp-agent::before{display:none}}
+
+/* Funnel widget */
+.funnel-row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.funnel-row .label{flex-shrink:0;width:120px;font-size:13px;color:var(--text-muted)}
+.funnel-row .bar{flex:1}
+.funnel-row .num{flex-shrink:0;width:60px;font-weight:700;text-align:right;font-size:14px}
+
+/* Glow card (premier benefit highlight) */
+.glow-card{
+  background:linear-gradient(135deg,#FFFBEB,#fff);border:1px solid #FED7AA;
+  border-radius:18px;padding:24px;position:relative;overflow:hidden;
+}
+.glow-card::before{
+  content:'';position:absolute;top:-40%;right:-20%;width:300px;height:300px;
+  background:radial-gradient(circle, rgba(255,165,46,.18) 0%, transparent 70%);pointer-events:none;
+}
+
+/* ===== Rental Manager (landlord-focused landing) ===== */
+
+/* Hero split layout */
+.rm-hero{
+  background:
+    radial-gradient(900px 480px at 92% 8%, rgba(255,165,46,.22), transparent 60%),
+    linear-gradient(135deg,#FFFBEB 0%,#FFFFFF 60%);
+  padding:48px 0 56px;border-bottom:1px solid var(--border);
+}
+.rm-hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
+.rm-hero h1{font-size:46px;line-height:1.05;letter-spacing:-.02em;margin:14px 0 14px;font-weight:800}
+.rm-hero p.lead{font-size:16px;color:var(--text-muted);max-width:520px;margin:0 0 22px;line-height:1.55}
+@media (max-width:960px){.rm-hero-grid{grid-template-columns:1fr;gap:28px}.rm-hero h1{font-size:32px}}
+
+/* Mock dashboard panel for hero */
+.rm-mock{
+  background:#fff;border:1px solid var(--border);border-radius:18px;overflow:hidden;
+  box-shadow:0 30px 70px rgba(15,23,42,.12);
+}
+.rm-mock-bar{display:flex;align-items:center;gap:6px;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--surface-2)}
+.rm-mock-bar i{width:10px;height:10px;border-radius:999px;background:#E5E7EB}
+.rm-mock-bar i:nth-child(1){background:#EF4444}
+.rm-mock-bar i:nth-child(2){background:#FBBF24}
+.rm-mock-bar i:nth-child(3){background:#10B981}
+.rm-mock-bar .url{margin-left:10px;font-size:11.5px;color:var(--text-muted);font-family:"Menlo",monospace}
+
+/* Feature card (icon top) */
+.f-card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:22px;transition:.18s}
+.f-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-md);border-color:var(--border-strong)}
+.f-card .f-icon{width:42px;height:42px;border-radius:11px;background:var(--brand-50);color:var(--brand-700);display:grid;place-items:center;margin-bottom:12px}
+.f-card .f-icon svg{width:20px;height:20px}
+.f-card b{font-size:15px;letter-spacing:-.01em;display:block;margin-bottom:4px}
+.f-card p{margin:0;font-size:13px;color:var(--text-muted);line-height:1.55}
+
+/* Step card (numbered) */
+.step-card{
+  position:relative;background:#fff;border:1px solid var(--border);border-radius:18px;padding:24px;
+}
+.step-card .step-no{
+  position:absolute;top:-14px;left:24px;
+  width:40px;height:40px;border-radius:12px;
+  background:linear-gradient(135deg,var(--brand-600),var(--brand-800));color:#fff;
+  display:grid;place-items:center;font-weight:800;font-size:16px;letter-spacing:-.02em;
+  box-shadow:0 6px 16px rgba(194,65,12,.3);
+}
+.step-card h3{font-size:16px;letter-spacing:-.01em;margin:14px 0 8px}
+.step-card p{margin:0 0 12px;font-size:13.5px;color:var(--text-muted);line-height:1.55}
+.step-card ul{margin:0;padding-left:18px;font-size:13px;color:var(--text-muted)}
+.step-card ul li{margin-bottom:4px}
+
+/* Pricing card */
+.price-card{
+  background:#fff;border:1px solid var(--border);border-radius:18px;padding:28px;
+  position:relative;transition:.18s;
+}
+.price-card.featured{
+  border:2px solid var(--brand-700);
+  box-shadow:0 30px 60px rgba(194,65,12,.14);
+}
+.price-card .price-tag{font-size:13px;color:var(--text-muted);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.price-card .price-amount{font-size:40px;letter-spacing:-.02em;font-weight:800;margin:8px 0 4px;line-height:1}
+.price-card .price-amount .unit{font-size:15px;color:var(--text-muted);font-weight:600;margin-left:4px}
+.price-card .price-desc{font-size:13.5px;color:var(--text-muted);margin-bottom:18px}
+.price-card .price-features{list-style:none;padding:0;margin:0 0 22px;display:flex;flex-direction:column;gap:10px}
+.price-card .price-features li{display:flex;gap:10px;align-items:flex-start;font-size:13.5px}
+.price-card .price-features li svg{color:var(--brand-700);margin-top:2px;flex-shrink:0}
+.price-card .price-features li.off{color:var(--text-subtle);text-decoration:line-through}
+.price-card .price-features li.off svg{color:var(--text-subtle)}
+.price-card .price-badge{position:absolute;top:-12px;right:24px;background:var(--brand-700);color:#fff;padding:4px 12px;border-radius:999px;font-size:11.5px;font-weight:700;letter-spacing:.04em}
+
+/* Testimonial */
+.testimonial{background:#fff;border:1px solid var(--border);border-radius:18px;padding:24px;display:flex;flex-direction:column;gap:14px}
+.testimonial .stars{color:#F59E0B;font-size:14px;letter-spacing:2px}
+.testimonial blockquote{margin:0;font-size:15px;line-height:1.55;color:var(--text);letter-spacing:-.01em;flex:1}
+.testimonial .who{display:flex;align-items:center;gap:10px;border-top:1px solid var(--border);padding-top:14px}
+.testimonial .who b{font-size:13.5px;display:block}
+.testimonial .who .role{font-size:11.5px;color:var(--text-muted)}
+
+/* FAQ accordion */
+.faq{border:1px solid var(--border);border-radius:14px;background:#fff;overflow:hidden}
+.faq summary{padding:18px 22px;cursor:pointer;font-weight:600;list-style:none;display:flex;justify-content:space-between;align-items:center;font-size:14.5px;transition:.15s}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:'+';font-size:22px;color:var(--text-muted);font-weight:400}
+.faq[open] summary{background:var(--surface-2);border-bottom:1px solid var(--border)}
+.faq[open] summary::after{content:'−'}
+.faq summary:hover{background:var(--surface-2)}
+.faq .faq-body{padding:18px 22px;color:var(--text-muted);font-size:14px;line-height:1.6}
+
+/* ===== Zillow-style home page ===== */
+
+/* HERO with big bg image */
+.z-hero{
+  position:relative;
+  min-height:520px;height:64vh;max-height:640px;
+  background:#1a1a1a center/cover no-repeat;
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;overflow:hidden;
+}
+.z-hero::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(180deg, rgba(0,0,0,.25) 0%, rgba(0,0,0,.55) 100%);
+  z-index:0;
+}
+.z-hero-inner{position:relative;z-index:1;width:100%;max-width:780px;padding:0 24px;text-align:center}
+.z-hero h1{
+  font-size:52px;line-height:1.05;letter-spacing:-.02em;font-weight:800;margin:0 0 8px;color:#fff;
+  text-shadow:0 2px 20px rgba(0,0,0,.35);
+}
+.z-hero .z-sub{
+  font-size:17px;color:rgba(255,255,255,.92);margin:0 0 28px;
+  text-shadow:0 1px 8px rgba(0,0,0,.4);
+}
+.z-search{
+  display:flex;background:#fff;border-radius:999px;
+  padding:6px;box-shadow:0 24px 60px rgba(0,0,0,.32);
+  align-items:center;gap:0;
+}
+.z-search input{
+  flex:1;border:0;outline:none;font-size:15.5px;color:var(--text);
+  padding:14px 22px;background:transparent;
+}
+.z-search input::placeholder{color:var(--text-subtle)}
+.z-search .z-search-btn{
+  width:50px;height:50px;border-radius:999px;background:var(--brand-700);
+  color:#fff;display:grid;place-items:center;border:0;cursor:pointer;flex-shrink:0;
+}
+.z-search .z-search-btn:hover{background:var(--brand-800)}
+.z-search .z-search-btn svg{width:20px;height:20px}
+
+/* Buy/Rent/Sell triad below search */
+.action-triad{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:22px}
+@media (max-width:960px){.action-triad{grid-template-columns:repeat(2,1fr)}}
+.action-card{
+  background:rgba(255,255,255,.96);backdrop-filter:blur(10px);
+  border-radius:14px;padding:16px 18px;text-align:left;
+  color:var(--text);text-decoration:none;transition:.18s;
+  display:flex;gap:12px;align-items:center;
+}
+.action-card:hover{background:#fff;transform:translateY(-2px);box-shadow:0 12px 28px rgba(0,0,0,.18)}
+.action-card .ac-icon{width:40px;height:40px;border-radius:10px;background:var(--brand-50);color:var(--brand-700);display:grid;place-items:center;flex-shrink:0}
+.action-card .ac-icon svg{width:20px;height:20px}
+.action-card b{display:block;font-size:14.5px;letter-spacing:-.01em}
+.action-card span{font-size:12px;color:var(--text-muted)}
+@media (max-width:760px){.z-hero h1{font-size:36px}.action-triad{grid-template-columns:1fr}}
+
+/* Z-style section */
+.z-section{padding:56px 0}
+.z-section-head{margin-bottom:24px}
+.z-section-head h2{font-size:28px;letter-spacing:-.015em;margin:0;font-weight:800}
+.z-section-head .sub{font-size:14.5px;color:var(--text-muted);margin-top:4px}
+
+/* Tool card (Buy with / Sell with) */
+.tool-card{
+  background:#fff;border:1px solid var(--border);border-radius:18px;padding:24px;
+  display:flex;flex-direction:column;transition:.18s;text-decoration:none;color:inherit;
+}
+.tool-card:hover{border-color:var(--border-strong);box-shadow:var(--shadow-md);transform:translateY(-2px)}
+.tool-card .tc-icon{width:48px;height:48px;border-radius:12px;background:var(--brand-50);color:var(--brand-700);display:grid;place-items:center;margin-bottom:14px}
+.tool-card .tc-icon svg{width:22px;height:22px}
+.tool-card h3{font-size:17px;letter-spacing:-.01em;margin:0 0 6px;font-weight:700}
+.tool-card p{font-size:13.5px;color:var(--text-muted);margin:0 0 14px;line-height:1.55;flex:1}
+.tool-card .tc-cta{font-size:13px;color:var(--brand-700);font-weight:700;display:inline-flex;align-items:center;gap:4px}
+.tool-card .tc-cta svg{width:14px;height:14px}
+
+/* Feature strip (image + text side-by-side) */
+.feature-strip{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
+.feature-strip.reverse{grid-template-columns:.95fr 1.05fr}
+.feature-strip.reverse .fs-text{order:2}
+.feature-strip.reverse .fs-img{order:1}
+.feature-strip .fs-img{position:relative;border-radius:20px;overflow:hidden;aspect-ratio:4/3;background-size:cover;background-position:center;box-shadow:var(--shadow-md)}
+.feature-strip .fs-img .fs-badge{position:absolute;top:16px;left:16px;background:#fff;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:700;color:var(--text);box-shadow:var(--shadow-sm)}
+.feature-strip .fs-text h2{font-size:34px;letter-spacing:-.02em;margin:8px 0 10px;font-weight:800;line-height:1.1}
+.feature-strip .fs-text p{font-size:15px;color:var(--text-muted);margin:0 0 18px;line-height:1.6;max-width:480px}
+.feature-strip .fs-bullets{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;max-width:440px;margin-bottom:22px}
+.feature-strip .fs-bullets > div{display:flex;gap:6px;align-items:center;font-size:13.5px;color:var(--text)}
+.feature-strip .fs-bullets svg{color:var(--brand-700)}
+@media (max-width:860px){.feature-strip,.feature-strip.reverse{grid-template-columns:1fr;gap:24px}.feature-strip.reverse .fs-text,.feature-strip.reverse .fs-img{order:initial}.feature-strip .fs-text h2{font-size:26px}}
+
+/* District tile (Zillow-style neighborhood card) */
+.nb-card{
+  position:relative;aspect-ratio:1;border-radius:14px;overflow:hidden;
+  background-size:cover;background-position:center;text-decoration:none;color:#fff;
+  display:flex;flex-direction:column;justify-content:flex-end;padding:14px;transition:.2s;
+}
+.nb-card::after{content:'';position:absolute;inset:0;background:linear-gradient(0deg,rgba(0,0,0,.78) 0%,rgba(0,0,0,.05) 70%);z-index:1}
+.nb-card > *{position:relative;z-index:2}
+.nb-card:hover{transform:translateY(-3px)}
+.nb-card .nb-name{font-size:17px;font-weight:800;letter-spacing:-.01em;text-shadow:0 1px 6px rgba(0,0,0,.4)}
+.nb-card .nb-meta{font-size:11.5px;opacity:.9;margin-top:2px}
+.nb-card .nb-arrow{position:absolute;top:12px;right:12px;width:28px;height:28px;border-radius:999px;background:rgba(255,255,255,.92);color:var(--brand-700);display:grid;place-items:center;font-size:13px}
+.nb-card .nb-arrow svg{width:14px;height:14px}
+
+/* Resource card */
+.res-card{display:block;text-decoration:none;color:inherit;border:1px solid var(--border);border-radius:16px;overflow:hidden;background:#fff;transition:.18s}
+.res-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-md);border-color:var(--border-strong)}
+.res-card .res-img{aspect-ratio:16/10;background-size:cover;background-position:center}
+.res-card .res-body{padding:16px 18px}
+.res-card .res-cat{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--brand-700);font-weight:700}
+.res-card .res-title{font-size:15px;font-weight:700;margin:6px 0 6px;letter-spacing:-.01em;line-height:1.4}
+.res-card .res-meta{font-size:11.5px;color:var(--text-muted)}
+
+/* ===== Home page components (international UX) ===== */
+
+/* Buy / Rent / New intent toggle */
+.intent-toggle{display:inline-flex;background:#fff;border:1px solid var(--border);border-radius:999px;padding:4px;box-shadow:var(--shadow-sm)}
+.intent-toggle button{padding:9px 22px;font-size:14px;font-weight:600;border-radius:999px;color:var(--text-muted);border:0;background:transparent;cursor:pointer;transition:.15s}
+.intent-toggle button.active{background:var(--brand-700);color:#fff;box-shadow:0 4px 12px rgba(194,65,12,.25)}
+.intent-toggle button:hover:not(.active){color:var(--text)}
+
+/* Clean section head */
+.section-head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:18px;gap:16px;flex-wrap:wrap}
+.section-head h2{font-size:22px;font-weight:700;letter-spacing:-.01em;margin:0}
+.section-head .sub{font-size:13px;color:var(--text-muted);margin-top:3px}
+.section-head .head-right{display:flex;align-items:center;gap:14px;margin-left:auto}
+
+/* Listing filter tabs */
+.listing-tabs{display:flex;gap:2px;background:var(--surface-2);padding:4px;border-radius:10px;border:1px solid var(--border)}
+.listing-tabs button{padding:7px 14px;font-size:13px;font-weight:600;color:var(--text-muted);border-radius:8px;border:0;background:transparent;cursor:pointer;transition:.12s}
+.listing-tabs button.active{background:#fff;color:var(--brand-700);box-shadow:var(--shadow-sm)}
+.listing-tabs button:hover:not(.active){color:var(--text)}
+
+/* Property type card (visual) */
+.type-card{
+  position:relative;aspect-ratio:4/3.2;border-radius:16px;overflow:hidden;
+  display:flex;flex-direction:column;justify-content:flex-end;padding:18px;
+  color:#fff;text-decoration:none;transition:transform .2s ease, box-shadow .2s ease;
+  background-size:cover;background-position:center;
+  box-shadow:var(--shadow-sm);
+}
+.type-card::after{content:'';position:absolute;inset:0;background:linear-gradient(0deg,rgba(0,0,0,.75) 0%,rgba(0,0,0,.15) 60%,transparent 100%);z-index:1}
+.type-card > *{position:relative;z-index:2}
+.type-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-md)}
+.type-card .type-icon{width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.18);display:grid;place-items:center;margin-bottom:auto;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.2)}
+.type-card .type-icon svg{width:20px;height:20px;color:#fff}
+.type-card b{font-size:17px;letter-spacing:-.01em;display:block}
+.type-card .count{font-size:12.5px;opacity:.85;margin-top:2px}
+
+/* District card */
+.district-card{
+  display:flex;align-items:center;gap:12px;padding:12px;border-radius:14px;
+  background:#fff;border:1px solid var(--border);text-decoration:none;color:inherit;transition:.18s
+}
+.district-card:hover{border-color:var(--border-strong);box-shadow:var(--shadow-sm);transform:translateY(-2px)}
+.district-card .thumb{width:60px;height:60px;border-radius:10px;background-size:cover;background-position:center;flex-shrink:0;position:relative;overflow:hidden}
+.district-card .info{flex:1;min-width:0}
+.district-card .info b{display:block;font-size:14.5px}
+.district-card .info .sub{font-size:11.5px;color:var(--text-muted);margin-top:2px}
+.district-card .info .price{font-size:12.5px;color:var(--text);margin-top:4px;display:flex;gap:6px;align-items:center}
+.district-card .info .price .change{font-size:11px;color:#047857}
+
+/* Project card */
+.project-card{border-radius:16px;overflow:hidden;background:#fff;border:1px solid var(--border);transition:.2s;text-decoration:none;color:inherit;display:block}
+.project-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-md);border-color:var(--border-strong)}
+.project-card .photo{aspect-ratio:16/9;background-size:cover;background-position:center;position:relative}
+.project-card .photo .badge-overlay{position:absolute;top:12px;left:12px;display:flex;gap:6px}
+.project-card .photo .units{position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,.65);color:#fff;padding:4px 10px;border-radius:6px;font-size:11.5px;font-weight:600}
+.project-card .body{padding:16px}
+.project-card .body .project-name{font-size:16px;font-weight:700;letter-spacing:-.01em;display:block}
+.project-card .body .project-loc{font-size:12.5px;color:var(--text-muted);margin-top:2px;display:flex;align-items:center;gap:4px}
+.project-card .price-row{display:flex;justify-content:space-between;align-items:flex-end;margin-top:12px;padding-top:12px;border-top:1px dashed var(--border)}
+.project-card .price-row .from{font-size:11px;color:var(--text-muted);display:block}
+.project-card .price-row .price{font-size:17px;font-weight:800;color:var(--text)}
+.project-card .price-row .completion{font-size:11px;color:var(--text-muted);text-align:right}
+.project-card .price-row .completion b{display:block;color:var(--text);font-size:13px}
+
+/* Market insight band */
+.market-band{
+  background:
+    radial-gradient(700px 320px at 110% -20%, rgba(255,165,46,.22), transparent 60%),
+    linear-gradient(135deg,#0F172A 0%,#7C2D12 100%);
+  color:#fff;border-radius:18px;padding:28px 32px;
+}
+.market-band h3{font-size:18px;letter-spacing:-.01em;margin:0;color:#fff}
+.market-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin-top:20px}
+.market-stats > div .num{font-size:26px;font-weight:800;letter-spacing:-.01em;color:#fff}
+.market-stats > div .lbl{font-size:12px;opacity:.7;margin-top:2px}
+.market-stats > div .ch{font-size:11.5px;color:#4ADE80;margin-top:6px;font-weight:600}
+.market-stats > div .ch.dn{color:#FBBF24}
+@media (max-width:760px){.market-stats{grid-template-columns:repeat(2,1fr);gap:18px}}
+
+/* CTA banner (agent signup) */
+.cta-banner{
+  background:
+    radial-gradient(700px 280px at 92% 30%, rgba(255,165,46,.18), transparent 60%),
+    linear-gradient(135deg,#FFFBEB 0%,#FFF7ED 100%);
+  border:1px solid #FED7AA;border-radius:18px;padding:28px 32px;
+  display:flex;align-items:center;gap:24px;
+}
+.cta-banner .cta-text h3{font-size:22px;letter-spacing:-.01em;margin:6px 0 4px}
+.cta-banner .cta-text p{color:var(--text-muted);margin:0;max-width:540px;font-size:14px}
+@media (max-width:860px){.cta-banner{flex-direction:column;text-align:center}.cta-banner .cta-text{text-align:center}}
+
+/* helper grids */
+.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
+.grid-4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px}
+.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+@media (max-width:1100px){.grid-4{grid-template-columns:repeat(2,1fr)}.grid-3{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:680px){.grid-4,.grid-3,.grid-2{grid-template-columns:1fr}}
+
+/* listing detail */
+.gallery{
+  display:grid;grid-template-columns:2fr 1fr 1fr;grid-template-rows:1fr 1fr;gap:8px;
+  border-radius:18px;overflow:hidden;height:460px;
+}
+.gallery > div{background:#E5E7EB;overflow:hidden;position:relative}
+.gallery > div:first-child{grid-row:1 / span 2}
+.gallery img{width:100%;height:100%;object-fit:cover}
+.gallery .more{position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,.65);color:#fff;padding:8px 12px;border-radius:8px;font-size:12.5px;font-weight:600}
+
+/* chat */
+.chat{display:grid;grid-template-columns:300px 1fr;height:calc(100vh - 64px);background:#fff;border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.chat-list{border-right:1px solid var(--border);overflow-y:auto}
+.chat-list-item{display:flex;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border);cursor:pointer}
+.chat-list-item:hover{background:var(--surface-2)}
+.chat-list-item.active{background:var(--brand-50)}
+.chat-msgs{padding:18px 22px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;background:#FAFBFC}
+.msg{max-width:70%;padding:10px 14px;border-radius:14px;font-size:13.5px;line-height:1.5}
+.msg.me{align-self:flex-end;background:var(--brand-700);color:#fff;border-bottom-right-radius:4px}
+.msg.them{align-self:flex-start;background:#fff;border:1px solid var(--border);border-bottom-left-radius:4px}
+.msg .time{font-size:10.5px;opacity:.7;display:block;margin-top:4px}
+.chat-input{border-top:1px solid var(--border);padding:12px;display:flex;gap:8px;background:#fff}
+.chat-input input{flex:1;border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:13.5px}
+
+/* compare */
+.compare{display:grid;grid-template-columns:240px repeat(3,1fr);gap:1px;background:var(--border);border-radius:16px;overflow:hidden;border:1px solid var(--border)}
+.compare > div{background:#fff;padding:14px 16px;font-size:13px}
+.compare .row-label{color:var(--text-muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+
+/* tabs */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border)}
+.tabs a,.tabs button{padding:10px 14px;font-size:13.5px;font-weight:600;color:var(--text-muted);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs a.active,.tabs button.active{color:var(--brand-700);border-bottom-color:var(--brand-700)}
+.tabs a:hover,.tabs button:hover{color:var(--text)}
+
+/* spark */
+.spark{display:flex;align-items:flex-end;gap:3px;height:36px}
+.spark > i{flex:1;background:var(--brand-200);border-radius:3px;min-height:4px;display:block}
+.spark > i.hi{background:var(--brand-600)}
+
+/* feature splash blocks (AI page) */
+.feature-block{
+  border-radius:18px;border:1px solid var(--border);background:#fff;padding:24px;
+  display:grid;grid-template-columns:1fr 1.2fr;gap:24px;align-items:center;
+}
+.feature-icon-lg{
+  width:56px;height:56px;border-radius:14px;
+  background:linear-gradient(135deg,var(--brand-50),#fff);
+  border:1px solid var(--brand-100);
+  display:grid;place-items:center;color:var(--brand-700);margin-bottom:12px;
+}
+@media (max-width:860px){.feature-block{grid-template-columns:1fr}}
+
+/* notice banner */
+.notice{
+  display:flex;gap:12px;align-items:flex-start;
+  padding:14px 16px;border-radius:12px;background:#EFF6FF;border:1px solid #DBEAFE;
+  color:#1E40AF;font-size:13px;font-weight:500;
+}
+
+/* auth */
+.auth-wrap{min-height:100vh;display:grid;grid-template-columns:1.05fr .95fr}
+.auth-side{
+  position:relative;overflow:hidden;
+  background:
+    radial-gradient(900px 500px at 90% -10%, rgba(255,165,46,.32), transparent 55%),
+    radial-gradient(700px 500px at -20% 100%, rgba(194,65,12,.45), transparent 60%),
+    linear-gradient(135deg,#1A0E07 0%,#3D1E0A 55%,#7C2D12 100%);
+  color:#fff;padding:48px 56px;display:flex;flex-direction:column;justify-content:space-between;gap:24px;
+}
+.auth-side::before{
+  content:'';position:absolute;inset:0;
+  background-image:
+    radial-gradient(circle at 12% 18%, rgba(255,255,255,.05) 0 1px, transparent 2px),
+    radial-gradient(circle at 78% 62%, rgba(255,255,255,.04) 0 1px, transparent 2px);
+  background-size:36px 36px, 42px 42px;
+  pointer-events:none;opacity:.6;
+}
+.auth-side > *{position:relative;z-index:1}
+.auth-side h2{font-size:34px;line-height:1.15;letter-spacing:-.02em;margin:0 0 10px;font-weight:800}
+.auth-side p.tagline{color:rgba(255,255,255,.75);max-width:480px;font-size:15px;margin:0}
+
+.auth-form{padding:48px;display:flex;align-items:center;justify-content:center;background:#fff}
+.auth-form-card{width:100%;max-width:440px}
+@media (max-width:860px){.auth-wrap{grid-template-columns:1fr}.auth-side{padding:32px;min-height:auto}.auth-form{padding:32px}}
+
+/* Float cards */
+.float-cards{position:relative;height:330px;margin:8px 0}
+.float-cards .fc{
+  position:absolute;width:280px;background:#fff;border-radius:14px;padding:10px;
+  box-shadow:0 30px 60px rgba(0,0,0,.45);color:var(--text);
+  animation: floaty 7s ease-in-out infinite;
+}
+.float-cards .fc:nth-child(1){top:0;right:60px;animation-delay:0s;z-index:3}
+.float-cards .fc:nth-child(2){top:100px;right:-30px;animation-delay:1.3s;z-index:2}
+.float-cards .fc:nth-child(3){top:200px;right:90px;animation-delay:2.6s;z-index:1;transform-origin:center}
+@keyframes floaty{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-10px) rotate(-.4deg)}}
+.fc-thumb{aspect-ratio:16/9;border-radius:10px;background-size:cover;background-position:center;margin-bottom:8px;position:relative}
+.fc-thumb .fc-badge{position:absolute;top:8px;left:8px;background:rgba(255,255,255,.96);font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;color:var(--brand-700);display:inline-flex;gap:4px;align-items:center}
+.fc-meta{display:flex;justify-content:space-between;font-size:12px;padding:0 4px 4px}
+.fc-meta b{color:var(--text)}
+.fc-meta span{color:var(--text-muted)}
+
+/* Stats */
+.stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;border-top:1px solid rgba(255,255,255,.14);border-bottom:1px solid rgba(255,255,255,.14);padding:18px 0;max-width:520px}
+.stat-row .num{font-size:24px;font-weight:800;letter-spacing:-.01em;color:#fff}
+.stat-row .lbl{font-size:11.5px;color:rgba(255,255,255,.62);margin-top:2px}
+
+/* Trust strip */
+.trust{display:flex;gap:18px;font-size:12px;color:rgba(255,255,255,.6);flex-wrap:wrap;align-items:center}
+.trust > div{display:inline-flex;gap:6px;align-items:center}
+.trust svg{width:14px;height:14px;color:rgba(255,255,255,.7)}
+
+/* Tab pills */
+.tab-pills{display:flex;background:var(--surface-2);padding:4px;border-radius:12px;gap:4px;border:1px solid var(--border)}
+.tab-pills button{flex:1;padding:9px 10px;font-size:13px;font-weight:600;border-radius:8px;color:var(--text-muted);transition:.15s;border:0;background:transparent;cursor:pointer}
+.tab-pills button.active{background:#fff;color:var(--brand-700);box-shadow:var(--shadow-sm)}
+.tab-pills button:hover:not(.active){color:var(--text)}
+
+/* Method toggle */
+.method-toggle{display:inline-flex;background:#F1F5F9;padding:3px;border-radius:999px;gap:2px}
+.method-toggle button{padding:6px 14px;font-size:12.5px;font-weight:600;color:var(--text-muted);border-radius:999px;border:0;background:transparent;cursor:pointer}
+.method-toggle button.active{background:#fff;color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+
+/* Phone input with prefix */
+.phone-input{display:flex;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:#fff;transition:border-color .15s, box-shadow .15s}
+.phone-input:focus-within{border-color:var(--brand-600);box-shadow:0 0 0 3px rgba(194,65,12,.12)}
+.phone-input .prefix{padding:10px 12px;background:var(--surface-2);font-weight:600;font-size:13.5px;border-right:1px solid var(--border);color:var(--text);display:flex;align-items:center;gap:6px}
+.phone-input input{border:0;padding:10px 12px;flex:1;font-size:14px;outline:none;letter-spacing:.5px}
+
+/* Password */
+.password-field{position:relative}
+.password-field .toggle{position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--text-subtle);cursor:pointer;background:transparent;border:0;padding:4px}
+.password-field .toggle:hover{color:var(--text)}
+.password-field .input{padding-right:38px}
+
+.pwd-strength{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-top:6px}
+.pwd-strength i{height:4px;background:#E2E8F0;border-radius:2px;display:block}
+.pwd-strength.s1 i:nth-child(-n+1){background:#DC2626}
+.pwd-strength.s2 i:nth-child(-n+2){background:#F59E0B}
+.pwd-strength.s3 i:nth-child(-n+3){background:#84CC16}
+.pwd-strength.s4 i:nth-child(-n+4){background:#10B981}
+
+.pwd-strength-label{font-size:11px;color:var(--text-subtle);margin-top:4px}
+
+/* Hint */
+.hint{font-size:11.5px;color:var(--text-subtle);margin-top:5px;line-height:1.4}
+
+/* Auth headings */
+.auth-h1{font-size:24px;font-weight:800;letter-spacing:-.01em;margin:0 0 4px}
+.auth-sub{color:var(--text-muted);font-size:13.5px;margin:0 0 20px}
+
+/* Tab pane */
+.pane{display:none}
+.pane.active{display:block;animation:fadeIn .25s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* Social buttons row (compact) */
+.social-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.social-btn{display:flex;align-items:center;justify-content:center;gap:8px;padding:11px;background:#fff;border:1px solid var(--border);border-radius:10px;cursor:pointer;color:var(--text);font-weight:600;font-size:13px;transition:.15s}
+.social-btn:hover{border-color:var(--border-strong);background:var(--surface-2)}
+.social-btn svg{width:18px;height:18px}
+
+/* Big social CTA (full width, prominent — for the one-tap user pane) */
+.btn-social-cta{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:14px 18px;background:#fff;border:1.5px solid var(--border);border-radius:14px;
+  font-weight:700;font-size:15px;color:var(--text);transition:all .15s ease;
+  box-shadow:var(--shadow-sm);
+}
+.btn-social-cta:hover{border-color:var(--brand-200);background:var(--brand-50);transform:translateY(-1px);box-shadow:var(--shadow-md)}
+.btn-social-cta .social-ic{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;flex-shrink:0}
+.btn-social-cta .social-ic.g{background:#fff;border:1px solid var(--border)}
+.btn-social-cta .social-ic.g svg{width:18px;height:18px;color:#4285F4}
+.btn-social-cta .social-ic.fb{background:#1877F2}
+.btn-social-cta .social-ic.fb svg{width:18px;height:18px;color:#fff}
+.btn-social-cta > span:nth-child(2){flex:1;text-align:left}
+.btn-social-cta > svg:last-child{width:18px;height:18px;color:var(--text-subtle)}
+.btn-social-cta:hover > svg:last-child{color:var(--brand-700)}
+
+/* Sub-tab (agent role picker) */
+.role-picker{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.role-card{padding:14px;border:1px solid var(--border);border-radius:12px;cursor:pointer;transition:.15s;background:#fff}
+.role-card:hover{border-color:var(--brand-200);background:var(--brand-50)}
+.role-card.active{border-color:var(--brand-700);background:var(--brand-50);box-shadow:0 0 0 3px rgba(194,65,12,.08)}
+.role-card .role-ic{width:32px;height:32px;border-radius:8px;background:#fff;border:1px solid var(--border);display:grid;place-items:center;color:var(--brand-700);margin-bottom:8px}
+.role-card.active .role-ic{background:var(--brand-700);color:#fff;border-color:var(--brand-700)}
+
+/* OTP cells */
+.otp-row{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.otp-row input{height:48px;text-align:center;font-size:18px;font-weight:700;border:1px solid var(--border);border-radius:10px;outline:none;background:#fff}
+.otp-row input:focus{border-color:var(--brand-600);box-shadow:0 0 0 3px rgba(194,65,12,.12)}
+
+/* Inline check */
+.check-pill{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;background:var(--brand-50);color:var(--brand-700);border-radius:999px;font-size:11.5px;font-weight:600;border:1px solid var(--brand-100)}
+
+/* listing page sidebar */
+.detail-grid{display:grid;grid-template-columns:1fr 360px;gap:28px}
+@media (max-width:1024px){.detail-grid{grid-template-columns:1fr}}
+
+/* photo placeholder */
+.photo-ph{
+  width:100%;height:100%;
+  background:
+    linear-gradient(135deg,#CBD5E1 0%, #94A3B8 100%);
+  display:grid;place-items:center;color:rgba(255,255,255,.7);font-weight:700;
+}
+
+/* small map placeholder */
+.map-ph{
+  height:300px;border-radius:14px;
+  background:
+    linear-gradient(135deg,#DBEAFE, #ECFEFF, #DCFCE7);
+  border:1px solid var(--border);
+  display:grid;place-items:center;color:#64748B;font-weight:600;
+}
+
+/* checkbox switch */
+.switch{position:relative;width:36px;height:20px;border-radius:999px;background:#CBD5E1;display:inline-block;cursor:pointer;transition:.2s}
+.switch::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:999px;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.switch.on{background:var(--brand-600)}
+.switch.on::after{left:18px}
+
+/* tag groups in detail */
+.amenity{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border);border-radius:10px;font-size:13px;color:var(--text);background:#fff}
+
+/* progress ring small */
+.ring{
+  --p:75; --sz:64px;
+  width:var(--sz);height:var(--sz);border-radius:999px;
+  background:
+    conic-gradient(var(--brand-600) calc(var(--p)*1%), #E5E7EB 0);
+  display:grid;place-items:center;color:var(--brand-700);font-weight:700;font-size:14px;
+}
+.ring::after{content:'';position:absolute}
+.ring-inner{
+  width:calc(var(--sz) - 16px);height:calc(var(--sz) - 16px);background:#fff;border-radius:999px;display:grid;place-items:center
+}
+
+/* hide on mobile */
+@media (max-width:768px){
+  .hide-sm{display:none !important}
+}
+
+</style>
+<!--nemi:css:end-->
+</head>
+<body>
+<div id="topbar"></div>
+
+<div class="container-wide" style="padding:28px 24px 80px">
+
+  <!-- Page head -->
+  <div class="flex items-center justify-between mb-4" style="flex-wrap:wrap;gap:12px">
+    <div>
+      <div class="flex items-center gap-2 text-sm text-muted mb-1">
+        <a href="dashboard.html">Хяналт</a>
+        <span>›</span>
+        <b style="color:var(--text)">Дансны тохиргоо</b>
+      </div>
+      <h1 style="font-size:26px;letter-spacing:-.01em;margin:0;font-weight:800">Дансны тохиргоо</h1>
+    </div>
+  </div>
+
+  <div class="acc-layout">
+
+    <!-- ============ LEFT NAV ============ -->
+    <nav class="acc-nav">
+      <a href="#profile" class="nav-item active" id="n-profile"></a>
+      <a href="#security" class="nav-item" id="n-security"></a>
+      <a href="#notifications" class="nav-item" id="n-notif"></a>
+      <a href="#connected" class="nav-item" id="n-conn"></a>
+      <a href="#payment" class="nav-item" id="n-pay"></a>
+      <a href="#search-prefs" class="nav-item" id="n-search"></a>
+      <a href="#services" class="nav-item" id="n-svc"></a>
+      <a href="#subscriptions" class="nav-item" id="n-sub"></a>
+      <a href="#privacy" class="nav-item" id="n-priv"></a>
+      <a href="#preferences" class="nav-item" id="n-pref"></a>
+      <a href="#danger" class="nav-item" style="color:#B91C1C" id="n-danger"></a>
+    </nav>
+
+    <!-- ============ CONTENT ============ -->
+    <main>
+
+      <!-- PROFILE -->
+      <section class="acc-section" id="profile">
+        <h2>Хувийн профайл</h2>
+        <div class="sub">Танай олон нийтэд харагдах болон агентуудтай харилцах үндсэн мэдээлэл</div>
+
+        <div class="profile-photo-row">
+          <div class="photo">ЭБ</div>
+          <div style="flex:1">
+            <b style="font-size:14.5px">Профайл зураг</b>
+            <p class="text-sm text-muted" style="margin:2px 0 8px">JPG, PNG · Хамгийн ихдээ 5MB · Дөрвөлжин харьцаа</p>
+            <div class="flex gap-2">
+              <button class="btn btn-secondary btn-sm">Зураг солих</button>
+              <button class="btn btn-ghost btn-sm">Устгах</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="acc-row">
+          <div class="lbl">Бүтэн нэр</div>
+          <div class="val">Б. Энхтуяа</div>
+          <button class="btn btn-ghost btn-sm">Засах</button>
+        </div>
+        <div class="acc-row">
+          <div class="lbl">И-мэйл</div>
+          <div class="val">enkhtuya@example.com <span class="verified-tick">✓ Баталгаажсан</span></div>
+          <button class="btn btn-ghost btn-sm">Солих</button>
+        </div>
+        <div class="acc-row">
+          <div class="lbl">Утасны дугаар</div>
+          <div class="val">+976 9911 2233 <span class="verified-tick">✓ Баталгаажсан</span></div>
+          <button class="btn btn-ghost btn-sm">Солих</button>
+        </div>
+        <div class="acc-row">
+          <div class="lbl">Иргэний бүртгэл</div>
+          <div class="val">ЦЯ95012345 <span class="verified-tick">✓ E-Mongolia</span><span class="meta">Кадастр баталгаажсан</span></div>
+          <button class="btn btn-ghost btn-sm">Үзэх</button>
+        </div>
+        <div class="acc-row">
+          <div class="lbl">Гэрийн хаяг</div>
+          <div class="val">Encanto тауэр, 1502 тоот<span class="meta">Сүхбаатар дүүрэг · түрээсэлж буй</span></div>
+          <button class="btn btn-ghost btn-sm">Засах</button>
+        </div>
+        <div class="acc-row">
+          <div class="lbl">Төрсөн он</div>
+          <div class="val">1995.06.12 <span class="meta">Зөвхөн та харна</span></div>
+          <button class="btn btn-ghost btn-sm">Засах</button>
+        </div>
+      </section>
+
+      <!-- SECURITY -->
+      <section class="acc-section" id="security">
+        <h2>Аюулгүй байдал</h2>
+        <div class="sub">Нэвтрэлт, нууц үг, төхөөрөмжийг удирдах</div>
+
+        <div class="acc-row">
+          <div class="lbl">Нууц үг</div>
+          <div class="val">••••••••••<span class="meta">Сүүлд солисон: 2026.02.14</span></div>
+          <button class="btn btn-secondary btn-sm">Нууц үг солих</button>
+        </div>
+
+        <div class="acc-row">
+          <div class="lbl">Хоёр алхамт баталгаажилт (2FA)</div>
+          <div class="val">📱 Authenticator app <span class="verified-tick">✓ Идэвхтэй</span><span class="meta">Backup кодыг хэвлэж хадгалсан</span></div>
+          <div class="flex gap-2"><span class="switch on"></span></div>
+        </div>
+
+        <div class="acc-row">
+          <div class="lbl">Биометрик</div>
+          <div class="val">Хуруу хээ · Face ID<span class="meta">Гар утсанд зориулагдсан</span></div>
+          <span class="switch on"></span>
+        </div>
+
+        <div class="divider mt-4 mb-3"></div>
+
+        <b style="font-size:13.5px">Идэвхтэй сесс (3)</b>
+        <div class="mt-3">
+          <div class="session-row">
+            <div class="ic">💻</div>
+            <div class="info">
+              <b>MacBook Pro · Chrome <span class="current-tag default-tag">Одоо</span></b>
+              <div class="meta">Улаанбаатар, MN · 192.168.1.42 · 5 мин өмнө идэвхтэй</div>
+            </div>
+            <button class="btn btn-ghost btn-sm">Дэлгэрэнгүй</button>
+          </div>
+          <div class="session-row">
+            <div class="ic">📱</div>
+            <div class="info">
+              <b>iPhone 15 · Нэми app</b>
+              <div class="meta">Улаанбаатар, MN · 4G · 2 цаг өмнө</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" style="color:#B91C1C">Гаргах</button>
+          </div>
+          <div class="session-row">
+            <div class="ic">🖥</div>
+            <div class="info">
+              <b>Windows · Edge</b>
+              <div class="meta">Дархан · 122.55.13.x · 5 хоног өмнө</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" style="color:#B91C1C">Гаргах</button>
+          </div>
+        </div>
+
+        <button class="btn btn-secondary btn-sm mt-3">Бусад бүх төхөөрөмжөөс гарах</button>
+      </section>
+
+      <!-- NOTIFICATIONS -->
+      <section class="acc-section" id="notifications">
+        <h2>Мэдэгдэл</h2>
+        <div class="sub">Юу, хаашаа, ямар давтамжаар авах</div>
+
+        <table class="notif-matrix">
+          <thead>
+            <tr>
+              <th>Категори</th>
+              <th>Push</th>
+              <th>И-мэйл</th>
+              <th>SMS</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>💸 Үнэ буурсан зар<span class="desc">Хадгалсан зар нь хямдрах үед</span></td>
+              <td class="center"><span class="switch on"></span></td>
+              <td class="center"><span class="switch on"></span></td>
+              <td class="center"><span class="switch"></span></td>
+            </tr>
+            <tr>
+              <td>🔔 Шинэ зар хайлтаас<span class="desc">Хайлтын профайлд тохирох зар</span></td>
+              <td class="center"><span class="switch on"></span></td>
+              <td class="center"><span class="switch on"></span></td>
+              <td class="center"><span class="switch"></span></td>
+            </tr>
+            <tr>
+              <td>📅 Үзлэгийн сануулга<span class="desc">Үзлэгийн өмнө 24 цаг</span></td>
+              <td class="center"><span class="switch on"></span></td>
+              <td class="center"><span class="switch on"></span></td>
+              <td class="center"><span class="switch on"></span></td>
+            </tr>
+            <tr>
+              <td>💬 Чат зурвас<span class="desc">Агент эсвэл түрээслүүлэгчээс</span></td>
+              <td class="center"><span class="switch on"></span></td>
+              <td class="center"><span class="switch"></span></td>
+              <td class="center"><span class="switch"></span></td>
+            </tr>
+            <tr>
+              <td>💰 Refinance боломж<span class="desc">8% ипотек шилжих санал</span></td>
+              <td class="center"><span class="switch"></span></td>
+              <td class="center"><span class="switch on"></span></td>
+              <td class="center"><span class="switch"></span></td>
+            </tr>
+            <tr>
+              <td>🏠 Гэр сайжруулах AI санал<span class="desc">Танай гэрт зориулсан</span></td>
+              <td class="center"><span class="switch"></span></td>
+              <td class="center"><span class="switch on"></span></td>
+              <td class="center"><span class="switch"></span></td>
+            </tr>
+            <tr>
+              <td>📊 Зах зээлийн тойм<span class="desc">Сар бүр</span></td>
+              <td class="center"><span class="switch"></span></td>
+              <td class="center"><span class="switch on"></span></td>
+              <td class="center"><span class="switch"></span></td>
+            </tr>
+            <tr>
+              <td>📧 Маркетингийн санал<span class="desc">Хамтрагч брэндийн санал</span></td>
+              <td class="center"><span class="switch"></span></td>
+              <td class="center"><span class="switch"></span></td>
+              <td class="center"><span class="switch"></span></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- CONNECTED ACCOUNTS -->
+      <section class="acc-section" id="connected">
+        <h2>Холбогдсон данс</h2>
+        <div class="sub">Олон үйлчилгээгээр нэвтрэх эсвэл хурдан нэвтрэлт</div>
+
+        <div class="conn-card">
+          <div class="ic" style="background:#fff;border:1px solid var(--border);color:#4285F4" id="c-google"></div>
+          <div class="info">
+            <b>Google · enkhtuya@gmail.com</b>
+            <div class="meta">2025.10.12 холбосон</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" style="color:#B91C1C">Тасалах</button>
+        </div>
+
+        <div class="conn-card">
+          <div class="ic" style="background:#1877F2" id="c-fb"></div>
+          <div class="info">
+            <b>Facebook</b>
+            <div class="meta">Холбоогүй</div>
+          </div>
+          <button class="btn btn-secondary btn-sm">Холбох</button>
+        </div>
+
+        <div class="conn-card">
+          <div class="ic" style="background:#34A853;color:#fff;font-weight:800">EM</div>
+          <div class="info">
+            <b>E-Mongolia <span class="verified-tick">✓</span></b>
+            <div class="meta">Кадастр + Иргэний бүртгэлтэй холбогдсон</div>
+          </div>
+          <button class="btn btn-ghost btn-sm">Тохиргоо</button>
+        </div>
+      </section>
+
+      <!-- PAYMENT METHODS -->
+      <section class="acc-section" id="payment">
+        <h2>Төлбөрийн арга</h2>
+        <div class="sub">Хадгалсан карт, банкны данс, QPay</div>
+
+        <div class="pm-card">
+          <div class="ic" style="background:#34A853">КБ</div>
+          <div class="info">
+            <b>•••• 1234</b>
+            <div class="meta">Хаан банк · Visa · 03/2028</div>
+          </div>
+          <span class="default-tag">Үндсэн</span>
+        </div>
+
+        <div class="pm-card">
+          <div class="ic" style="background:#E11D48">ГБ</div>
+          <div class="info">
+            <b>•••• 5678</b>
+            <div class="meta">Голомт банк · MasterCard · 11/2027</div>
+          </div>
+          <button class="btn btn-ghost btn-sm">Үндсэн болгох</button>
+        </div>
+
+        <div class="pm-card">
+          <div class="ic" style="background:#F59E0B">QP</div>
+          <div class="info">
+            <b>QPay</b>
+            <div class="meta">+976 9911 2233-тай холбогдсон</div>
+          </div>
+          <button class="btn btn-ghost btn-sm">Тохиргоо</button>
+        </div>
+
+        <button class="btn btn-secondary mt-3">+ Шинэ карт нэмэх</button>
+
+        <div class="divider mt-4 mb-3"></div>
+        <b style="font-size:13.5px">Төлбөрийн түүх</b>
+        <p class="text-sm text-muted mt-1">Сүүлийн 12 сард: <b style="color:var(--text)">5 ширхэг гүйлгээ · 12.6M ₮</b></p>
+        <a class="text-sm text-brand font-semibold">Бүх түүх →</a>
+      </section>
+
+      <!-- SEARCH PREFERENCES -->
+      <section class="acc-section" id="search-prefs">
+        <h2>Хайлтын тохиргоо</h2>
+        <div class="sub">Анхдагч утга, нэгж, валют</div>
+
+        <div class="acc-row">
+          <div class="lbl">Анхдагч хайлтын байршил</div>
+          <div class="val">Улаанбаатар <span class="meta">Бүх дүүрэг</span></div>
+          <button class="btn btn-ghost btn-sm">Засах</button>
+        </div>
+        <div class="acc-row">
+          <div class="lbl">Анхдагч үнийн хязгаар</div>
+          <div class="val">400M – 600M ₮</div>
+          <button class="btn btn-ghost btn-sm">Засах</button>
+        </div>
+        <div class="acc-row">
+          <div class="lbl">Анхдагч төрөл</div>
+          <div class="val">Орон сууц, Хаус</div>
+          <button class="btn btn-ghost btn-sm">Засах</button>
+        </div>
+        <div class="acc-row">
+          <div class="lbl">Хэмжээний нэгж</div>
+          <div class="val">м² (метр квадрат)</div>
+          <button class="btn btn-ghost btn-sm">Өөрчлөх</button>
+        </div>
+        <div class="acc-row">
+          <div class="lbl">Валют</div>
+          <div class="val">₮ Монгол төгрөг</div>
+          <button class="btn btn-ghost btn-sm">Өөрчлөх</button>
+        </div>
+      </section>
+
+      <!-- CONNECTED SERVICES -->
+      <section class="acc-section" id="services">
+        <h2>Холбогдсон үйлчилгээ</h2>
+        <div class="sub">Танай аяллыг дагалдаж буй мэргэжилтнүүд</div>
+
+        <div class="conn-card">
+          <div class="ic" style="background:#C2410C">AB</div>
+          <div class="info">
+            <b>Б. Анхбаяр <span class="default-tag" style="background:#FFF7ED;color:#C2410C">Premier агент</span></b>
+            <div class="meta">Голден Хаус · Хан-Уулд ажиллаж байна</div>
+          </div>
+          <a href="agent-profile.html?id=ag-01" class="btn btn-ghost btn-sm">Профайл</a>
+        </div>
+
+        <div class="conn-card">
+          <div class="ic" style="background:#047857">ХД</div>
+          <div class="info">
+            <b>Х. Дашмаа</b>
+            <div class="meta">Хаан банк · Зээлийн ажилтан</div>
+          </div>
+          <button class="btn btn-ghost btn-sm">Тасалах</button>
+        </div>
+
+        <div class="conn-card">
+          <div class="ic" style="background:#1D4ED8">БЭ</div>
+          <div class="info">
+            <b>Д. Бат-Эрдэнэ</b>
+            <div class="meta">Капитал Хуулийн Хүчинт · Нотариат</div>
+          </div>
+          <button class="btn btn-ghost btn-sm">Тасалах</button>
+        </div>
+
+        <a href="my-team.html" class="btn btn-secondary mt-2">Бүх багийг үзэх →</a>
+      </section>
+
+      <!-- SUBSCRIPTIONS -->
+      <section class="acc-section" id="subscriptions">
+        <h2>Идэвхтэй подписка</h2>
+        <div class="sub">Та юу хэрэглэж буй вэ</div>
+
+        <div class="sub-card">
+          <div class="ic">💎</div>
+          <div class="info">
+            <b>Renter Premium Screening</b>
+            <div class="meta">3 сар хүчинтэй шалгалтын баримт · 5 түрээслүүлэгчид хуваалцсан</div>
+          </div>
+          <div>
+            <div class="amt">15,000₮ / 3 сар</div>
+            <div class="text-xs text-muted" style="text-align:right">8.20-нд шинэчлэгдэх</div>
+          </div>
+        </div>
+
+        <div class="sub-card">
+          <div class="ic">🛡</div>
+          <div class="info">
+            <b>Insurance — Mongol Premium</b>
+            <div class="meta">Түрээсийн орон сууцны иж бүрэн даатгал</div>
+          </div>
+          <div>
+            <div class="amt">35,000₮ / сар</div>
+            <div class="text-xs text-muted" style="text-align:right">Сарын 1-нд төлнө</div>
+          </div>
+        </div>
+
+        <div class="text-sm text-muted mt-3">Бусад тарифыг нэмэх боломжтой: <a href="partners.html" class="text-brand font-semibold">Premier (агент)</a> · <a href="rental-manager.html" class="text-brand font-semibold">Rental Manager Pro</a></div>
+      </section>
+
+      <!-- PRIVACY & DATA -->
+      <section class="acc-section" id="privacy">
+        <h2>Нууцлал ба өгөгдөл</h2>
+        <div class="sub">Та өөрийн дата дээр бүрэн хяналттай</div>
+
+        <div class="acc-row">
+          <div class="lbl">Профайл агентуудад харагдах</div>
+          <div class="val">Зөвхөн харьцаж эхэлсэн агент<span class="meta">Premier агентууд өөрөө хайхгүй</span></div>
+          <span class="switch on"></span>
+        </div>
+        <div class="acc-row">
+          <div class="lbl">AI үнэлгээнд миний дата</div>
+          <div class="val">Anonymized aggregate-д орох<span class="meta">Хувийн мэдээллүүд нэрлэгдэхгүй</span></div>
+          <span class="switch on"></span>
+        </div>
+        <div class="acc-row">
+          <div class="lbl">3-р этгээдтэй хуваалцах</div>
+          <div class="val">Зөвхөн зөвшөөрсөн агентууд<span class="meta">Маркетинг 3-р этгээдэд хэзээ ч өгөхгүй</span></div>
+          <span class="switch"></span>
+        </div>
+        <div class="acc-row">
+          <div class="lbl">Cookies + tracking</div>
+          <div class="val">Essential only<span class="meta">Analytics & marketing tracking зөвшөөрөөгүй</span></div>
+          <button class="btn btn-ghost btn-sm">Удирдах</button>
+        </div>
+
+        <div class="divider mt-4 mb-3"></div>
+
+        <b style="font-size:13.5px">Миний дата</b>
+        <p class="text-sm text-muted mt-1" style="margin-bottom:14px">Хадгалсан зар, чат, баримт, гүйлгээний түүх — бүгдийг JSON эсвэл PDF-р авах эрхтэй.</p>
+        <div class="flex gap-2">
+          <button class="btn btn-secondary">📥 Бүх миний дата татах</button>
+          <button class="btn btn-ghost">📜 Хадгалалтын лог</button>
+        </div>
+      </section>
+
+      <!-- ACCOUNT PREFERENCES -->
+      <section class="acc-section" id="preferences">
+        <h2>Дансны ерөнхий тохиргоо</h2>
+        <div class="sub">Хэл, цаг бүс, темийн өнгө</div>
+
+        <div class="acc-row">
+          <div class="lbl">Хэл</div>
+          <div class="val">🇲🇳 Монгол</div>
+          <select class="select" style="width:auto;padding:6px 24px 6px 10px;font-size:12.5px">
+            <option>Монгол</option>
+            <option>English</option>
+            <option>中文</option>
+            <option>Русский</option>
+          </select>
+        </div>
+        <div class="acc-row">
+          <div class="lbl">Цаг бүс</div>
+          <div class="val">UTC+8 Улаанбаатар</div>
+          <button class="btn btn-ghost btn-sm">Өөрчлөх</button>
+        </div>
+        <div class="acc-row">
+          <div class="lbl">Темийн өнгө</div>
+          <div class="val">Light · автомат systemтэй</div>
+          <div class="flex gap-1">
+            <button class="btn btn-secondary btn-sm" style="background:var(--brand-50);color:var(--brand-700)">☀ Light</button>
+            <button class="btn btn-secondary btn-sm">🌙 Dark</button>
+            <button class="btn btn-secondary btn-sm">⚙ Auto</button>
+          </div>
+        </div>
+        <div class="acc-row">
+          <div class="lbl">И-мэйлийн давтамж</div>
+          <div class="val">Өдөр бүр digest</div>
+          <select class="select" style="width:auto;padding:6px 24px 6px 10px;font-size:12.5px">
+            <option>Шууд тус бүрт</option>
+            <option selected>Өдөр бүр digest</option>
+            <option>Долоо хоног бүр</option>
+            <option>Хааж</option>
+          </select>
+        </div>
+      </section>
+
+      <!-- DANGER ZONE -->
+      <section class="danger-zone" id="danger">
+        <h2>⚠ Аюулгүй устгал</h2>
+        <div class="sub">Эдгээр үйлдлийг буцаах боломжгүй. Болгоомжтой шийдвэрлэнэ үү.</div>
+
+        <div class="danger-item">
+          <div class="info">
+            <b>Бүх үйл ажиллагааны түүх цэвэрлэх</b>
+            <div class="meta">Сүүлд үзсэн, хайлтын түүх, хүрсэн товчлуурын лог — бүгд устаж AI санал болголт хийгдэхгүй болно.</div>
+          </div>
+          <button class="btn btn-danger">Цэвэрлэх</button>
+        </div>
+
+        <div class="danger-item">
+          <div class="info">
+            <b>Дансаа түр царцаах</b>
+            <div class="meta">Хадгалсан зар, чатууд хадгалагдана. Нэвтрэх хэдэн ч цагт боломжтой.</div>
+          </div>
+          <button class="btn btn-danger">Царцаах</button>
+        </div>
+
+        <div class="danger-item">
+          <div class="info">
+            <b>Дансаа бүрэн устгах</b>
+            <div class="meta">30 хоногийн grace period байна. Тэр хугацаанд буцаах боломжтой. Дараа нь бүх дата буцаах боломжгүй устана.</div>
+          </div>
+          <button class="btn btn-danger">Устгах хүсэлт</button>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<div id="footer"></div>
+
+<!--nemi:js:start-->
+<script>
+// ============== Нэми Mock Data ==============
+window.NEMI_DATA = (() => {
+  const districts = ["Сүхбаатар", "Чингэлтэй", "Хан-Уул", "Баянгол", "Сонгинохайрхан", "Баянзүрх", "Налайх"];
+  const types = ["Орон сууц", "Хаус", "Газар", "Оффис", "Худалдааны талбай"];
+
+  const offices = [
+    { id: "of-01", name: "Голден Хаус", logo: "GH", agents: 12, listings: 86, color: "#C2410C", verified: true },
+    { id: "of-02", name: "Urban Realty", logo: "UR", agents: 24, listings: 134, color: "#1D4ED8", verified: true },
+    { id: "of-03", name: "Premium Estate", logo: "PE", agents: 18, listings: 102, color: "#9333EA", verified: true },
+    { id: "of-04", name: "Сити Хоум", logo: "СХ", agents: 9, listings: 41, color: "#B91C1C", verified: false },
+  ];
+
+  const agents = [
+    { id: "ag-01", name: "Б. Анхбаяр",  office: "Голден Хаус",   officeId: "of-01", phone: "+976 9911 2233", listings: 14, sold: 38, rating: 4.9, reviews: 142, years: 6, verified: true,  premier:true,  responseTime:"~12 минут", languages: ["Монгол","Англи"],       areas:["Хан-Уул","Сүхбаатар","Зайсан"],     specialty:"Лакшери орон сууц",     avatar:"AB", bio:"6 жил Хан-Уул, Сүхбаатарт ажиллаж байна. River Garden, Encanto зэрэг premium хотхонтой нягт хамтрах туршлагатай. Англи хэлээр чөлөөтэй ярьдаг тул гадаад харилцагчдыг хүлээн авахад тохиромжтой.", subRatings:{ knowledge:4.9, process:4.8, response:5.0, negotiation:4.8 } },
+    { id: "ag-02", name: "Д. Сэлэнгэ",   office: "Urban Realty",  officeId: "of-02", phone: "+976 8800 4455", listings: 22, sold: 67, rating: 4.8, reviews: 213, years: 8, verified: true,  premier:true,  responseTime:"~8 минут",  languages: ["Монгол","Англи","Хятад"], areas:["Сүхбаатар","Чингэлтэй"],            specialty:"Шинэ хотхон",            avatar:"DS", bio:"Шинэ хотхоны борлуулалтанд 8 жил мэргэшсэн. Хятад хэлтэй учир гадаадын инвесторуудтай хамтран ажиллах боломжтой.", subRatings:{ knowledge:4.9, process:4.7, response:4.9, negotiation:4.7 } },
+    { id: "ag-03", name: "Н. Энхжаргал", office: "Premium Estate",officeId: "of-03", phone: "+976 9966 7788", listings: 18, sold: 52, rating: 4.9, reviews: 98,  years: 5, verified: true,  premier:true,  responseTime:"~15 минут", languages: ["Монгол","Англи"],       areas:["Хан-Уул","Зайсан","Их тэнгэр"],     specialty:"Хаус ба газар",          avatar:"NE", bio:"Зайсан, Их тэнгэрийн хороололд хувийн хаус, газрын борлуулалт мэргэшсэн. Гэр бүлд тохиромжтой обьект олох шилдэг.", subRatings:{ knowledge:5.0, process:4.9, response:4.7, negotiation:5.0 } },
+    { id: "ag-04", name: "Т. Мөнхзул",   office: "Голден Хаус",   officeId: "of-01", phone: "+976 9555 1212", listings: 11, sold: 24, rating: 4.7, reviews: 64,  years: 3, verified: true,  premier:false, responseTime:"~25 минут", languages: ["Монгол","Орос"],         areas:["Сүхбаатар","Баянгол"],              specialty:"Хувийн орон сууц",       avatar:"TM", bio:"Орос хэлтэй, дунд орлоготой гэр бүлийн худалдан авагчдад туслахад дуртай. Сүхбаатар, Баянгол дүүрэгт мэргэшсэн.", subRatings:{ knowledge:4.6, process:4.7, response:4.8, negotiation:4.7 } },
+    { id: "ag-05", name: "Х. Батсайхан", office: "Urban Realty",  officeId: "of-02", phone: "+976 8800 9090", listings: 9,  sold: 15, rating: 4.6, reviews: 41,  years: 2, verified: false, premier:false, responseTime:"~40 минут", languages: ["Монгол"],                areas:["Сүхбаатар","Чингэлтэй"],            specialty:"Оффис ба худалдаа",      avatar:"XB", bio:"Оффис, худалдааны талбайн салбарт ажилладаг шинэ агент. Хямд үнэтэй коммерциал зар хайдаг бизнесүүдэд тусална.", subRatings:{ knowledge:4.4, process:4.5, response:4.7, negotiation:4.6 } },
+    { id: "ag-06", name: "С. Алтанзул",  office: "Сити Хоум",     officeId: "of-04", phone: "+976 9090 3344", listings: 7,  sold: 12, rating: 4.5, reviews: 33,  years: 2, verified: false, premier:false, responseTime:"~1 цаг",    languages: ["Монгол"],                areas:["Баянзүрх","Чингэлтэй"],             specialty:"Эконом орон сууц",       avatar:"SA", bio:"Эхний орон сууцаа авч буй залуу гэр бүлүүдэд зориулсан хямд хувилбарууд олох мэргэжилтэн.", subRatings:{ knowledge:4.3, process:4.5, response:4.5, negotiation:4.4 } },
+    { id: "ag-07", name: "О. Болормаа",  office: "Premium Estate",officeId: "of-03", phone: "+976 9966 1122", listings: 26, sold: 81, rating: 4.9, reviews: 256, years: 11,verified: true,  premier:true,  responseTime:"~6 минут",  languages: ["Монгол","Англи","Япон"],  areas:["Хан-Уул","Сүхбаатар","Зайсан","Эрдэнэт"], specialty:"Лакшери ба luxury",   avatar:"OB", bio:"11 жилийн туршлагатай, top-1 lakshery агент. Япон, Англи хэлтэй, гадаад VIP харилцагчдыг хүлээн авах боломжтой.", subRatings:{ knowledge:5.0, process:4.9, response:5.0, negotiation:4.9 } },
+    { id: "ag-08", name: "Г. Эрдэнэбат", office: "Голден Хаус",   officeId: "of-01", phone: "+976 9911 4455", listings: 17, sold: 44, rating: 4.8, reviews: 187, years: 7, verified: true,  premier:true,  responseTime:"~10 минут", languages: ["Монгол","Англи"],         areas:["Баянзүрх","Сонгинохайрхан","Налайх"],specialty:"Хувьцаа байшин",        avatar:"GE", bio:"Гэр бүлд тохирох амьдрах орчны хайлтаар алдаршсан. Сонгинохайрхан, Налайх руу ажилладаг цөөн агентуудын нэг.", subRatings:{ knowledge:4.8, process:4.9, response:4.8, negotiation:4.7 } },
+    { id: "ag-09", name: "Ц. Энхтуяа",   office: "Urban Realty",  officeId: "of-02", phone: "+976 8800 7766", listings: 13, sold: 29, rating: 4.7, reviews: 89,  years: 4, verified: true,  premier:false, responseTime:"~30 минут", languages: ["Монгол","Англи","Солонгос"], areas:["Чингэлтэй","Сүхбаатар"],             specialty:"Шинэ ашиглалт",       avatar:"CE", bio:"Шинэ ашиглалтанд орсон зарын нарийн мэдээллээр хэрэглэгчдэд туслахад дуртай.", subRatings:{ knowledge:4.7, process:4.6, response:4.8, negotiation:4.6 } },
+    { id: "ag-10", name: "Б. Цэндсүрэн", office: "Сити Хоум",     officeId: "of-04", phone: "+976 9090 8899", listings: 5,  sold: 9,  rating: 4.4, reviews: 22,  years: 1, verified: false, premier:false, responseTime:"~2 цаг",    languages: ["Монгол"],                  areas:["Сонгинохайрхан","Налайх"],             specialty:"Хямд орон сууц",        avatar:"BC", bio:"Шинэ үе залуу агент. Эконом хувилбар хайж байгаа залуу хүмүүст түргэн хариу өгдөг.", subRatings:{ knowledge:4.2, process:4.4, response:4.3, negotiation:4.5 } },
+    { id: "ag-11", name: "С. Очирбат",   office: "Premium Estate",officeId: "of-03", phone: "+976 9966 5544", listings: 31, sold: 96, rating: 4.9, reviews: 312, years: 13,verified: true,  premier:true,  responseTime:"~5 минут",  languages: ["Монгол","Англи","Хятад"],  areas:["Сүхбаатар","Хан-Уул","Зайсан"],         specialty:"Бүх төрөл",              avatar:"SO", bio:"Top-3 агент. 13 жил үл хөдлөхийн салбарт ажиллаж 96 хэлцэл хаасан. Чанартай үйлчилгээний жишиг.", subRatings:{ knowledge:5.0, process:5.0, response:5.0, negotiation:4.9 } },
+    { id: "ag-12", name: "Д. Хулан",     office: "Голден Хаус",   officeId: "of-01", phone: "+976 9555 6677", listings: 10, sold: 19, rating: 4.7, reviews: 56,  years: 3, verified: true,  premier:false, responseTime:"~20 минут", languages: ["Монгол","Англи"],          areas:["Хан-Уул","Зайсан"],                     specialty:"Гэр бүлийн орон сууц", avatar:"DX", bio:"Гэр бүлд таалагдах гэр олоход үргэлж тэвчээртэй хандана. 3 жил Хан-Уул, Зайсангийн обьектод мэргэшсэн.", subRatings:{ knowledge:4.7, process:4.8, response:4.6, negotiation:4.7 } },
+  ];
+
+  // Mock review pool — re-used per agent profile page
+  const reviewPool = [
+    { name:"Б. Энхтуяа",   area:"Хан-Уул",   type:"Худалдан авсан", date:"2026-04-12", rating:5, verified:true,  text:"Маш мэргэжлийн, тэвчээртэй. Бид 3 байр үзсэн ч хүсэлд тохирох гэрийг олох хүртэл хүлээж тусалсан. Хариу хугацаа маш хурдан, асуултанд бүгдэд нь тодорхой хариулсан." },
+    { name:"А. Цогзолмаа", area:"Сүхбаатар", type:"Зарсан",         date:"2026-03-28", rating:5, verified:true,  text:"Гэрээ 3 долоо хоногт зарж өгсөн. Үнэлгээ зөв тогтоосон, хайлтын стратеги нь үнэхээр ажилласан. Зөвлөж байна." },
+    { name:"Д. Батбаяр",   area:"Зайсан",    type:"Худалдан авсан", date:"2026-03-15", rating:5, verified:false, text:"Олон агенттай харьцаж байсан ч энэ хүн л арилжаагаар мэргэжлийн хандсан. Урт хугацаанд ч тэвчээртэй." },
+    { name:"Ч. Энхбаяр",   area:"Хан-Уул",   type:"Худалдан авсан", date:"2026-02-22", rating:4, verified:true,  text:"Сайн ажилласан. Заримдаа хариу удаа ирдэг боловч шаардлагатай мэдээллийг үнэн зөв өгдөг." },
+    { name:"Х. Нармандах", area:"Чингэлтэй", type:"Худалдан авсан", date:"2026-02-09", rating:5, verified:true,  text:"Гэр бүлийн анхны байр авч байсан. Бүх үе шатанд тайлбарлаж, эрхзүйн асуудлуудыг шийдвэрлэхэд маш их тусалсан." },
+    { name:"Т. Сараа",     area:"Сүхбаатар", type:"Зарсан",         date:"2026-01-30", rating:5, verified:true,  text:"Зарын зураг, описаниа маш сайн боловсруулсан. AI үнэлгээгээр нөгөө талын гаргасан үнийн саналыг харьцуулж зөв шийдвэр гаргахад тусалсан." },
+    { name:"Б. Болормаа",  area:"Зайсан",    type:"Худалдан авсан", date:"2026-01-12", rating:5, verified:false, text:"Сэтгэлгээ нь тийм нөгөө талын хүн шиг бус, миний эрх ашгийг хамгаалж хэлэлцээ хийсэн." },
+    { name:"Г. Дөлгөөн",   area:"Баянгол",   type:"Худалдан авсан", date:"2025-12-28", rating:4, verified:true,  text:"Зар олоход тусалсан. Хариу хугацаа арай удаа боловч мэдээлэл нь зөв." },
+    { name:"Э. Болд",      area:"Сонгинохайрхан", type:"Худалдан авсан", date:"2025-12-10", rating:5, verified:true, text:"Сонгинохайрханд эх юм олох амар биш. Гэвч энэ агент 5 хувилбар үзүүлж, миний төсөв болон гэр бүлийн хэрэгцээнд тохирсон гэрийг олж өгсөн." },
+    { name:"М. Алтанцэцэг",area:"Сүхбаатар", type:"Зарсан",         date:"2025-11-22", rating:5, verified:true,  text:"Зарын маркетинг бол шилдэг. Мэргэжлийн зураг авах, нийгмийн сүлжээнд цацах, дижитал тур — бүгдийг хариуцлагатай хийсэн." },
+  ];
+
+  const photos = [
+    "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=900&q=80&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=900&q=80&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=900&q=80&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1572120360610-d971b9d7767c?w=900&q=80&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=900&q=80&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1505691938895-1758d7feb511?w=900&q=80&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=900&q=80&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=900&q=80&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=900&q=80&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?w=900&q=80&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1567496898669-ee935f5f647a?w=900&q=80&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=900&q=80&auto=format&fit=crop",
+  ];
+
+  const listings = [
+    { id:"L-2401", title:"Premium 3 өрөө · River Garden", district:"Хан-Уул", type:"Орон сууц", rooms:3, area:118, floor:"12/18", price:520_000_000, pricePerM2:4_407_000, year:2022, parking:1, photo:photos[0], photos:4, status:"active", agent:"ag-01", aiScore:96, aiNote:"Зах зээлийн дунджаас 3% доогуур үнэтэй", verified:true, hot:true, featured:true, shared:true, lat:47.905, lng:106.917, desc:"Шинэ ашиглалтад орсон, бүрэн гүйцэтгэлтэй, тавилгатай, Олимпийн гудамжинд байрлах.", amenities:["Лифт","Газар доорх зогсоол","Хаалттай хороолол","Камер","Зүлэг","Тоглоомын талбай"]},
+    { id:"L-2402", title:"4 өрөө дуплекс · Зайсан хайрхан", district:"Хан-Уул", type:"Хаус", rooms:4, area:212, floor:"-", price:1_250_000_000, pricePerM2:5_896_000, year:2021, parking:2, photo:photos[1], photos:7, status:"active", agent:"ag-03", aiScore:88, aiNote:"Үнэ нь зах зээлийн дундажтай дүйцэж байна", verified:true, hot:false, featured:true, shared:false, lat:47.875, lng:106.928, desc:"Зайсангийн хормойд, уулын үзэмжтэй, хувийн хашаатай хаус.", amenities:["Хувийн хашаа","2 машины зогсоол","Гал тогоо","Гэрэлтүүлэг","Хамгаалалт","Терасс"]},
+    { id:"L-2403", title:"2 өрөө · Sky City", district:"Сүхбаатар", type:"Орон сууц", rooms:2, area:74, floor:"8/14", price:285_000_000, pricePerM2:3_851_000, year:2020, parking:1, photo:photos[2], photos:5, status:"active", agent:"ag-02", aiScore:92, aiNote:"Зах зээлийн үнээс 8% хямд", verified:true, hot:true, featured:false, shared:true, lat:47.921, lng:106.918},
+    { id:"L-2404", title:"1 өрөө студи · MRT хороолол", district:"Баянгол", type:"Орон сууц", rooms:1, area:42, floor:"6/12", price:155_000_000, pricePerM2:3_690_000, year:2019, parking:0, photo:photos[3], photos:3, status:"active", agent:"ag-04", aiScore:84, aiNote:"Үнэ дунджаас 2% дээгүүр", verified:true, hot:false, featured:false, shared:true, lat:47.913, lng:106.881 },
+    { id:"L-2405", title:"3 өрөө · Encanto тауэр", district:"Сүхбаатар", type:"Орон сууц", rooms:3, area:96, floor:"15/22", price:435_000_000, pricePerM2:4_531_000, year:2023, parking:1, photo:photos[4], photos:6, status:"active", agent:"ag-01", aiScore:95, aiNote:"Шинэ барилгад зориулсан үнэлгээ маш сайн", verified:true, hot:true, featured:true, shared:true, lat:47.919, lng:106.91 },
+    { id:"L-2406", title:"Газар · Богд хан АА", district:"Хан-Уул", type:"Газар", rooms:0, area:780, floor:"-", price:185_000_000, pricePerM2:237_000, year:0, parking:0, photo:photos[5], photos:4, status:"active", agent:"ag-03", aiScore:81, aiNote:"Бараг ижил газрууд 5%-аар үнэтэй", verified:true, hot:false, featured:false, shared:false, lat:47.836, lng:106.92 },
+    { id:"L-2407", title:"Оффисын талбай · Central Tower", district:"Сүхбаатар", type:"Оффис", rooms:0, area:215, floor:"18/22", price:1_080_000_000, pricePerM2:5_023_000, year:2018, parking:3, photo:photos[6], photos:5, status:"active", agent:"ag-05", aiScore:78, aiNote:"Үнэ нь дунджаас 6% дээгүүр", verified:false, hot:false, featured:false, shared:false, lat:47.918, lng:106.916 },
+    { id:"L-2408", title:"2 өрөө · Гэрэлт хороолол", district:"Чингэлтэй", type:"Орон сууц", rooms:2, area:68, floor:"4/9", price:198_000_000, pricePerM2:2_912_000, year:2015, parking:0, photo:photos[7], photos:4, status:"active", agent:"ag-06", aiScore:71, aiNote:"Хямд үнэ боловч хуурамч магадлал 12%", verified:false, hot:false, featured:false, shared:false, lat:47.928, lng:106.91 },
+    { id:"L-2409", title:"3 өрөө · The Mall residence", district:"Сүхбаатар", type:"Орон сууц", rooms:3, area:108, floor:"9/16", price:478_000_000, pricePerM2:4_426_000, year:2021, parking:1, photo:photos[8], photos:6, status:"active", agent:"ag-02", aiScore:90, aiNote:"Үнэ зах зээлтэй нийцэж байна", verified:true, hot:false, featured:true, shared:true, lat:47.917, lng:106.92 },
+    { id:"L-2410", title:"Хаус · Их тэнгэр амралт", district:"Хан-Уул", type:"Хаус", rooms:5, area:260, floor:"-", price:1_650_000_000, pricePerM2:6_346_000, year:2022, parking:3, photo:photos[9], photos:9, status:"active", agent:"ag-01", aiScore:93, aiNote:"Лакшери хэсгийн жишиг үнэ", verified:true, hot:true, featured:true, shared:false, lat:47.83, lng:106.94 },
+    { id:"L-2411", title:"2 өрөө · Аркэйд хороолол", district:"Баянзүрх", type:"Орон сууц", rooms:2, area:62, floor:"7/14", price:175_000_000, pricePerM2:2_823_000, year:2017, parking:0, photo:photos[10], photos:3, status:"draft", agent:"ag-04", aiScore:79, aiNote:"Зураг нь өөр зартай төстэй (давхардал?)", verified:true, hot:false, featured:false, shared:true, lat:47.91, lng:106.96 },
+    { id:"L-2412", title:"Худалдааны талбай · Чингис гудамж", district:"Сүхбаатар", type:"Худалдааны талбай", rooms:0, area:142, floor:"1/5", price:920_000_000, pricePerM2:6_478_000, year:2014, parking:2, photo:photos[11], photos:5, status:"review", agent:"ag-05", aiScore:74, aiNote:"Зах зээлийн үнэлгээ хүсэлт нэмэгдсэн", verified:false, hot:false, featured:false, shared:false, lat:47.92, lng:106.92 },
+  ];
+
+  // user (mock logged-in)
+  const user = { name:"Б. Энхтуяа", email:"enkhtuya@example.com", avatar:"EB", saved:["L-2401","L-2405","L-2402"], chats:3, viewings:2 };
+
+  // leads (for agent CRM)
+  const leads = [
+    { id:"LD-901", name:"Г. Хулан", phone:"+976 9911 2222", listing:"L-2401", source:"website", stage:"new", score:92, lastTouch:"2 цаг", note:"3 өрөө шаардаж байна, 500M төсөвтэй" },
+    { id:"LD-902", name:"Б. Болдсайхан", phone:"+976 8800 3344", listing:"L-2405", source:"facebook", stage:"contacted", score:78, lastTouch:"6 цаг", note:"Үзэлт зохион байгуулна" },
+    { id:"LD-903", name:"Н. Цэвэлмаа", phone:"+976 9999 1111", listing:"L-2410", source:"referral", stage:"viewing", score:88, lastTouch:"Өчигдөр", note:"Гэр бүлийн хамт үзлэг хийсэн" },
+    { id:"LD-904", name:"Д. Эрдэнэбат", phone:"+976 9966 7766", listing:"L-2402", source:"instagram", stage:"offer", score:95, lastTouch:"Өнөөдөр", note:"Үнийн санал илгээсэн" },
+    { id:"LD-905", name:"А. Уянга", phone:"+976 8800 5544", listing:"L-2403", source:"website", stage:"new", score:64, lastTouch:"30 мин", note:"Хямд хувилбар хайж байна" },
+    { id:"LD-906", name:"Т. Билгүүн", phone:"+976 9595 6464", listing:"L-2409", source:"google", stage:"contacted", score:71, lastTouch:"3 өдөр", note:"Дахин залгах" },
+  ];
+
+  // chats
+  const chats = [
+    { id:"c-1", name:"Б. Анхбаяр", office:"Голден Хаус", avatar:"AB", listing:"L-2401", last:"Үзлэг бямба гаригт боломжтой", time:"14:32", unread:1 },
+    { id:"c-2", name:"Д. Сэлэнгэ", office:"Urban Realty", avatar:"DS", listing:"L-2405", last:"Тавилгатай хувилбар бий", time:"Өчигдөр", unread:0 },
+    { id:"c-3", name:"Н. Энхжаргал", office:"Premium Estate", avatar:"NE", listing:"L-2402", last:"Үнийг 1.2 болгох боломжтой", time:"2 өдрийн өмнө", unread:0 },
+  ];
+
+  const messages = [
+    { from:"them", text:"Сайн байна уу. River Garden-ийн зарын талаар сонирхож байна гэж байсан.", time:"14:01" },
+    { from:"me", text:"Сайн байна уу! Тийм, бямба гаригт үзэх боломжтой юу?", time:"14:18" },
+    { from:"them", text:"Бямба гаригийн 11:00 цаг таарч байгаа. Тохирох уу?", time:"14:24" },
+    { from:"me", text:"Тохирно. Хаягийг чатанд илгээгээч?", time:"14:30" },
+    { from:"them", text:"Олимпийн гудамж, River Garden, 12-р давхар, 1207 тоот. Үзлэг бямба гаригт боломжтой.", time:"14:32" },
+  ];
+
+  // viewings
+  const viewings = [
+    { id:"V-1", listing:"L-2401", agent:"ag-01", date:"2026-05-30", time:"11:00", status:"confirmed" },
+    { id:"V-2", listing:"L-2402", agent:"ag-03", date:"2026-06-02", time:"15:30", status:"pending" },
+  ];
+
+  // helpers
+  const fmtMNT = n => new Intl.NumberFormat('mn-MN').format(n) + "₮";
+  const shortMNT = n => {
+    if(n>=1e9) return (n/1e9).toFixed(2) + " тэрбум₮";
+    if(n>=1e6) return (n/1e6).toFixed(0) + " сая₮";
+    return n.toLocaleString('mn-MN')+"₮";
+  };
+  const agentById = id => agents.find(a => a.id===id);
+  const officeByName = n => offices.find(o => o.name===n);
+  const listingById = id => listings.find(l => l.id===id);
+
+  return { offices, agents, listings, user, leads, chats, messages, viewings, districts, types, reviewPool, fmtMNT, shortMNT, agentById, officeByName, listingById };
+})();
+
+
+// ============== Нэми App Helpers ==============
+(function(){
+  const D = window.NEMI_DATA;
+
+  // Simple icon set
+  const I = {
+    search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>',
+    heart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
+    heartFill:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
+    bed:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg>',
+    bath:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6 6.5 3.5a1.5 1.5 0 0 0-1-.5C4.683 3 4 3.683 4 4.5V17a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><line x1="10" y1="5" x2="8" y2="7"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="7" y1="19" x2="7" y2="21"/><line x1="17" y1="19" x2="17" y2="21"/></svg>',
+    area:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3z"/><path d="M14 14h7v7h-7z"/><path d="M14 3h7v7h-7z"/><path d="M3 14h7v7H3z"/></svg>',
+    pin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+    verified:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5l-8-3z"/><path d="m9 12 2 2 4-4"/></svg>',
+    sparkle:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18M5.5 5.5l13 13M18.5 5.5l-13 13"/></svg>',
+    ai:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 1.9 4.8L19 9.7l-3.7 3.5.9 5.1L12 16l-4.2 2.3.9-5.1L5 9.7l5.1-1.9L12 3z"/></svg>',
+    user:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M5.5 21c1.5-3 4-5 6.5-5s5 2 6.5 5"/></svg>',
+    home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>',
+    chat:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z"/></svg>',
+    calendar:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+    bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>',
+    cog:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+    plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+    filter:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>',
+    grid:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>',
+    map:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>',
+    eye:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+    share:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>',
+    car:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17h14M5 17l-2-5 2-5h14l2 5-2 5M5 17v3M19 17v3M7 12h2M15 12h2"/></svg>',
+    arrowRight:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>',
+    arrowUp:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>',
+    arrowDown:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>',
+    star:'<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
+    phone:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
+    money:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+    chart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>',
+    shield:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+    flame:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 17c1.4 0 2.5-1 2.5-2.5 0-1.5-1-2-1-3.5 0-2 2-2 2-4 0-1.5-1-3-3-3-2.5 0-4 2-4 4 0 1.5.5 2.5.5 4 0 1-.5 1.5-1 2"/><path d="M14 19.5A6.5 6.5 0 0 1 7.5 13c0-2.5 1-3.5 1-5C8.5 5 6 4 6 4s-1 1.5-1 4 1 5 1 7c0 3.5 3 6.5 6.5 6.5 1.5 0 3-1 3-2.5 0-1-1-1.5-1.5-1.5s-1 .5-1 1z"/></svg>',
+    building:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="9" y1="6" x2="9" y2="6"/><line x1="15" y1="6" x2="15" y2="6"/><line x1="9" y1="10" x2="9" y2="10"/><line x1="15" y1="10" x2="15" y2="10"/><line x1="9" y1="14" x2="9" y2="14"/><line x1="15" y1="14" x2="15" y2="14"/><line x1="10" y1="22" x2="10" y2="18"/><line x1="14" y1="22" x2="14" y2="18"/></svg>',
+    inbox:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>',
+    users:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+    pkg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
+    activity:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>',
+    upload:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>',
+    download:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+    edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+    trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+    check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+    x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+    alert:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m10.29 3.86-8.5 14.7A2 2 0 0 0 3.5 22h17a2 2 0 0 0 1.71-3.44l-8.5-14.7a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+    target:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
+    copy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+    coins:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4M16.71 13.88l.7.71-2.82 2.82"/></svg>',
+    logout:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
+    facebook:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M22 12a10 10 0 1 0-11.56 9.88V14.9H7.9V12h2.54V9.8c0-2.51 1.5-3.9 3.78-3.9 1.1 0 2.24.2 2.24.2v2.46h-1.26c-1.25 0-1.64.77-1.64 1.57V12h2.78l-.44 2.9h-2.34v6.98A10 10 0 0 0 22 12z"/></svg>',
+    google:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.48 10.92v3.28h7.84c-.24 1.84-.85 3.18-1.73 4.1-1.05 1.07-2.7 2.27-5.59 2.27-4.45 0-7.9-3.5-7.9-7.94S8.55 4.69 13 4.69c2.39 0 4.18.93 5.4 2.06l2.34-2.32C19.13 2.97 16.79 2 13 2 6.96 2 2 6.85 2 12.85S6.96 24 13 24c3.27 0 5.7-1.07 7.62-3.05 1.97-1.97 2.58-4.73 2.58-6.97 0-.7-.06-1.34-.16-1.86h-10.6z"/></svg>',
+  };
+
+  window.NEMI = { I, D };
+
+  // Brand logo (inline SVG so we can recolor the text via currentColor / explicit fill)
+  // Original artwork preserved; orange marks keep their hardcoded #FFA52E, text uses passed color.
+  window.NEMI.logoSVG = function(color, sizeClass) {
+    color = color || 'currentColor';
+    sizeClass = sizeClass || 'logo-md';
+    return `<svg class="logo ${sizeClass}" viewBox="0 0 1067 324" xmlns="http://www.w3.org/2000/svg" aria-label="Нэми" role="img">
+  <g transform="translate(-647.039012,-1592.302406)">
+    <g transform="matrix(7.08041,0,0,7.08041,-6972.709199,-10396.509937)">
+      <g transform="matrix(-0.059534,0,0.027041,0.046809,1071.995945,1644.824353)"><rect x="178.755" y="1274.149" width="127.915" height="479.788" fill="#FFA52E"/></g>
+      <g transform="matrix(0.059534,0,-0.025052,0.070214,1109.4707,1615.003436)"><rect x="178.755" y="1274.149" width="127.915" height="479.788" fill="#FFA52E"/></g>
+      <g transform="matrix(0.059534,0,-0.025052,0.070214,1134.752825,1603.774204)"><rect x="178.755" y="1274.149" width="127.915" height="479.788" fill="#FFA52E"/></g>
+    </g>
+    <g transform="matrix(6.696748,0,0,6.696748,-6486.765921,-8685.935813)" fill="${color}">
+      <path d="M1118.725,1556.533L1124.125,1556.533L1124.125,1560.333L1124.225,1560.433C1125.092,1559 1126.225,1557.875 1127.625,1557.058C1129.025,1556.241 1130.575,1555.833 1132.275,1555.833C1135.108,1555.833 1137.342,1556.566 1138.975,1558.033C1140.608,1559.5 1141.425,1561.7 1141.425,1564.633L1141.425,1582.383L1135.725,1582.383L1135.725,1566.133C1135.658,1564.1 1135.225,1562.625 1134.425,1561.708C1133.625,1560.791 1132.375,1560.333 1130.675,1560.333C1129.708,1560.333 1128.842,1560.508 1128.075,1560.858C1127.308,1561.208 1126.658,1561.691 1126.125,1562.308C1125.592,1562.925 1125.175,1563.65 1124.875,1564.483C1124.575,1565.316 1124.425,1566.2 1124.425,1567.133L1124.425,1582.383L1118.725,1582.383L1118.725,1556.533Z"/>
+      <path d="M1165.175,1567.183C1165.108,1566.283 1164.917,1565.416 1164.6,1564.583C1164.283,1563.75 1163.85,1563.025 1163.3,1562.408C1162.75,1561.791 1162.083,1561.291 1161.3,1560.908C1160.517,1560.525 1159.642,1560.333 1158.675,1560.333C1157.675,1560.333 1156.767,1560.508 1155.95,1560.858C1155.133,1561.208 1154.433,1561.691 1153.85,1562.308C1153.267,1562.925 1152.8,1563.65 1152.45,1564.483C1152.1,1565.316 1151.908,1566.216 1151.875,1567.183L1165.175,1567.183ZM1151.875,1570.933C1151.875,1571.933 1152.017,1572.9 1152.3,1573.833C1152.583,1574.766 1153.008,1575.583 1153.575,1576.283C1154.142,1576.983 1154.858,1577.541 1155.725,1577.958C1156.592,1578.375 1157.625,1578.583 1158.825,1578.583C1160.492,1578.583 1161.833,1578.225 1162.85,1577.508C1163.867,1576.791 1164.625,1575.716 1165.125,1574.283L1170.525,1574.283C1170.225,1575.683 1169.708,1576.933 1168.975,1578.033C1168.242,1579.133 1167.358,1580.058 1166.325,1580.808C1165.292,1581.558 1164.133,1582.125 1162.85,1582.508C1161.567,1582.891 1160.225,1583.083 1158.825,1583.083C1156.792,1583.083 1154.992,1582.75 1153.425,1582.083C1151.858,1581.416 1150.533,1580.483 1149.45,1579.283C1148.367,1578.083 1147.55,1576.65 1147,1574.983C1146.45,1573.316 1146.175,1571.483 1146.175,1569.483C1146.175,1567.65 1146.467,1565.908 1147.05,1564.258C1147.633,1562.608 1148.467,1561.158 1149.55,1559.908C1150.633,1558.658 1151.942,1557.666 1153.475,1556.933C1155.008,1556.2 1156.742,1555.833 1158.675,1555.833C1160.708,1555.833 1162.533,1556.258 1164.15,1557.108C1165.767,1557.958 1167.108,1559.083 1168.175,1560.483C1169.242,1561.883 1170.017,1563.491 1170.5,1565.308C1170.983,1567.125 1171.108,1569 1170.875,1570.933L1151.875,1570.933Z"/>
+      <path d="M1175.225,1556.533L1180.625,1556.533L1180.625,1560.133L1180.775,1560.133C1181.208,1559.5 1181.675,1558.916 1182.175,1558.383C1182.675,1557.85 1183.233,1557.4 1183.85,1557.033C1184.467,1556.666 1185.175,1556.375 1185.975,1556.158C1186.775,1555.941 1187.692,1555.833 1188.725,1555.833C1190.292,1555.833 1191.75,1556.183 1193.1,1556.883C1194.45,1557.583 1195.408,1558.666 1195.975,1560.133C1196.942,1558.8 1198.058,1557.75 1199.325,1556.983C1200.592,1556.216 1202.175,1555.833 1204.075,1555.833C1206.808,1555.833 1208.933,1556.5 1210.45,1557.833C1211.967,1559.166 1212.725,1561.4 1212.725,1564.533L1212.725,1582.383L1207.025,1582.383L1207.025,1567.283C1207.025,1566.25 1206.992,1565.308 1206.925,1564.458C1206.858,1563.608 1206.667,1562.875 1206.35,1562.258C1206.033,1561.641 1205.558,1561.166 1204.925,1560.833C1204.292,1560.5 1203.425,1560.333 1202.325,1560.333C1200.392,1560.333 1198.992,1560.933 1198.125,1562.133C1197.258,1563.333 1196.825,1565.033 1196.825,1567.233L1196.825,1582.383L1191.125,1582.383L1191.125,1565.783C1191.125,1563.983 1190.8,1562.625 1190.15,1561.708C1189.5,1560.791 1188.308,1560.333 1186.575,1560.333C1185.842,1560.333 1185.133,1560.483 1184.45,1560.783C1183.767,1561.083 1183.167,1561.516 1182.65,1562.083C1182.133,1562.65 1181.717,1563.35 1181.4,1564.183C1181.083,1565.016 1180.925,1565.966 1180.925,1567.033L1180.925,1582.383L1175.225,1582.383L1175.225,1556.533Z"/>
+      <path d="M1218.875,1546.683L1224.575,1546.683L1224.575,1552.083L1218.875,1552.083L1218.875,1546.683ZM1218.875,1556.533L1224.575,1556.533L1224.575,1582.383L1218.875,1582.383L1218.875,1556.533Z"/>
+    </g>
+  </g>
+</svg>`;
+  };
+
+  // Brand bar component (used across pages)
+  window.NEMI.topbar = function(active) {
+    const items = [
+      ["index.html","Нүүр","home"],
+      ["listings.html","Зар","listings"],
+      ["agents.html","Агентууд","agents"],
+      ["home-loans.html","Зээл","loans"],
+      ["ai.html","AI","ai"],
+      ["agent.html","Агент","agent"],
+      ["office.html","Оффис","office"],
+    ];
+    return `
+      <header class="topbar">
+        <div class="container-wide topbar-inner">
+          <a href="index.html" class="brand">${NEMI.logoSVG('#0F172A','logo-md')}</a>
+          <nav class="nav">
+            ${items.map(i => `<a href="${i[0]}" class="${active===i[2]?'active':''}">${i[1]}</a>`).join('')}
+          </nav>
+          <div class="topbar-actions">
+            <a href="agent.html" class="btn btn-ghost hide-sm">${I.plus} Зар оруулах</a>
+            <a href="favorites.html" class="btn btn-secondary hide-sm">${I.heart} Хадгалсан</a>
+            <a href="login.html" class="btn btn-primary">${I.user} Нэвтрэх</a>
+          </div>
+        </div>
+      </header>`;
+  };
+
+  // Footer
+  window.NEMI.footer = function() {
+    return `
+      <footer class="footer">
+        <div class="container">
+          <!-- ============ MAIN 4-COLUMN ============ -->
+          <div class="footer-main">
+
+            <!-- COL 1: Brand -->
+            <div class="footer-brand-col">
+              <div class="brand">${NEMI.logoSVG('#fff','logo-md')}</div>
+              <p class="t">Баталгаатай үл хөдлөхийн платформ. Худалдан авагч, агент, оффисуудыг AI-аар нэгтгэсэн.</p>
+              <a href="agent-signup.html" class="footer-cta">${I.building} Агент болж нэгдэх ${I.arrowRight}</a>
+              <div class="footer-stats">
+                <div><b>12,480+</b><span>Идэвхтэй зар</span></div>
+                <div><b>320+</b><span>Баталгаажсан агент</span></div>
+                <div><b>28</b><span>Хамтрагч оффис</span></div>
+              </div>
+            </div>
+
+            <!-- COL 2: Users -->
+            <div>
+              <h4>Хэрэглэгчид</h4>
+              <a href="listings.html">Зар хайх</a>
+              <a href="agents.html">Агент хайх</a>
+              <a href="home-loans.html">Орон сууцны зээл</a>
+              <a href="favorites.html">Хадгалсан зар</a>
+              <a href="recently-viewed.html">Сүүлд үзсэн</a>
+              <a href="tours.html">Үзлэгийн цаг</a>
+              <a href="my-home.html">Миний гэр</a>
+              <a href="your-rental.html">Миний түрээс</a>
+              <a href="my-team.html">Миний баг</a>
+              <a href="account.html">Дансны тохиргоо</a>
+            </div>
+
+            <!-- COL 3: Professionals -->
+            <div>
+              <h4>Мэргэжилтнүүд</h4>
+              <a href="partners.html" style="color:#FFA52E"><b>⭐ Нэми Premier</b></a>
+              <a href="agent-signup.html">Агент болж нэгдэх</a>
+              <a href="agent.html">Агентын самбар</a>
+              <a href="office.html">Оффисын админ</a>
+              <a href="rental-manager.html">Түрээс удирдах</a>
+              <a href="ai.html">AI боломжууд</a>
+              <a href="#">MLS / API</a>
+              <a href="#">Сургалт</a>
+            </div>
+
+            <!-- COL 4: Company -->
+            <div>
+              <h4>Нэми</h4>
+              <a href="#">Бидний тухай</a>
+              <a href="news.html">Мэдээ ба блог</a>
+              <a href="news.html">Зах зээлийн судалгаа</a>
+              <a href="#">Ажлын байр</a>
+              <a href="#">Тусламжийн төв</a>
+              <a href="#">Сурах төв</a>
+              <a href="#">Холбоо барих</a>
+              <a href="#">Хэвлэлийн булан</a>
+            </div>
+          </div>
+
+          <!-- ============ STRIP: apps + banks + lang ============ -->
+          <div class="footer-strip">
+            <div class="apps-row">
+              <span class="lbl">📱 Гар утсаны апп</span>
+              <a class="app-badge" href="#">
+                <span style="font-size:18px"></span>
+                <div>
+                  <span class="store">App Store</span>
+                  <span class="nm">iOS</span>
+                </div>
+              </a>
+              <a class="app-badge" href="#">
+                <span style="font-size:18px">▶</span>
+                <div>
+                  <span class="store">Play Store</span>
+                  <span class="nm">Android</span>
+                </div>
+              </a>
+            </div>
+
+            <div class="banks-row">
+              <span class="lbl">🏦 Хамтрагч</span>
+              <span style="color:#34A853">Хаан банк</span>
+              <span style="color:#E11D48">Голомт</span>
+              <span style="color:#1D4ED8">ХХБ</span>
+              <span style="color:#F59E0B">QPay</span>
+              <span style="color:#0EA5E9">Хас</span>
+            </div>
+
+            <div></div>
+
+            <div class="lang-row">
+              <span class="lbl">🌐</span>
+              <a class="active">🇲🇳 Монгол</a>
+              <a>🇺🇸 EN</a>
+              <a>🇨🇳 中文</a>
+            </div>
+          </div>
+
+          <!-- ============ BOTTOM LEGAL ============ -->
+          <div class="footer-bottom">
+            <div class="fb-left">
+              © 2026 Нэми технологи. Бүх эрх хуулиар хамгаалагдсан. · v1.0 prototype
+            </div>
+            <div class="fb-right">
+              <a href="#">Үйлчилгээний нөхцөл</a>
+              <a href="#">Нууцлал</a>
+              <a href="#">🍪 Cookie</a>
+              <a href="#">⚖ Шударга орон сууц</a>
+              <a href="account.html#privacy" class="dns">🛡 Хувийн мэдээллийг бүү худалд →</a>
+            </div>
+          </div>
+
+        </div>
+      </footer>`;
+  };
+
+  // Listing card — clean, minimal (Zillow/Redfin-style)
+  window.NEMI.listingCard = function(l) {
+    const a = D.agentById(l.agent);
+    const office = D.officeByName(a?.office);
+    // Pick ONE primary photo badge by priority: hot > verified
+    const primaryBadge = l.hot
+      ? `<span class="badge badge-rose">${I.flame} Эрэлттэй</span>`
+      : (l.verified ? `<span class="badge badge-green">${I.verified} Баталгаатай</span>` : '');
+    return `
+      <a href="listing.html?id=${l.id}" class="listing-card">
+        <div class="listing-photo">
+          <img src="${l.photo}" alt="${l.title}" loading="lazy" />
+          <div class="photo-tags">${primaryBadge}</div>
+          <button class="heart" onclick="event.preventDefault();event.stopPropagation();this.classList.toggle('active')">${I.heart}</button>
+        </div>
+        <div class="listing-body">
+          <div class="flex items-center justify-between gap-2">
+            <div class="listing-price">${D.shortMNT(l.price)}</div>
+            <div class="ai-score-pill" title="AI чанарын оноо">★ ${l.aiScore}</div>
+          </div>
+          <div class="listing-title">${l.title}</div>
+          <div class="listing-specs">
+            ${l.rooms?`<span>${l.rooms} өрөө</span>`:''}
+            <span>${l.area} м²</span>
+            ${l.floor!=='-'?`<span>${l.floor}</span>`:''}
+            <span>${l.district}</span>
+          </div>
+          <div class="listing-agent">
+            <div class="avatar avatar-sm" style="background:${office?.color||'#C2410C'};color:#fff;display:grid;place-items:center;font-weight:700;font-size:10px">${a?.avatar||"NA"}</div>
+            <div style="min-width:0;flex:1">
+              <div class="agent-name">${a?.name||""}</div>
+              <div class="agent-office">${a?.office||""}</div>
+            </div>
+            ${a?.verified?`<span class="badge badge-green" style="padding:2px 6px;font-size:10.5px">${I.verified}</span>`:''}
+          </div>
+        </div>
+      </a>`;
+  };
+})();
+
+</script>
+<!--nemi:js:end-->
+<script>
+  const {I, D} = NEMI;
+  document.getElementById('topbar').innerHTML = NEMI.topbar('account');
+  document.getElementById('footer').innerHTML = NEMI.footer();
+
+  // Nav icons
+  document.getElementById('n-profile').innerHTML  = I.user      + ' Хувийн профайл';
+  document.getElementById('n-security').innerHTML = I.shield    + ' Аюулгүй байдал';
+  document.getElementById('n-notif').innerHTML    = I.bell      + ' Мэдэгдэл';
+  document.getElementById('n-conn').innerHTML     = I.share     + ' Холбогдсон данс';
+  document.getElementById('n-pay').innerHTML      = I.money     + ' Төлбөрийн арга';
+  document.getElementById('n-search').innerHTML   = I.search    + ' Хайлтын тохиргоо';
+  document.getElementById('n-svc').innerHTML      = I.users     + ' Холбогдсон үйлчилгээ';
+  document.getElementById('n-sub').innerHTML      = I.coins     + ' Подписка';
+  document.getElementById('n-priv').innerHTML     = I.eye       + ' Нууцлал ба өгөгдөл';
+  document.getElementById('n-pref').innerHTML     = I.cog       + ' Дансны тохиргоо';
+  document.getElementById('n-danger').innerHTML   = I.trash     + ' Аюулгүй устгал';
+
+  document.getElementById('c-google').innerHTML = I.google;
+  document.getElementById('c-fb').innerHTML = I.facebook;
+
+  // Scroll-spy: highlight nav item based on scroll position
+  const sections = ['profile','security','notifications','connected','payment','search-prefs','services','subscriptions','privacy','preferences','danger'];
+  const navMap = {
+    'profile':'n-profile','security':'n-security','notifications':'n-notif','connected':'n-conn',
+    'payment':'n-pay','search-prefs':'n-search','services':'n-svc','subscriptions':'n-sub',
+    'privacy':'n-priv','preferences':'n-pref','danger':'n-danger'
+  };
+  function updateActiveNav(){
+    let active = sections[0];
+    for(const id of sections){
+      const el = document.getElementById(id);
+      if(el && el.getBoundingClientRect().top < 120) active = id;
+    }
+    document.querySelectorAll('.acc-nav .nav-item').forEach(n => n.classList.remove('active'));
+    const nav = document.getElementById(navMap[active]);
+    if(nav) nav.classList.add('active');
+  }
+  window.addEventListener('scroll', updateActiveNav, {passive:true});
+  updateActiveNav();
+</script>
+</body>
+</html>

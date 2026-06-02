@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+/* ============================================================
+   Нэми дизайн систем — Tailwind v4 (@theme)
+   Брэнд токенуудыг legacy/assets/css/styles.css-ээс шилжүүлсэн.
+   Лого өнгө: #FFA52E. Текст: Inter (latin + cyrillic).
+   ============================================================ */
+@theme {
+  /* Брэнд улбар шар (лого #FFA52E-ээс гаргасан) */
+  --color-brand-50: #fff7ed;
+  --color-brand-100: #ffedd5;
+  --color-brand-200: #fed7aa;
+  --color-brand-500: #f97316;
+  --color-brand-600: #ea580c;
+  --color-brand-700: #c2410c;
+  --color-brand-800: #9a3412;
+  --color-brand-900: #7c2d12;
+  --color-brand-logo: #ffa52e;
+
+  /* Хоёрдогч accent — гүн cyan (итгэлцэл) */
+  --color-accent-400: #22d3ee;
+  --color-accent-500: #06b6d4;
+  --color-accent-600: #0891b2;
+
+  /* Гадаргуу ба фон */
+  --color-bg: #f6f8fa;
+  --color-surface: #ffffff;
+  --color-surface-2: #fafbfc;
+  --color-line: #e5e7eb;
+  --color-line-strong: #cbd5e1;
+
+  /* Текст */
+  --color-ink: #0f172a;
+  --color-muted: #64748b;
+  --color-subtle: #94a3b8;
+
+  /* Статус */
+  --color-danger: #dc2626;
+  --color-warning: #f59e0b;
+  --color-success: #10b981;
+  --color-info: #0ea5e9;
+
+  /* Сүүдэр */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 1px rgba(15, 23, 42, 0.03);
+  --shadow-md: 0 4px 14px rgba(15, 23, 42, 0.06), 0 2px 4px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 20px 40px rgba(15, 23, 42, 0.08);
+
+  /* Фонт — Inter (cyrillic-тэй) layout.tsx-д тохируулсан */
+  --font-sans: var(--font-inter), "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Tailwind v4-д border-ийн өгөгдмөл өнгийг брэнд line болгох */
+  *,
+  ::after,
+  ::before {
+    border-color: var(--color-line);
+  }
+}

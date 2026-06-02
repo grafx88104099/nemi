@@ -1,0 +1,39 @@
+{
+  "name": "nemi",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "seed": "node scripts/seed.mjs",
+    "test": "vitest run",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.10.3",
+    "@supabase/supabase-js": "^2.106.2",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.17.0",
+    "maplibre-gl": "^5.24.0",
+    "next": "16.2.6",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "resend": "^6.12.4",
+    "tailwind-merge": "^3.6.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.6",
+    "pg": "^8.21.0",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "^4.1.7"
+  }
+}
