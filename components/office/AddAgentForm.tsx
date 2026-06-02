@@ -12,7 +12,7 @@ export function AddAgentForm() {
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ name: "", email: "", phone: "", specialty: "" });
   const [pending, startTransition] = useTransition();
-  const [result, setResult] = useState<{ emailed: boolean; link?: string } | null>(null);
+  const [result, setResult] = useState<{ emailed: boolean; link?: string; reason?: string; email?: string } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const router = useRouter();
@@ -23,10 +23,11 @@ export function AddAgentForm() {
     setErr(null);
     setResult(null);
     startTransition(async () => {
+      const sentTo = f.email.trim();
       const r = await createAgentByOffice(f);
       if (r.error) setErr(r.error);
       else {
-        setResult({ emailed: !!r.emailed, link: r.actionLink });
+        setResult({ emailed: !!r.emailed, link: r.actionLink, reason: r.reason, email: sentTo });
         setF({ name: "", email: "", phone: "", specialty: "" });
         router.refresh();
       }
@@ -46,21 +47,25 @@ export function AddAgentForm() {
       <h3 className="mb-3 font-bold text-ink">Шинэ агент нэмэх</h3>
       {result ? (
         <div className="space-y-3">
-          <div className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">
-            ✓ Агент үүслээ.{" "}
-            {result.emailed
-              ? "Нэвтрэх урилгыг и-мэйлээр илгээлээ."
-              : "И-мэйл илгээгдсэнгүй (тохиргоо дутуу) — доорх линкийг агентад дамжуулна уу:"}
+          <div className={`rounded-xl p-4 text-sm ${result.emailed ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>
+            {result.emailed ? (
+              <>✓ Агент үүслээ. Нэвтрэх урилгыг <b>{result.email}</b> хаяг руу илгээлээ. Агент и-мэйл дээрх товчоор нууц үгээ үүсгэн самбартаа нэвтэрнэ.</>
+            ) : (
+              <>✓ Агент үүслээ. Гэхдээ и-мэйл илгээгдсэнгүй{result.reason ? ` (${result.reason})` : ""}. Доорх линкийг агентад дамжуулна уу:</>
+            )}
           </div>
-          {!result.emailed && result.link && (
-            <div className="flex items-center gap-2 rounded-lg border border-line bg-surface-2 p-2">
-              <input readOnly value={result.link} className="flex-1 bg-transparent text-xs outline-none" onFocus={(e) => e.target.select()} />
-              <button onClick={async () => { try { await navigator.clipboard.writeText(result.link!); setCopied(true); } catch {} }} className="rounded-md p-1.5 text-brand-600 hover:bg-surface">
-                {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-              </button>
+          {result.link && (
+            <div>
+              {result.emailed && <p className="mb-1 text-xs text-muted">Нөөц линк (и-мэйл очоогүй тохиолдолд):</p>}
+              <div className="flex items-center gap-2 rounded-lg border border-line bg-surface-2 p-2">
+                <input readOnly value={result.link} className="flex-1 bg-transparent text-xs outline-none" onFocus={(e) => e.target.select()} />
+                <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(result.link!); setCopied(true); } catch {} }} className="rounded-md p-1.5 text-brand-600 hover:bg-surface">
+                  {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+                </button>
+              </div>
             </div>
           )}
-          <Button size="sm" variant="outline" onClick={() => { setResult(null); setOpen(false); }}>Хаах</Button>
+          <Button size="sm" variant="outline" onClick={() => { setResult(null); setCopied(false); setOpen(false); }}>Хаах</Button>
         </div>
       ) : (
         <form onSubmit={submit} className="space-y-3">

@@ -7,13 +7,22 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
 
-export function ResetPasswordForm() {
+export function ResetPasswordForm({ next }: { next?: string }) {
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+
+  const dest = next || "/login";
+  const destLabel = dest.startsWith("/agent")
+    ? "Агентын самбар"
+    : dest.startsWith("/office")
+      ? "Оффисын самбар"
+      : dest.startsWith("/admin")
+        ? "Удирдлагын самбар"
+        : "Нэвтрэх хуудас";
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -30,15 +39,19 @@ export function ResetPasswordForm() {
     }
     setDone(true);
     setLoading(false);
-    setTimeout(() => router.push("/login"), 1500);
+    // Урилгаар орсон агент session-тэй тул шууд самбартаа шилжинэ.
+    setTimeout(() => {
+      router.push(dest);
+      router.refresh();
+    }, 1500);
   }
 
   if (done) {
     return (
       <div className="space-y-2 text-center">
         <div className="text-4xl">✅</div>
-        <h2 className="text-lg font-bold text-ink">Нууц үг шинэчлэгдлээ</h2>
-        <p className="text-sm text-muted">Нэвтрэх хуудас руу шилжиж байна...</p>
+        <h2 className="text-lg font-bold text-ink">Нууц үг тохирлоо</h2>
+        <p className="text-sm text-muted">{destLabel} руу шилжиж байна...</p>
       </div>
     );
   }

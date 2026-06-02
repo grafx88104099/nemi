@@ -177,7 +177,7 @@ export async function createAgentByOffice(input: {
   email: string;
   phone: string;
   specialty: string;
-}): Promise<{ ok?: boolean; emailed?: boolean; actionLink?: string; error?: string }> {
+}): Promise<{ ok?: boolean; emailed?: boolean; actionLink?: string; reason?: string; error?: string }> {
   const ctx = await requireOffice();
   if ("error" in ctx) return { error: ctx.error };
   if (!input.name.trim() || !input.email.trim()) return { error: "Нэр болон и-мэйл шаардлагатай." };
@@ -185,13 +185,16 @@ export async function createAgentByOffice(input: {
   const admin = createAdminClient();
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
-  // 1) Invite линк үүсгэх (хэрэглэгчийг үүсгэнэ, нууц үггүй)
+  // 1) Invite линк үүсгэх (хэрэглэгчийг үүсгэнэ, нууц үггүй).
+  // generateLink нь implicit-flow (#access_token hash) линк үүсгэдэг тул CLIENT
+  // боловсруулагч /auth/confirm руу чиглүүлнэ → setSession → /reset-password
+  // (нууц үг үүсгэх) → role-ийн дагуу /agent самбар.
   const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
     type: "invite",
     email: input.email.trim(),
     options: {
       data: { full_name: input.name.trim() },
-      redirectTo: `${site}/auth/callback?next=/reset-password`,
+      redirectTo: `${site}/auth/confirm?next=/reset-password`,
     },
   });
   if (linkErr || !linkData.user) {
@@ -224,6 +227,14 @@ export async function createAgentByOffice(input: {
   });
 
   revalidatePath("/office/agents");
-  // Имэйл явуулж чадаагүй бол (түлхүүргүй/тест хязгаар) линкийг буцааж гараар хуваалцуулна
-  return { ok: true, emailed: res.sent, actionLink: res.sent ? undefined : actionLink };
+  // Линкийг үргэлж буцаана: и-мэйл очоогүй бол гол сувгаар, очсон ч нөөц болгон.
+  return { ok: true, emailed: res.sent, actionLink, reason: res.sent ? undefined : mapEmailReason(res.reason) };
+}
+
+/** Resend-ийн алдааг оффис админд ойлгомжтой богино тайлбар болгоно. */
+function mapEmailReason(reason?: string): string {
+  if (!reason) return "тодорхойгүй шалтгаан";
+  if (reason === "no_api_key") return "и-мэйл API тохируулаагүй";
+  if (/verify a domain|testing emails|own email address/i.test(reason)) return "илгээгчийн домэйн баталгаажаагүй";
+  return reason;
 }
