@@ -119,6 +119,56 @@ export async function setAgentLoginEnabled(agentId: string, enabled: boolean): P
 }
 
 /**
+ * Агентыг БҮРЭН устгана — зар (+зураг/лид/сэтгэгдэл cascade), agent мөр, мөн
+ * нэвтрэлтийн auth.users бүртгэл + profile хүртэл. ЭРГЭШГҮЙ. office_admin
+ * зөвхөн өөрийн оффист; өөрийгөө болон админ бүртгэлийг устгахыг хориглоно.
+ * confirmName нь агентын нэртэй яг таарах ёстой (санамсаргүй устгалаас сэргийлэх).
+ */
+export async function deleteAgentFully(
+  agentId: string,
+  confirmName: string
+): Promise<{ ok: boolean; error?: string }> {
+  const ctx = await guard(agentId);
+  if ("error" in ctx) return { ok: false, error: ctx.error };
+  const { admin, agent } = ctx;
+
+  if (confirmName.trim() !== (agent.display_name ?? "").trim()) {
+    return { ok: false, error: "Баталгаажуулах нэр таарсангүй." };
+  }
+
+  // Өөрийгөө устгахаас сэргийлэх (оффис админ өөрийн agent профайлтай байж болно)
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user && agent.profile_id === user.id) {
+    return { ok: false, error: "Та өөрийгөө устгаж болохгүй." };
+  }
+
+  // Өөр админ бүртгэлийг устгахыг хориглох
+  if (agent.profile_id) {
+    const { data: target } = await admin.from("profiles").select("role").eq("id", agent.profile_id).single();
+    if (target?.role === "admin") return { ok: false, error: "Админ бүртгэлийг устгаж болохгүй." };
+  }
+
+  // 1) Агентын зарууд (cascade: listing_photos, ai_valuations, favorites, recently_viewed)
+  await admin.from("listings").delete().eq("agent_id", agentId);
+  // 2) Agent мөр (cascade: leads, conversations, reviews, subscriptions)
+  const { error: agErr } = await admin.from("agents").delete().eq("id", agentId);
+  if (agErr) return { ok: false, error: agErr.message };
+  // 3) Нэвтрэлт + профайл (profiles → auth.users on delete cascade)
+  if (agent.profile_id) {
+    const { error: delErr } = await admin.auth.admin.deleteUser(agent.profile_id);
+    if (delErr) return { ok: false, error: delErr.message };
+  }
+
+  revalidatePath("/office/agents");
+  revalidatePath("/office");
+  revalidatePath("/agents");
+  return { ok: true };
+}
+
+/**
  * Оффис админ ШИНЭ агент үүсгэнэ — auth invite + agent мөр + Resend урилга.
  * Агент и-мэйлийн линкээр нууц үгээ тохируулж нэвтэрнэ.
  */

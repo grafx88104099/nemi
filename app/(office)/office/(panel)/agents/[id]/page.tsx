@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Phone, Sparkles, ExternalLink, Building2, Star, Award, Clock, KeyRound } from "lucide-react";
+import { ArrowLeft, Phone, Sparkles, ExternalLink, Building2, Star, Award, Clock, KeyRound, AlertTriangle } from "lucide-react";
 
+import { createClient } from "@/lib/supabase/server";
 import { getOfficeAgent } from "@/lib/queries-office";
 import { getAgentAccount } from "@/lib/actions/agent-account";
 import { AgentAccountManager } from "@/components/office/AgentAccountManager";
+import { DeleteAgentButton } from "@/components/office/DeleteAgentButton";
 import { Card, CardBody } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +33,13 @@ export default async function OfficeAgentManagePage({
   if (!data) notFound();
   const { agent, listings } = data;
   const account = await getAgentAccount(id);
+
+  // Оффис админ өөрийн agent профайлаа устгахаас сэргийлэх — товчийг нуух
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const isSelf = !!user && agent.profile_id === user.id;
   const color = (agent.office?.color as string) ?? "#C2410C";
   const status = (agent.status as string) ?? "active";
   const areas = (agent.areas as string[]) ?? [];
@@ -164,6 +173,26 @@ export default async function OfficeAgentManagePage({
           </tbody>
         </table>
       </Card>
+
+      {/* Аюултай бүс — агентыг бүрэн устгах (өөрийгөө устгах боломжгүй) */}
+      {!isSelf && (
+        <Card className="mt-6 border-rose-200">
+          <CardBody className="space-y-3">
+            <h2 className="flex items-center gap-2 font-bold text-rose-600">
+              <AlertTriangle className="size-4" /> Аюултай бүс
+            </h2>
+            <p className="text-sm text-muted">
+              Агентыг системээс бүрмөсөн устгана — бүх зар, лид, сэтгэгдэл, мөн нэвтрэлтийн
+              бүртгэл устах ба сэргээх боломжгүй.
+            </p>
+            <DeleteAgentButton
+              agentId={id}
+              agentName={agent.display_name as string}
+              listingsCount={listings.length}
+            />
+          </CardBody>
+        </Card>
+      )}
     </div>
   );
 }
