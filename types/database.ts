@@ -264,6 +264,24 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["listing_photos"]["Insert"]>;
         Relationships: [];
       };
+      listing_shares: {
+        Row: {
+          id: string;
+          listing_id: string;
+          agent_id: string;
+          shared_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          listing_id: string;
+          agent_id: string;
+          shared_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["listing_shares"]["Insert"]>;
+        Relationships: [];
+      };
       ai_valuations: {
         Row: {
           id: string;
