@@ -21,17 +21,19 @@ export function MultiPhotoUpload({
     setUploading(true);
     setErr(null);
     const supabase = createClient();
-    const urls: string[] = [];
-    for (const file of files) {
-      const ext = file.name.split(".").pop();
-      const path = `${Date.now()}-${Math.round(Math.random() * 1e6)}.${ext}`;
-      const { error } = await supabase.storage.from("listings").upload(path, file);
-      if (error) {
-        setErr(error.message);
-        continue;
-      }
-      urls.push(supabase.storage.from("listings").getPublicUrl(path).data.publicUrl);
-    }
+    // Зэрэг upload хийгээд дарааллыг хадгална (index map).
+    const results = await Promise.all(
+      files.map(async (file, i) => {
+        const ext = file.name.split(".").pop();
+        const path = `${Date.now()}-${i}-${Math.round(Math.random() * 1e6)}.${ext}`;
+        const { error } = await supabase.storage.from("listings").upload(path, file);
+        if (error) return { error: error.message, url: null as string | null };
+        return { error: null, url: supabase.storage.from("listings").getPublicUrl(path).data.publicUrl };
+      })
+    );
+    const urls = results.map((r) => r.url).filter((u): u is string => !!u);
+    const firstErr = results.find((r) => r.error)?.error;
+    if (firstErr) setErr(firstErr);
     onChange([...value, ...urls]);
     setUploading(false);
   }

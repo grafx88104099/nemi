@@ -1,18 +1,13 @@
 import { Phone } from "lucide-react";
 
-import { getMyAgent, getAgentDashboard } from "@/lib/queries-agent";
+import { getMyAgent, getAgentLeads } from "@/lib/queries-agent";
 import { DashboardNav } from "@/components/dashboard/DashboardNav";
 import { LeadStageSelect } from "@/components/dashboard/LeadStageSelect";
 import { Card, CardBody } from "@/components/ui/card";
 import { ButtonLink } from "@/components/ui/button";
+import { LEAD_PIPELINE, LEAD_STAGE_LABEL } from "@/lib/constants";
 
-const COLS: [string, string][] = [
-  ["new", "Шинэ"],
-  ["contacted", "Холбогдсон"],
-  ["viewing", "Үзлэг"],
-  ["offer", "Санал"],
-  ["closed", "Хаасан"],
-];
+const COLS: [string, string][] = LEAD_PIPELINE.map((k) => [k, LEAD_STAGE_LABEL[k]]);
 
 export default async function LeadsPage() {
   const agent = await getMyAgent();
@@ -24,7 +19,7 @@ export default async function LeadsPage() {
       </div>
     );
   }
-  const { leads } = await getAgentDashboard(agent.id as string);
+  const leads = await getAgentLeads(agent.id as string);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6">

@@ -1,11 +1,15 @@
 import Link from "next/link";
 import { Building2, Calendar, KeyRound } from "lucide-react";
 
-import { getMyAgent, getAgentDashboard } from "@/lib/queries-agent";
+import { getMyAgent, getAgentListings, getAgentViewingsCount } from "@/lib/queries-agent";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { shortMNT } from "@/lib/format";
+import { LISTING_STATUS } from "@/lib/constants";
+
+const statusMeta = (s: string) =>
+  LISTING_STATUS[s as keyof typeof LISTING_STATUS] ?? { label: s, tone: "neutral" as const };
 
 export default async function RentalManagerPage() {
   const agent = await getMyAgent();
@@ -19,7 +23,10 @@ export default async function RentalManagerPage() {
     );
   }
 
-  const { listings, viewings } = await getAgentDashboard(agent.id as string);
+  const [listings, viewingsCount] = await Promise.all([
+    getAgentListings(agent.id as string),
+    getAgentViewingsCount(agent.id as string),
+  ]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6">
@@ -35,15 +42,16 @@ export default async function RentalManagerPage() {
 
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
         <Card><CardBody><Building2 className="size-5 text-brand-600" /><div className="mt-1 text-2xl font-extrabold text-ink">{listings.length}</div><div className="text-sm text-muted">Удирдаж буй обьект</div></CardBody></Card>
-        <Card><CardBody><Calendar className="size-5 text-amber-600" /><div className="mt-1 text-2xl font-extrabold text-ink">{viewings.length}</div><div className="text-sm text-muted">Товлосон үзлэг</div></CardBody></Card>
+        <Card><CardBody><Calendar className="size-5 text-amber-600" /><div className="mt-1 text-2xl font-extrabold text-ink">{viewingsCount}</div><div className="text-sm text-muted">Товлосон үзлэг</div></CardBody></Card>
         <Card><CardBody><KeyRound className="size-5 text-emerald-600" /><div className="mt-1 text-2xl font-extrabold text-ink">{listings.filter((l) => l.status === "active").length}</div><div className="text-sm text-muted">Идэвхтэй</div></CardBody></Card>
       </div>
 
       <h2 className="mt-8 text-lg font-bold text-ink">Обьектууд</h2>
       <Card className="mt-3 overflow-hidden">
         <table className="w-full text-sm">
+          <caption className="sr-only">Удирдаж буй обьектууд</caption>
           <thead className="border-b border-line bg-surface-2 text-left text-muted">
-            <tr><th className="p-3 font-medium">Обьект</th><th className="p-3 font-medium">Үнэ/сар</th><th className="p-3 font-medium">Дүүрэг</th><th className="p-3 font-medium">Төлөв</th></tr>
+            <tr><th scope="col" className="p-3 font-medium">Обьект</th><th scope="col" className="p-3 font-medium">Үнэ/сар</th><th scope="col" className="p-3 font-medium">Дүүрэг</th><th scope="col" className="p-3 font-medium">Төлөв</th></tr>
           </thead>
           <tbody>
             {listings.map((l) => (
@@ -51,7 +59,7 @@ export default async function RentalManagerPage() {
                 <td className="p-3"><Link href={`/listings/${l.id}`} className="font-medium text-ink hover:underline">{l.title}</Link></td>
                 <td className="p-3 text-ink">{shortMNT(l.price)}</td>
                 <td className="p-3 text-muted">{l.district}</td>
-                <td className="p-3"><Badge tone={l.status === "active" ? "green" : "neutral"}>{l.status}</Badge></td>
+                <td className="p-3"><Badge tone={statusMeta(l.status).tone}>{statusMeta(l.status).label}</Badge></td>
               </tr>
             ))}
             {listings.length === 0 && <tr><td colSpan={4} className="p-8 text-center text-muted">Обьект алга.</td></tr>}

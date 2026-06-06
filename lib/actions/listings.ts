@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import type { ListingStatus } from "@/lib/constants";
 
 export type ListingInput = {
   title: string;
@@ -17,7 +18,7 @@ export type ListingInput = {
   description: string;
   amenities: string[];
   photos: string[];
-  status: "active" | "draft" | "review";
+  status: ListingStatus;
 };
 
 async function savePhotos(
@@ -84,7 +85,8 @@ export async function updateListing(id: string, input: ListingInput): Promise<{ 
   const { supabase, agentId, status } = await myAgentId();
   if (!agentId) return { ok: false, error: "auth" };
   if (status !== "active") return { ok: false, error: "Таны бүртгэл баталгаажаагүй байна." };
-  const { error } = await supabase
+  // Эзэмшлийг код түвшинд баталгаажуулна (agent_id шүүлт) — RLS дээр дан тулгуурлахгүй.
+  const { data, error } = await supabase
     .from("listings")
     .update({
       title: input.title,
@@ -102,8 +104,11 @@ export async function updateListing(id: string, input: ListingInput): Promise<{ 
       photo: input.photos[0] || null,
       status: input.status,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("agent_id", agentId)
+    .select("id");
   if (error) return { ok: false, error: error.message };
+  if (!data || data.length === 0) return { ok: false, error: "Зар олдсонгүй эсвэл танд засах эрхгүй." };
   await savePhotos(supabase, id, input.photos);
   revalidatePath("/agent/listings");
   revalidatePath(`/listings/${id}`);
@@ -111,9 +116,16 @@ export async function updateListing(id: string, input: ListingInput): Promise<{ 
 }
 
 export async function deleteListing(id: string): Promise<{ ok: boolean; error?: string }> {
-  const supabase = await createClient();
-  const { error } = await supabase.from("listings").delete().eq("id", id);
+  const { supabase, agentId } = await myAgentId();
+  if (!agentId) return { ok: false, error: "Зөвхөн агент зар устгана." };
+  const { data, error } = await supabase
+    .from("listings")
+    .delete()
+    .eq("id", id)
+    .eq("agent_id", agentId)
+    .select("id");
   if (error) return { ok: false, error: error.message };
+  if (!data || data.length === 0) return { ok: false, error: "Зар олдсонгүй эсвэл танд устгах эрхгүй." };
   revalidatePath("/agent/listings");
   return { ok: true };
 }

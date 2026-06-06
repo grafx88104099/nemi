@@ -15,12 +15,21 @@ export async function valuateListing(
   } = await supabase.auth.getUser();
   if (!user) return { error: "auth" };
 
+  // Эзэмшил шалгана — зөвхөн өөрийн зарыг үнэлүүлнэ (AI зардал дэмий гарахаас сэргийлнэ).
+  const { data: me } = await supabase
+    .from("agents")
+    .select("id")
+    .eq("profile_id", user.id)
+    .maybeSingle();
+  if (!me) return { error: "not_agent" };
+
   const { data: l } = await supabase
     .from("listings")
-    .select("title, type, district, rooms, area, price, price_per_m2, year")
+    .select("title, type, district, rooms, area, price, price_per_m2, year, agent_id")
     .eq("id", listingId)
-    .single();
+    .maybeSingle();
   if (!l) return { error: "not_found" };
+  if (l.agent_id !== me.id) return { error: "forbidden" };
 
   // Харьцуулах зарууд (ижил дүүрэг + төрөл)
   const { data: comps } = await supabase
@@ -50,7 +59,8 @@ export async function valuateListing(
   await supabase
     .from("listings")
     .update({ ai_score: result.score, ai_note: result.note })
-    .eq("id", listingId);
+    .eq("id", listingId)
+    .eq("agent_id", me.id as string);
   await supabase.from("ai_valuations").insert({
     listing_id: listingId,
     score: result.score,

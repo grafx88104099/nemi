@@ -7,6 +7,7 @@ import { createListing, updateListing, type ListingInput } from "@/lib/actions/l
 import { Button } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
 import { MultiPhotoUpload } from "@/components/dashboard/MultiPhotoUpload";
+import { LISTING_STATUS, LISTING_STATUS_OPTIONS } from "@/lib/constants";
 
 const TYPES = ["Орон сууц", "Хаус", "Газар", "Оффис", "Худалдааны талбай"];
 const DISTRICTS = ["Сүхбаатар", "Чингэлтэй", "Хан-Уул", "Баянгол", "Сонгинохайрхан", "Баянзүрх", "Налайх"];
@@ -76,15 +77,15 @@ export function ListingForm({
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <Field label="Өрөө"><Input type="number" value={f.rooms} onChange={(e) => set("rooms", +e.target.value)} /></Field>
-        <Field label="Талбай (м²)"><Input type="number" value={f.area} onChange={(e) => set("area", +e.target.value)} /></Field>
+        <Field label="Өрөө"><Input type="number" inputMode="numeric" value={f.rooms || ""} onChange={(e) => set("rooms", +e.target.value)} placeholder="3" /></Field>
+        <Field label="Талбай (м²)"><Input type="number" inputMode="numeric" value={f.area || ""} onChange={(e) => set("area", +e.target.value)} placeholder="96" /></Field>
         <Field label="Давхар"><Input value={f.floor} onChange={(e) => set("floor", e.target.value)} placeholder="12/18" /></Field>
-        <Field label="Зогсоол"><Input type="number" value={f.parking} onChange={(e) => set("parking", +e.target.value)} /></Field>
+        <Field label="Зогсоол"><Input type="number" inputMode="numeric" value={f.parking || ""} onChange={(e) => set("parking", +e.target.value)} placeholder="0" /></Field>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <Field label="Үнэ (₮)"><Input id="price" type="number" required value={f.price} onChange={(e) => set("price", +e.target.value)} /></Field>
-        <Field label="Ашиглалтын он"><Input type="number" value={f.year} onChange={(e) => set("year", +e.target.value)} /></Field>
+        <Field label="Үнэ (₮)"><Input id="price" inputMode="numeric" required value={f.price ? f.price.toLocaleString("en-US") : ""} onChange={(e) => set("price", +e.target.value.replace(/\D/g, ""))} placeholder="1,000,000" /></Field>
+        <Field label="Ашиглалтын он"><Input type="number" inputMode="numeric" value={f.year || ""} onChange={(e) => set("year", +e.target.value)} placeholder="2024" /></Field>
       </div>
 
       <Field label="Тайлбар">
@@ -109,9 +110,9 @@ export function ListingForm({
 
       <Field label="Төлөв">
         <select className={sel} value={f.status} onChange={(e) => set("status", e.target.value as ListingInput["status"])}>
-          <option value="active">Идэвхтэй</option>
-          <option value="draft">Ноорог</option>
-          <option value="review">Хянуулж буй</option>
+          {LISTING_STATUS_OPTIONS.map((s) => (
+            <option key={s} value={s}>{LISTING_STATUS[s].label}</option>
+          ))}
         </select>
       </Field>
 

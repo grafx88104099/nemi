@@ -24,6 +24,7 @@ export function DeleteListingButton({ id }: { id: string }) {
       disabled={pending}
       className="rounded-lg p-2 text-muted hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
       title="Устгах"
+      aria-label="Зар устгах"
     >
       <Trash2 className="size-4" />
     </button>

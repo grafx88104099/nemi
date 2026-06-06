@@ -1,20 +1,21 @@
 import Link from "next/link";
 import { Building2, Users, CalendarDays, Star, Clock, Plus, UserCircle, ArrowRight, AlertCircle } from "lucide-react";
 
-import { getMyAgent, getAgentDashboard } from "@/lib/queries-agent";
+import { getMyAgent, getAgentOverview } from "@/lib/queries-agent";
 import { DashboardNav } from "@/components/dashboard/DashboardNav";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { PremierUpgrade } from "@/components/dashboard/PremierUpgrade";
+import { LEAD_PIPELINE, LEAD_STAGE_LABEL } from "@/lib/constants";
 
-const STAGES: { key: string; label: string; color: string }[] = [
-  { key: "new", label: "Шинэ", color: "bg-sky-500" },
-  { key: "contacted", label: "Холбогдсон", color: "bg-indigo-500" },
-  { key: "viewing", label: "Үзэлт", color: "bg-amber-500" },
-  { key: "offer", label: "Санал", color: "bg-orange-500" },
-  { key: "closed", label: "Хаасан", color: "bg-emerald-500" },
-];
+const STAGE_COLOR: Record<string, string> = {
+  new: "bg-sky-500",
+  contacted: "bg-indigo-500",
+  viewing: "bg-amber-500",
+  offer: "bg-orange-500",
+  closed: "bg-emerald-500",
+};
 
 export default async function AgentOverview() {
   const agent = await getMyAgent();
@@ -29,14 +30,14 @@ export default async function AgentOverview() {
   }
 
   const isActive = agent.status === "active";
-  const { stats, leads, viewings } = await getAgentDashboard(agent.id as string);
+  const { today, stats, byStage, recentLeads, upcoming } = await getAgentOverview(agent.id as string);
 
-  // Best-practice деривативууд
-  const today = new Date().toISOString().slice(0, 10);
-  const newLeads = leads.filter((l) => l.stage === "new").length;
-  const todayViewings = viewings.filter((v) => v.scheduled_at?.slice(0, 10) === today);
-  const upcoming = viewings.filter((v) => v.scheduled_at && v.scheduled_at >= today + "T00:00:00");
-  const pipeline = STAGES.map((s) => ({ ...s, count: leads.filter((l) => l.stage === s.key).length }));
+  const pipeline = LEAD_PIPELINE.map((key) => ({
+    key,
+    label: LEAD_STAGE_LABEL[key],
+    color: STAGE_COLOR[key],
+    count: byStage[key] ?? 0,
+  }));
   const pipelineTotal = pipeline.reduce((a, b) => a + b.count, 0) || 1;
 
   // Профайл гүйцэд байдал
@@ -49,8 +50,8 @@ export default async function AgentOverview() {
 
   const kpis = [
     { icon: Building2, label: "Идэвхтэй зар", value: stats.active, tone: "text-brand-600" },
-    { icon: Users, label: "Шинэ лид", value: newLeads, tone: "text-sky-600", hint: `нийт ${stats.leads}` },
-    { icon: CalendarDays, label: "Өнөөдрийн үзлэг", value: todayViewings.length, tone: "text-amber-600" },
+    { icon: Users, label: "Шинэ лид", value: stats.newLeads, tone: "text-sky-600", hint: `нийт ${stats.leads}` },
+    { icon: CalendarDays, label: "Өнөөдрийн үзлэг", value: stats.todayViewings, tone: "text-amber-600" },
     { icon: Star, label: "Үнэлгээ", value: agent.rating ?? "—", tone: "text-emerald-600", hint: `${agent.reviews_count ?? 0} сэтгэгдэл` },
   ];
 
@@ -154,16 +155,18 @@ export default async function AgentOverview() {
               <Link href="/agent/leads" className="text-sm text-brand-600 hover:underline">Бүгд →</Link>
             </div>
             <div className="space-y-2">
-              {leads.slice(0, 5).map((l) => (
+              {recentLeads.map((l) => (
                 <div key={l.id} className="flex items-center justify-between rounded-lg bg-surface-2 px-3 py-2">
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium text-ink">{l.name}</div>
                     <div className="truncate text-xs text-muted">{l.listing?.title ?? "—"} · {l.last_touch ?? ""}</div>
                   </div>
-                  <Badge tone={l.stage === "new" ? "blue" : l.stage === "offer" ? "amber" : "neutral"}>{l.stage}</Badge>
+                  <Badge tone={l.stage === "new" ? "blue" : l.stage === "offer" ? "amber" : "neutral"}>
+                    {LEAD_STAGE_LABEL[l.stage as keyof typeof LEAD_STAGE_LABEL] ?? l.stage}
+                  </Badge>
                 </div>
               ))}
-              {leads.length === 0 && <p className="text-sm text-muted">Лид алга.</p>}
+              {recentLeads.length === 0 && <p className="text-sm text-muted">Лид алга.</p>}
             </div>
           </CardBody>
         </Card>
@@ -174,7 +177,7 @@ export default async function AgentOverview() {
               <CalendarDays className="size-4" /> Удахгүй болох үзлэг
             </h2>
             <div className="space-y-2">
-              {upcoming.slice(0, 5).map((v) => {
+              {upcoming.map((v) => {
                 const isToday = v.scheduled_at?.slice(0, 10) === today;
                 return (
                   <div key={v.id} className="flex items-center justify-between rounded-lg bg-surface-2 px-3 py-2">

@@ -3,16 +3,10 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-import { updateLeadStage, type LeadStage } from "@/lib/actions/leads";
+import { updateLeadStage } from "@/lib/actions/leads";
+import { LEAD_STAGES, LEAD_STAGE_LABEL, type LeadStage } from "@/lib/constants";
 
-const STAGES: [LeadStage, string][] = [
-  ["new", "Шинэ"],
-  ["contacted", "Холбогдсон"],
-  ["viewing", "Үзлэг"],
-  ["offer", "Санал"],
-  ["closed", "Хаасан"],
-  ["lost", "Алдсан"],
-];
+const STAGES: [LeadStage, string][] = LEAD_STAGES.map((k) => [k, LEAD_STAGE_LABEL[k]]);
 
 export function LeadStageSelect({ id, stage }: { id: string; stage: string }) {
   const [pending, startTransition] = useTransition();
@@ -20,6 +14,7 @@ export function LeadStageSelect({ id, stage }: { id: string; stage: string }) {
 
   return (
     <select
+      aria-label="Лидийн шат солих"
       defaultValue={stage}
       disabled={pending}
       onChange={(e) =>
