@@ -1,11 +1,11 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ShieldCheck, Flame, Star, Phone, MapPin, Check } from "lucide-react";
+import { ShieldCheck, Flame, Star, Phone, MapPin, Check, Clock, Sparkles } from "lucide-react";
 
 import { getListingById } from "@/lib/queries";
 import { isFavorited } from "@/lib/queries-user";
 import { recordView } from "@/lib/actions/viewings";
-import { fmtMNT, shortMNT } from "@/lib/format";
+import { fmtMNT, shortMNT, relativeDate, fmtDate, isFresh } from "@/lib/format";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
@@ -65,12 +65,22 @@ export default async function ListingDetailPage({
               {l.hot ? <Badge tone="rose"><Flame /> Эрэлттэй</Badge> : null}
               {l.verified ? <Badge tone="green"><ShieldCheck /> Баталгаатай</Badge> : null}
               <Badge tone="neutral">{l.type as string}</Badge>
+              {l.created_at && isFresh(l.created_at as string) ? (
+                <Badge tone="brand"><Sparkles /> Шинэ</Badge>
+              ) : null}
             </div>
             <h1 className="mt-3 text-3xl font-extrabold text-ink">{shortMNT(l.price as number)}</h1>
             <p className="mt-1 text-lg text-ink">{l.title as string}</p>
-            <p className="mt-1 flex items-center gap-1 text-sm text-muted">
-              <MapPin className="size-4" /> {l.district as string}
-            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
+              <span className="flex items-center gap-1">
+                <MapPin className="size-4" /> {l.district as string}
+              </span>
+              {l.created_at ? (
+                <span className="flex items-center gap-1" title={fmtDate(l.created_at as string)}>
+                  <Clock className="size-4" /> {relativeDate(l.created_at as string)} нийтэлсэн
+                </span>
+              ) : null}
+            </div>
           </div>
 
           <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">

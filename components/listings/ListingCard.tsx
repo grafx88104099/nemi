@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { Flame, ShieldCheck, Star } from "lucide-react";
+import { Flame, ShieldCheck, Star, Clock, Sparkles } from "lucide-react";
 
-import { shortMNT } from "@/lib/format";
+import { shortMNT, relativeDate, isFresh } from "@/lib/format";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
@@ -18,6 +18,7 @@ export type ListingCardData = {
   hot: boolean;
   verified: boolean;
   deal_type?: "sale" | "rent";
+  created_at?: string;
   agent: {
     display_name: string;
     avatar: string | null;
@@ -54,6 +55,13 @@ export function ListingCard({ l }: { l: ListingCardData }) {
             </Badge>
           ) : null}
         </div>
+        {l.created_at && isFresh(l.created_at) && (
+          <div className="absolute right-3 top-3">
+            <Badge tone="brand">
+              <Sparkles /> Шинэ
+            </Badge>
+          </div>
+        )}
       </div>
       <div className="space-y-2 p-4">
         <div className="flex items-center justify-between gap-2">
@@ -89,6 +97,11 @@ export function ListingCard({ l }: { l: ListingCardData }) {
               {l.agent.display_name}
             </span>
             {l.agent.verified && <ShieldCheck className="size-4 text-emerald-600" />}
+          </div>
+        )}
+        {l.created_at && (
+          <div className="flex items-center gap-1 text-xs text-muted">
+            <Clock className="size-3" /> {relativeDate(l.created_at)} нийтэлсэн
           </div>
         )}
       </div>

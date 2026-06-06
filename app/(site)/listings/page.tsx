@@ -12,6 +12,12 @@ const SORTS: [string, string][] = [
   ["price_desc", "Үнэ: их → бага"],
   ["ai", "AI оноо"],
 ];
+const POSTED: [string, string][] = [
+  ["1", "Сүүлийн 24 цаг"],
+  ["3", "Сүүлийн 3 хоног"],
+  ["7", "Сүүлийн 7 хоног"],
+  ["30", "Сүүлийн 30 хоног"],
+];
 
 export default async function ListingsPage({
   searchParams,
@@ -27,6 +33,7 @@ export default async function ListingsPage({
     minPrice: sp.minPrice ? Number(sp.minPrice) : undefined,
     maxPrice: sp.maxPrice ? Number(sp.maxPrice) : undefined,
     deal: sp.deal === "rent" || sp.deal === "sale" ? sp.deal : undefined,
+    posted: sp.posted ? Number(sp.posted) : undefined,
     sort: (sp.sort as ListingFilters["sort"]) || "new",
     page: sp.page ? Number(sp.page) : 1,
   };
@@ -84,6 +91,10 @@ export default async function ListingsPage({
         </select>
         <input name="minPrice" type="number" defaultValue={sp.minPrice ?? ""} placeholder="Үнэ доод" className="h-10 rounded-lg border border-line px-2 text-sm focus:border-brand-500 focus:outline-none" />
         <input name="maxPrice" type="number" defaultValue={sp.maxPrice ?? ""} placeholder="Үнэ дээд" className="h-10 rounded-lg border border-line px-2 text-sm focus:border-brand-500 focus:outline-none" />
+        <select name="posted" defaultValue={sp.posted ?? ""} className="h-10 rounded-lg border border-line bg-surface px-2 text-sm">
+          <option value="">Бүх хугацаа</option>
+          {POSTED.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
         <select name="sort" defaultValue={sp.sort ?? "new"} className="h-10 rounded-lg border border-line bg-surface px-2 text-sm">
           {SORTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>

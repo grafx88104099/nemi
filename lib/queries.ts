@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { ListingCardData } from "@/components/listings/ListingCard";
 
 const CARD_SELECT =
-  "id, title, price, ai_score, rooms, area, floor, district, photo, hot, verified, deal_type, " +
+  "id, title, price, ai_score, rooms, area, floor, district, photo, hot, verified, deal_type, created_at, " +
   "agent:agents(display_name, avatar, avatar_url, verified, office:offices(color))";
 
 /** Онцлох (featured) идэвхтэй зарууд. */
@@ -26,6 +26,8 @@ export type ListingFilters = {
   minPrice?: number;
   maxPrice?: number;
   deal?: "sale" | "rent";
+  /** Сүүлийн N хоногт нийтэлсэн зар (огноогоор шүүх). */
+  posted?: number;
   sort?: "new" | "price_asc" | "price_desc" | "ai";
   page?: number;
   pageSize?: number;
@@ -50,6 +52,10 @@ export async function getListings(f: ListingFilters = {}) {
   if (f.rooms) query = query.gte("rooms", f.rooms);
   if (f.minPrice) query = query.gte("price", f.minPrice);
   if (f.maxPrice) query = query.lte("price", f.maxPrice);
+  if (f.posted && f.posted > 0) {
+    const cutoff = new Date(Date.now() - f.posted * 86_400_000).toISOString();
+    query = query.gte("created_at", cutoff);
+  }
 
   switch (f.sort) {
     case "price_asc": query = query.order("price", { ascending: true }); break;
