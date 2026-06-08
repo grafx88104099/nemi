@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Phone, Building2, Clock, FolderKanban } from "lucide-react";
 
-import { getLeadDetail, getAgentListings, getAgentProjects, getMyAgent } from "@/lib/queries-agent";
+import { getLeadDetail, getLinkableListings, getAgentProjects, getMyAgent } from "@/lib/queries-agent";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { LeadStageSelect } from "@/components/dashboard/LeadStageSelect";
@@ -25,11 +25,10 @@ export default async function LeadDetailPage({
   const data = await getLeadDetail(id);
   if (!data) notFound();
   const { lead, activities } = data;
-  const [listings, projects] = await Promise.all([
-    getAgentListings(agent!.id as string),
+  const [listingOpts, projects] = await Promise.all([
+    getLinkableListings(agent!.id as string),
     getAgentProjects(agent!.id as string),
   ]);
-  const listingOpts = listings.map((l) => ({ id: l.id, title: l.title }));
   const projectOpts = projects.map((p) => ({ id: p.id, title: p.title }));
 
   const stage = lead.stage as string;

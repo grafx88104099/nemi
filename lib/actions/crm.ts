@@ -66,8 +66,13 @@ async function guardRefs(
   row: { listing_id: string | null; project_id: string | null }
 ) {
   if (row.listing_id) {
-    const { data } = await supabase.from("listings").select("id").eq("id", row.listing_id).eq("agent_id", agentId).maybeSingle();
-    if (!data) row.listing_id = null;
+    // Өөрийн зар ЭСВЭЛ надтай хуваалцсан зар дээр бүртгэл хийхийг зөвшөөрнө.
+    const { data: own } = await supabase.from("listings").select("id").eq("id", row.listing_id).eq("agent_id", agentId).maybeSingle();
+    if (!own) {
+      const { data: shared } = await supabase
+        .from("listing_shares").select("id").eq("listing_id", row.listing_id).eq("agent_id", agentId).maybeSingle();
+      if (!shared) row.listing_id = null;
+    }
   }
   if (row.project_id) {
     const { data } = await supabase.from("projects").select("id").eq("id", row.project_id).eq("agent_id", agentId).maybeSingle();

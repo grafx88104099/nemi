@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Phone } from "lucide-react";
 
-import { getMyAgent, getAgentLeads, getAgentListings, getAgentProjects } from "@/lib/queries-agent";
+import { getMyAgent, getAgentLeads, getLinkableListings, getAgentProjects } from "@/lib/queries-agent";
 import { DashboardNav } from "@/components/dashboard/DashboardNav";
 import { LeadStageSelect } from "@/components/dashboard/LeadStageSelect";
 import { LeadFormButton } from "@/components/dashboard/LeadFormButton";
@@ -21,12 +21,11 @@ export default async function LeadsPage() {
       </div>
     );
   }
-  const [leads, listings, projects] = await Promise.all([
+  const [leads, listingOpts, projects] = await Promise.all([
     getAgentLeads(agent.id as string),
-    getAgentListings(agent.id as string),
+    getLinkableListings(agent.id as string),
     getAgentProjects(agent.id as string),
   ]);
-  const listingOpts = listings.map((l) => ({ id: l.id, title: l.title }));
   const projectOpts = projects.map((p) => ({ id: p.id, title: p.title }));
 
   return (

@@ -167,6 +167,27 @@ export async function getSharedWithMe(agentId: string) {
   }>).filter((r) => r.listing);
 }
 
+export type LinkableListing = { id: string; title: string; shared: boolean; owner: string | null };
+
+/**
+ * Лидэд холбож болох зарууд: ӨӨРИЙН зар + НАДТАЙ ХУВААЛЦСАН зарууд.
+ * Хуваалцсан зар дээр хүлээн авагч агент CRM бүртгэл хийх боломжтой.
+ */
+export async function getLinkableListings(agentId: string): Promise<LinkableListing[]> {
+  const [own, shared] = await Promise.all([
+    getAgentListings(agentId),
+    getSharedWithMe(agentId),
+  ]);
+  const map = new Map<string, LinkableListing>();
+  for (const l of own) map.set(l.id, { id: l.id, title: l.title, shared: false, owner: null });
+  for (const s of shared) {
+    if (s.listing && !map.has(s.listing.id)) {
+      map.set(s.listing.id, { id: s.listing.id, title: s.listing.title, shared: true, owner: s.owner?.display_name ?? null });
+    }
+  }
+  return [...map.values()];
+}
+
 export type LeadActivity = {
   id: string;
   kind: string;

@@ -26,6 +26,8 @@ export type LeadInitial = {
 
 const sel = "h-10 w-full rounded-xl border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none";
 
+type ListingOpt = { id: string; title: string; shared?: boolean; owner?: string | null };
+
 export function LeadFormButton({
   mode,
   listings,
@@ -34,7 +36,7 @@ export function LeadFormButton({
   defaultProjectId,
 }: {
   mode: "create" | "edit";
-  listings: { id: string; title: string }[];
+  listings: ListingOpt[];
   projects?: { id: string; title: string }[];
   initial?: LeadInitial;
   defaultProjectId?: string;
@@ -138,7 +140,11 @@ export function LeadFormButton({
               <span className="text-xs font-medium text-muted">Холбоотой зар</span>
               <select className={sel} value={f.listingId ?? ""} onChange={(e) => set("listingId", e.target.value)}>
                 <option value="">— Сонгох —</option>
-                {listings.map((l) => <option key={l.id} value={l.id}>{l.title}</option>)}
+                {listings.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.title}{l.shared ? ` · хуваалцсан${l.owner ? ` (${l.owner})` : ""}` : ""}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="block space-y-1">
