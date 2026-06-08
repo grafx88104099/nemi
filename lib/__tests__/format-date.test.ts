@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { daysSince, isFresh, relativeDate, fmtDate } from "@/lib/format";
+import { daysSince, isFresh, relativeDate, fmtDate, fmtDateTime } from "@/lib/format";
 
 const NOW = new Date("2026-06-06T12:00:00Z");
 const ago = (days: number, hours = 0) =>
@@ -47,5 +47,12 @@ describe("relativeDate", () => {
 describe("fmtDate", () => {
   it("монгол бүтэн огноо", () => {
     expect(fmtDate("2026-06-06T00:00:00")).toBe("2026 оны 6-р сарын 6");
+  });
+});
+
+describe("fmtDateTime", () => {
+  it("огноо + цаг (орон нутгийн), тэглэлттэй", () => {
+    expect(fmtDateTime("2026-06-08T14:30:00")).toBe("2026.06.08 14:30");
+    expect(fmtDateTime("2026-01-05T09:05:00")).toBe("2026.01.05 09:05");
   });
 });

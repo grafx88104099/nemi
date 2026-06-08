@@ -349,6 +349,8 @@ export type Database = {
           score: number | null;
           note: string | null;
           last_touch: string | null;
+          last_activity_at: string | null;
+          project_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -363,9 +365,77 @@ export type Database = {
           score?: number | null;
           note?: string | null;
           last_touch?: string | null;
+          last_activity_at?: string | null;
+          project_id?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["leads"]["Insert"]>;
+        Relationships: [];
+      };
+      lead_activities: {
+        Row: {
+          id: string;
+          agent_id: string;
+          lead_id: string | null;
+          project_id: string | null;
+          kind: Database["public"]["Enums"]["activity_kind"];
+          summary: string;
+          outcome: string | null;
+          duration_min: number | null;
+          occurred_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          agent_id: string;
+          lead_id?: string | null;
+          project_id?: string | null;
+          kind?: Database["public"]["Enums"]["activity_kind"];
+          summary: string;
+          outcome?: string | null;
+          duration_min?: number | null;
+          occurred_at?: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["lead_activities"]["Insert"]>;
+        Relationships: [];
+      };
+      projects: {
+        Row: {
+          id: string;
+          agent_id: string;
+          title: string;
+          client_name: string | null;
+          client_phone: string | null;
+          type: Database["public"]["Enums"]["project_type"];
+          status: Database["public"]["Enums"]["project_status"];
+          budget_min: number | null;
+          budget_max: number | null;
+          target_area: string | null;
+          deadline: string | null;
+          note: string | null;
+          last_activity_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          agent_id: string;
+          title: string;
+          client_name?: string | null;
+          client_phone?: string | null;
+          type?: Database["public"]["Enums"]["project_type"];
+          status?: Database["public"]["Enums"]["project_status"];
+          budget_min?: number | null;
+          budget_max?: number | null;
+          target_area?: string | null;
+          deadline?: string | null;
+          note?: string | null;
+          last_activity_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["projects"]["Insert"]>;
         Relationships: [];
       };
       conversations: {
@@ -619,6 +689,9 @@ export type Database = {
       listing_status: "active" | "draft" | "review" | "sold";
       lead_stage: "new" | "contacted" | "viewing" | "offer" | "closed" | "lost";
       lead_source: "website" | "facebook" | "instagram" | "google" | "referral" | "other";
+      activity_kind: "call" | "meeting" | "message" | "note" | "viewing" | "email";
+      project_type: "buy" | "sell" | "rent_out" | "rent_in";
+      project_status: "active" | "on_hold" | "won" | "lost";
       viewing_status: "pending" | "confirmed" | "done" | "cancelled";
       subscription_status: "trialing" | "active" | "past_due" | "canceled";
       deal_type: "sale" | "rent";

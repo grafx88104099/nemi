@@ -5,8 +5,6 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { LEAD_STAGES, type LeadStage } from "@/lib/constants";
 
-export type { LeadStage };
-
 export async function updateLeadStage(id: string, stage: LeadStage): Promise<{ ok: boolean }> {
   if (!LEAD_STAGES.includes(stage)) return { ok: false };
   const supabase = await createClient();

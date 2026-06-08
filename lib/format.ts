@@ -45,3 +45,10 @@ export function fmtDate(iso: string): string {
   const d = new Date(iso);
   return `${d.getFullYear()} оны ${d.getMonth() + 1}-р сарын ${d.getDate()}`;
 }
+
+/** Огноо + цаг: «2026.06.08 14:30». */
+export function fmtDateTime(iso: string): string {
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}

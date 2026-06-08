@@ -167,6 +167,124 @@ export async function getSharedWithMe(agentId: string) {
   }>).filter((r) => r.listing);
 }
 
+export type LeadActivity = {
+  id: string;
+  kind: string;
+  summary: string;
+  outcome: string | null;
+  duration_min: number | null;
+  occurred_at: string;
+};
+
+/** Лидийн дэлгэрэнгүй + дуудлага/ярианы түүх (зөвхөн өөрийн лид). */
+export async function getLeadDetail(id: string) {
+  const agent = await getMyAgent();
+  if (!agent) return null;
+  const supabase = await createClient();
+  const { data: lead, error } = await supabase
+    .from("leads")
+    .select("*, listing:listings(id, title), project:projects(id, title)")
+    .eq("id", id)
+    .eq("agent_id", agent.id as string)
+    .maybeSingle();
+  if (error) console.error("getLeadDetail:", error.message);
+  if (!lead) return null;
+
+  const { data: activities } = await supabase
+    .from("lead_activities")
+    .select("id, kind, summary, outcome, duration_min, occurred_at")
+    .eq("lead_id", id)
+    .order("occurred_at", { ascending: false });
+
+  return {
+    lead: lead as unknown as Record<string, unknown> & {
+      listing: { id: string; title: string } | null;
+      project: { id: string; title: string } | null;
+    },
+    activities: (activities ?? []) as LeadActivity[],
+  };
+}
+
+export type ProjectRow = {
+  id: string; title: string; client_name: string | null; client_phone: string | null;
+  type: string; status: string; budget_min: number | null; budget_max: number | null;
+  target_area: string | null; deadline: string | null; note: string | null;
+  last_activity_at: string | null; leadCount: number;
+};
+
+/** Агентын төслүүд + лидийн тоо. */
+export async function getAgentProjects(agentId: string): Promise<ProjectRow[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("projects")
+    .select("*, leads(count)")
+    .eq("agent_id", agentId)
+    .order("created_at", { ascending: false });
+  if (error) console.error("getAgentProjects:", error.message);
+  return ((data ?? []) as unknown as Array<Record<string, unknown> & { leads: { count: number }[] }>).map((p) => ({
+    id: p.id as string,
+    title: p.title as string,
+    client_name: (p.client_name as string | null) ?? null,
+    client_phone: (p.client_phone as string | null) ?? null,
+    type: p.type as string,
+    status: p.status as string,
+    budget_min: (p.budget_min as number | null) ?? null,
+    budget_max: (p.budget_max as number | null) ?? null,
+    target_area: (p.target_area as string | null) ?? null,
+    deadline: (p.deadline as string | null) ?? null,
+    note: (p.note as string | null) ?? null,
+    last_activity_at: (p.last_activity_at as string | null) ?? null,
+    leadCount: Array.isArray(p.leads) ? p.leads[0]?.count ?? 0 : 0,
+  }));
+}
+
+/** Төслийн дэлгэрэнгүй — холбоотой лид + үйл явдлын нэгдсэн түүх (зөвхөн өөрийн). */
+export async function getProjectDetail(id: string) {
+  const agent = await getMyAgent();
+  if (!agent) return null;
+  const supabase = await createClient();
+  const { data: project, error } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("id", id)
+    .eq("agent_id", agent.id as string)
+    .maybeSingle();
+  if (error) console.error("getProjectDetail:", error.message);
+  if (!project) return null;
+
+  const { data: leads } = await supabase
+    .from("leads")
+    .select("id, name, phone, stage, score, last_activity_at")
+    .eq("project_id", id)
+    .order("created_at", { ascending: false });
+  const leadList = (leads ?? []) as Array<{
+    id: string; name: string; phone: string | null; stage: string; score: number | null; last_activity_at: string | null;
+  }>;
+  const leadIds = leadList.map((l) => l.id);
+  const leadName = new Map(leadList.map((l) => [l.id, l.name]));
+
+  // Төсөлд шууд хавсаргасан + холбоотой лидүүдийн үйл явдлууд.
+  const filter = leadIds.length
+    ? `project_id.eq.${id},lead_id.in.(${leadIds.join(",")})`
+    : `project_id.eq.${id}`;
+  const { data: acts } = await supabase
+    .from("lead_activities")
+    .select("id, kind, summary, outcome, duration_min, occurred_at, lead_id")
+    .or(filter)
+    .order("occurred_at", { ascending: false });
+
+  const activities = ((acts ?? []) as Array<LeadActivity & { lead_id: string | null }>).map((a) => ({
+    ...a,
+    leadName: a.lead_id ? leadName.get(a.lead_id) ?? null : null,
+  }));
+
+  return {
+    project: project as Record<string, unknown>,
+    leads: leadList,
+    activities,
+  };
+}
+
 /** Зөвхөн ӨӨРИЙН зарыг (засварлахаар) буцаана — хуваалцсан/бусдын зар null. */
 export async function getMyListing(id: string) {
   const agent = await getMyAgent();

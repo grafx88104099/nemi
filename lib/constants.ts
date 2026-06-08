@@ -7,7 +7,7 @@
 export const LISTING_STATUSES = ["active", "draft", "review", "sold"] as const;
 export type ListingStatus = (typeof LISTING_STATUSES)[number];
 
-export type StatusTone = "green" | "neutral" | "amber" | "rose";
+export type StatusTone = "green" | "neutral" | "amber" | "rose" | "blue" | "brand";
 
 export const LISTING_STATUS: Record<ListingStatus, { label: string; tone: StatusTone }> = {
   active: { label: "Идэвхтэй", tone: "green" },
@@ -37,3 +37,50 @@ export const LEAD_STAGE_LABEL: Record<LeadStage, string> = {
  * багана болгон харуулахгүй (зөвхөн select-ээр тохируулна).
  */
 export const LEAD_PIPELINE: LeadStage[] = ["new", "contacted", "viewing", "offer", "closed"];
+
+// ── Лидийн эх сурвалж ─────────────────────────────────────
+export const LEAD_SOURCES = ["website", "facebook", "instagram", "google", "referral", "other"] as const;
+export type LeadSource = (typeof LEAD_SOURCES)[number];
+
+export const LEAD_SOURCE_LABEL: Record<LeadSource, string> = {
+  website: "Вэбсайт",
+  facebook: "Фэйсбүүк",
+  instagram: "Инстаграм",
+  google: "Гүүгл",
+  referral: "Санал болголт",
+  other: "Бусад",
+};
+
+// ── Үйл явдлын төрөл (дуудлага/ярианы лог) ────────────────
+export const ACTIVITY_KINDS = ["call", "meeting", "message", "note", "viewing", "email"] as const;
+export type ActivityKind = (typeof ACTIVITY_KINDS)[number];
+
+export const ACTIVITY_KIND_LABEL: Record<ActivityKind, string> = {
+  call: "Дуудлага",
+  meeting: "Уулзалт",
+  message: "Мессеж",
+  note: "Тэмдэглэл",
+  viewing: "Үзлэг",
+  email: "Имэйл",
+};
+
+// ── Төсөл (үйлчлүүлэгчийн гэрээ) ───────────────────────────
+export const PROJECT_TYPES = ["buy", "sell", "rent_out", "rent_in"] as const;
+export type ProjectType = (typeof PROJECT_TYPES)[number];
+
+export const PROJECT_TYPE_LABEL: Record<ProjectType, string> = {
+  buy: "Худалдан авах",
+  sell: "Зарах",
+  rent_out: "Түрээслүүлэх",
+  rent_in: "Түрээслэх",
+};
+
+export const PROJECT_STATUSES = ["active", "on_hold", "won", "lost"] as const;
+export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
+
+export const PROJECT_STATUS_LABEL: Record<ProjectStatus, { label: string; tone: StatusTone }> = {
+  active: { label: "Идэвхтэй", tone: "green" },
+  on_hold: { label: "Хүлээгдэж буй", tone: "amber" },
+  won: { label: "Амжилттай", tone: "blue" },
+  lost: { label: "Алдсан", tone: "rose" },
+};

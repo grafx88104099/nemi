@@ -1,8 +1,10 @@
+import Link from "next/link";
 import { Phone } from "lucide-react";
 
-import { getMyAgent, getAgentLeads } from "@/lib/queries-agent";
+import { getMyAgent, getAgentLeads, getAgentListings, getAgentProjects } from "@/lib/queries-agent";
 import { DashboardNav } from "@/components/dashboard/DashboardNav";
 import { LeadStageSelect } from "@/components/dashboard/LeadStageSelect";
+import { LeadFormButton } from "@/components/dashboard/LeadFormButton";
 import { Card, CardBody } from "@/components/ui/card";
 import { ButtonLink } from "@/components/ui/button";
 import { LEAD_PIPELINE, LEAD_STAGE_LABEL } from "@/lib/constants";
@@ -19,12 +21,21 @@ export default async function LeadsPage() {
       </div>
     );
   }
-  const leads = await getAgentLeads(agent.id as string);
+  const [leads, listings, projects] = await Promise.all([
+    getAgentLeads(agent.id as string),
+    getAgentListings(agent.id as string),
+    getAgentProjects(agent.id as string),
+  ]);
+  const listingOpts = listings.map((l) => ({ id: l.id, title: l.title }));
+  const projectOpts = projects.map((p) => ({ id: p.id, title: p.title }));
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6">
       <div className="mt-1"><DashboardNav /></div>
-      <h1 className="mt-6 text-xl font-extrabold text-ink">Лид удирдлага (CRM)</h1>
+      <div className="mt-6 flex items-center justify-between">
+        <h1 className="text-xl font-extrabold text-ink">Лид удирдлага (CRM)</h1>
+        <LeadFormButton mode="create" listings={listingOpts} projects={projectOpts} />
+      </div>
 
       <div className="mt-4 grid gap-4 md:grid-cols-3 xl:grid-cols-5">
         {COLS.map(([key, label]) => {
@@ -40,7 +51,7 @@ export default async function LeadsPage() {
                   <Card key={l.id}>
                     <CardBody className="space-y-1.5 p-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-bold text-ink">{l.name}</span>
+                        <Link href={`/agent/leads/${l.id}`} className="text-sm font-bold text-ink hover:text-brand-600 hover:underline">{l.name}</Link>
                         {l.score != null && (
                           <span className="rounded-full bg-brand-50 px-1.5 text-xs font-semibold text-brand-700">{l.score}</span>
                         )}
