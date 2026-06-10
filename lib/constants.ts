@@ -28,6 +28,23 @@ export const DEAL_TYPE_LABEL: Record<DealType, string> = {
   rent: "Түрээс",
 };
 
+// ── Түрээсийн төлбөрийн нөхцөл (X+Y) ──────────────────────
+// X = урьдчилж төлөх түрээсийн сар, Y = барьцааны сар.
+export const RENT_TERM_PRESETS: { advance: number; deposit: number }[] = [
+  { advance: 1, deposit: 1 },
+  { advance: 2, deposit: 1 },
+  { advance: 3, deposit: 1 },
+  { advance: 6, deposit: 1 },
+  { advance: 1, deposit: 2 },
+];
+
+/** "1+1" хэлбэрийн товч тэмдэглэгээ. */
+export const rentTermCode = (advance: number, deposit: number) => `${advance}+${deposit}`;
+
+/** "1 сар түрээс + 1 сар барьцаа" хэлбэрийн дэлгэрэнгүй тайлбар. */
+export const rentTermLabel = (advance: number, deposit: number) =>
+  `${advance} сар түрээс + ${deposit} сар барьцаа`;
+
 // ── Лидийн шат ────────────────────────────────────────────
 export const LEAD_STAGES = ["new", "contacted", "viewing", "offer", "closed", "lost"] as const;
 export type LeadStage = (typeof LEAD_STAGES)[number];

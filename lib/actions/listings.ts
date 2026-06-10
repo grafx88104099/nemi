@@ -20,6 +20,8 @@ export type ListingInput = {
   photos: string[];
   status: ListingStatus;
   deal_type: DealType;
+  rent_advance_months: number | null;
+  rent_deposit_months: number | null;
 };
 
 async function savePhotos(
@@ -73,6 +75,8 @@ export async function createListing(input: ListingInput): Promise<{ id?: string;
       photo: input.photos[0] || null,
       status: input.status,
       deal_type: input.deal_type,
+      rent_advance_months: input.deal_type === "rent" ? input.rent_advance_months : null,
+      rent_deposit_months: input.deal_type === "rent" ? input.rent_deposit_months : null,
     })
     .select("id")
     .single();
@@ -106,6 +110,8 @@ export async function updateListing(id: string, input: ListingInput): Promise<{ 
       photo: input.photos[0] || null,
       status: input.status,
       deal_type: input.deal_type,
+      rent_advance_months: input.deal_type === "rent" ? input.rent_advance_months : null,
+      rent_deposit_months: input.deal_type === "rent" ? input.rent_deposit_months : null,
     })
     .eq("id", id)
     .eq("agent_id", agentId)

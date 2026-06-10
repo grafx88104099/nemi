@@ -7,7 +7,11 @@ import { createListing, updateListing, type ListingInput } from "@/lib/actions/l
 import { Button } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
 import { MultiPhotoUpload } from "@/components/dashboard/MultiPhotoUpload";
-import { LISTING_STATUS, LISTING_STATUS_OPTIONS, DEAL_TYPE_LABEL, type DealType } from "@/lib/constants";
+import {
+  LISTING_STATUS, LISTING_STATUS_OPTIONS, DEAL_TYPE_LABEL,
+  RENT_TERM_PRESETS, rentTermCode, rentTermLabel, type DealType,
+} from "@/lib/constants";
+import { fmtMNT } from "@/lib/format";
 
 const TYPES = ["Орон сууц", "Хаус", "Газар", "Оффис", "Худалдааны талбай"];
 const DISTRICTS = ["Сүхбаатар", "Чингэлтэй", "Хан-Уул", "Баянгол", "Сонгинохайрхан", "Баянзүрх", "Налайх"];
@@ -38,8 +42,13 @@ export function ListingForm({
     photos: [],
     status: (initial?.status as ListingInput["status"]) ?? "active",
     deal_type: (initial?.deal_type as DealType) ?? "sale",
+    rent_advance_months: initial?.rent_advance_months ?? 1,
+    rent_deposit_months: initial?.rent_deposit_months ?? 1,
   });
   const isRent = f.deal_type === "rent";
+  const adv = f.rent_advance_months ?? 1;
+  const dep = f.rent_deposit_months ?? 1;
+  const upfront = isRent && f.price ? (adv + dep) * f.price : 0;
 
   const set = (k: keyof ListingInput, v: unknown) => setF((s) => ({ ...s, [k]: v }));
   const sel = "h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none";
@@ -107,6 +116,49 @@ export function ListingForm({
         <Field label={isRent ? "Үнэ (₮/сар)" : "Үнэ (₮)"}><Input id="price" inputMode="numeric" required value={f.price ? f.price.toLocaleString("en-US") : ""} onChange={(e) => set("price", +e.target.value.replace(/\D/g, ""))} placeholder={isRent ? "2,500,000" : "1,000,000"} /></Field>
         <Field label="Ашиглалтын он"><Input type="number" inputMode="numeric" value={f.year || ""} onChange={(e) => set("year", +e.target.value)} placeholder="2024" /></Field>
       </div>
+
+      {isRent && (
+        <div className="space-y-3 rounded-2xl border border-line bg-surface-2 p-4">
+          <div>
+            <p className="text-sm font-semibold text-ink">Түрээсийн төлбөрийн нөхцөл</p>
+            <p className="mt-0.5 text-xs text-muted">
+              «{rentTermCode(adv, dep)}» = {rentTermLabel(adv, dep)}. Эхэлж төлөх дүн.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {RENT_TERM_PRESETS.map((p) => {
+              const active = adv === p.advance && dep === p.deposit;
+              return (
+                <button
+                  key={rentTermCode(p.advance, p.deposit)}
+                  type="button"
+                  onClick={() => { set("rent_advance_months", p.advance); set("rent_deposit_months", p.deposit); }}
+                  aria-pressed={active}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+                    active ? "bg-brand-600 text-white" : "border border-line bg-surface text-muted hover:text-ink"
+                  }`}
+                >
+                  {rentTermCode(p.advance, p.deposit)}
+                </button>
+              );
+            })}
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Урьдчилгаа түрээс (сар)">
+              <Input type="number" inputMode="numeric" min={0} value={adv} onChange={(e) => set("rent_advance_months", Math.max(0, +e.target.value || 0))} />
+            </Field>
+            <Field label="Барьцаа (сар)">
+              <Input type="number" inputMode="numeric" min={0} value={dep} onChange={(e) => set("rent_deposit_months", Math.max(0, +e.target.value || 0))} />
+            </Field>
+          </div>
+          {upfront > 0 && (
+            <p className="text-sm text-ink">
+              Эхний төлбөр: <b>{adv + dep} сар = {fmtMNT(upfront)}</b>
+              <span className="text-muted"> ({fmtMNT((dep) * f.price)} нь буцаагдах барьцаа)</span>
+            </p>
+          )}
+        </div>
+      )}
 
       <Field label="Тайлбар">
         <textarea

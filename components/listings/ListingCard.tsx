@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Flame, ShieldCheck, Star, Clock, Sparkles } from "lucide-react";
 
 import { shortMNT, relativeDate, isFresh } from "@/lib/format";
+import { rentTermCode } from "@/lib/constants";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
@@ -18,6 +19,8 @@ export type ListingCardData = {
   hot: boolean;
   verified: boolean;
   deal_type?: "sale" | "rent";
+  rent_advance_months?: number | null;
+  rent_deposit_months?: number | null;
   created_at?: string;
   agent: {
     display_name: string;
@@ -65,9 +68,16 @@ export function ListingCard({ l }: { l: ListingCardData }) {
       </div>
       <div className="space-y-2 p-4">
         <div className="flex items-center justify-between gap-2">
-          <div className="text-lg font-extrabold text-ink">
-            {shortMNT(l.price)}
-            {l.deal_type === "rent" && <span className="text-sm font-medium text-muted">/сар</span>}
+          <div className="flex items-center gap-2 text-lg font-extrabold text-ink">
+            <span>
+              {shortMNT(l.price)}
+              {l.deal_type === "rent" && <span className="text-sm font-medium text-muted">/сар</span>}
+            </span>
+            {l.deal_type === "rent" && l.rent_advance_months != null && l.rent_deposit_months != null && (
+              <span className="rounded-md bg-surface-2 px-1.5 py-0.5 text-xs font-semibold text-muted">
+                {rentTermCode(l.rent_advance_months, l.rent_deposit_months)}
+              </span>
+            )}
           </div>
           {l.ai_score != null && (
             <span

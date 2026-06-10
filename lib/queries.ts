@@ -2,7 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import type { ListingCardData } from "@/components/listings/ListingCard";
 
 const CARD_SELECT =
-  "id, title, price, ai_score, rooms, area, floor, district, photo, hot, verified, deal_type, created_at, " +
+  "id, title, price, ai_score, rooms, area, floor, district, photo, hot, verified, deal_type, " +
+  "rent_advance_months, rent_deposit_months, created_at, " +
   "agent:agents(display_name, avatar, avatar_url, verified, office:offices(color))";
 
 /** Онцлох (featured) идэвхтэй зарууд. */

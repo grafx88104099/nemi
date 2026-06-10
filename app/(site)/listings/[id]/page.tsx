@@ -6,6 +6,7 @@ import { getListingById } from "@/lib/queries";
 import { isFavorited } from "@/lib/queries-user";
 import { recordView } from "@/lib/actions/viewings";
 import { fmtMNT, shortMNT, relativeDate, fmtDate, isFresh } from "@/lib/format";
+import { rentTermCode, rentTermLabel } from "@/lib/constants";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
@@ -33,6 +34,10 @@ export default async function ListingDetailPage({
       ? [l.photo as string]
       : [];
   const amenities = (l.amenities as string[]) ?? [];
+  const isRent = l.deal_type === "rent";
+  const advM = l.rent_advance_months as number | null;
+  const depM = l.rent_deposit_months as number | null;
+  const hasRentTerms = isRent && advM != null && depM != null;
   const spec = (label: string, val: React.ReactNode) => (
     <div className="rounded-xl bg-surface-2 p-3 text-center">
       <div className="text-xs text-muted">{label}</div>
@@ -69,7 +74,10 @@ export default async function ListingDetailPage({
                 <Badge tone="brand"><Sparkles /> Шинэ</Badge>
               ) : null}
             </div>
-            <h1 className="mt-3 text-3xl font-extrabold text-ink">{shortMNT(l.price as number)}</h1>
+            <h1 className="mt-3 text-3xl font-extrabold text-ink">
+              {shortMNT(l.price as number)}
+              {isRent && <span className="text-xl font-medium text-muted">/сар</span>}
+            </h1>
             <p className="mt-1 text-lg text-ink">{l.title as string}</p>
             <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
               <span className="flex items-center gap-1">
@@ -90,6 +98,20 @@ export default async function ListingDetailPage({
             {(l.year as number) > 0 ? spec("Он", l.year as number) : null}
             {spec("Зогсоол", (l.parking as number) || "—")}
           </div>
+
+          {hasRentTerms && (
+            <div className="rounded-xl border border-line bg-surface-2 p-4">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-ink">Түрээсийн нөхцөл</span>
+                <Badge tone="blue">{rentTermCode(advM, depM)}</Badge>
+              </div>
+              <p className="mt-1 text-sm text-muted">{rentTermLabel(advM, depM)}</p>
+              <p className="mt-2 text-sm text-ink">
+                Эхэлж төлөх: <b>{advM + depM} сар = {fmtMNT((advM + depM) * (l.price as number))}</b>
+                <span className="text-muted"> ({fmtMNT(depM * (l.price as number))} нь буцаагдах барьцаа)</span>
+              </p>
+            </div>
+          )}
 
           {l.ai_score != null && (
             <Card>

@@ -42,6 +42,8 @@ export default async function EditListingPage({
                 .map((p) => p.url),
               status: (l.status as ListingStatus) ?? "active",
               deal_type: (l.deal_type as DealType) ?? "sale",
+              rent_advance_months: (l.rent_advance_months as number | null) ?? null,
+              rent_deposit_months: (l.rent_deposit_months as number | null) ?? null,
             }}
           />
         </CardBody>

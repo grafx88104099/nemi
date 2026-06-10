@@ -209,6 +209,8 @@ export type Database = {
           location: unknown | null;
           photo: string | null;
           deal_type: Database["public"]["Enums"]["deal_type"];
+          rent_advance_months: number | null;
+          rent_deposit_months: number | null;
           created_at: string;
           updated_at: string;
         };
@@ -238,6 +240,8 @@ export type Database = {
           location?: unknown | null;
           photo?: string | null;
           deal_type?: Database["public"]["Enums"]["deal_type"];
+          rent_advance_months?: number | null;
+          rent_deposit_months?: number | null;
           created_at?: string;
           updated_at?: string;
         };

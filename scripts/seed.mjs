@@ -105,27 +105,35 @@ async function main() {
     console.log(`✓ agents: ${D.agents.length}`);
 
     // ---- listings (+ photo + ai_valuation) ----
-    // Зарим зарыг ТҮРЭЭС болгож, сарын үнэ онооно (бусад нь зарах).
-    const RENT = { "L-2403": 2_500_000, "L-2404": 1_500_000, "L-2408": 1_800_000, "L-2411": 1_600_000 };
+    // Зарим зарыг ТҮРЭЭС болгож, сарын үнэ + төлбөрийн нөхцөл (advance+deposit) онооно.
+    const RENT = {
+      "L-2403": { price: 2_500_000, advance: 1, deposit: 2 },
+      "L-2404": { price: 1_500_000, advance: 1, deposit: 1 },
+      "L-2408": { price: 1_800_000, advance: 2, deposit: 1 },
+      "L-2411": { price: 1_600_000, advance: 1, deposit: 1 },
+    };
     const listingIdByLegacy = {};
     const listingAgentByLegacy = {};
     for (const l of D.listings) {
-      const isRent = l.id in RENT;
-      const price = isRent ? RENT[l.id] : l.price;
-      const perM2 = isRent ? (l.area ? Math.round(RENT[l.id] / l.area) : null) : l.pricePerM2;
+      const rent = RENT[l.id] ?? null;
+      const isRent = rent != null;
+      const price = isRent ? rent.price : l.price;
+      const perM2 = isRent ? (l.area ? Math.round(rent.price / l.area) : null) : l.pricePerM2;
       const r = await q(
         `insert into listings
            (legacy_id, agent_id, title, district, type, rooms, area, floor, price,
             price_per_m2, year, parking, status, verified, hot, featured, shared,
-            description, amenities, ai_score, ai_note, photo, deal_type, location)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,
-                 ST_SetSRID(ST_MakePoint($24,$25),4326)::geography)
+            description, amenities, ai_score, ai_note, photo, deal_type,
+            rent_advance_months, rent_deposit_months, location)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,
+                 ST_SetSRID(ST_MakePoint($26,$27),4326)::geography)
          returning id`,
         [
           l.id, agentIdByLegacy[l.agent], l.title, l.district, l.type, l.rooms,
           l.area, l.floor, price, perM2, l.year || null, l.parking, l.status,
           l.verified, l.hot, l.featured, l.shared, l.desc ?? null,
-          l.amenities ?? [], l.aiScore, l.aiNote, l.photo, isRent ? "rent" : "sale", l.lng, l.lat,
+          l.amenities ?? [], l.aiScore, l.aiNote, l.photo, isRent ? "rent" : "sale",
+          isRent ? rent.advance : null, isRent ? rent.deposit : null, l.lng, l.lat,
         ]
       );
       const id = r.rows[0].id;
