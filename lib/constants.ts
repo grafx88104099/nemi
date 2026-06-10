@@ -19,6 +19,15 @@ export const LISTING_STATUS: Record<ListingStatus, { label: string; tone: Status
 /** Агент гараар сонгож болох төлвүүд (review нь системийн урсгал тул орохгүй ч засвар хийхэд харагдана). */
 export const LISTING_STATUS_OPTIONS: ListingStatus[] = ["active", "draft", "review", "sold"];
 
+// ── Гүйлгээний төрөл (худалдах / түрээс) ──────────────────
+export const DEAL_TYPES = ["sale", "rent"] as const;
+export type DealType = (typeof DEAL_TYPES)[number];
+
+export const DEAL_TYPE_LABEL: Record<DealType, string> = {
+  sale: "Худалдах",
+  rent: "Түрээс",
+};
+
 // ── Лидийн шат ────────────────────────────────────────────
 export const LEAD_STAGES = ["new", "contacted", "viewing", "offer", "closed", "lost"] as const;
 export type LeadStage = (typeof LEAD_STAGES)[number];

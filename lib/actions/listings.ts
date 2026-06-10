@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
-import type { ListingStatus } from "@/lib/constants";
+import type { ListingStatus, DealType } from "@/lib/constants";
 
 export type ListingInput = {
   title: string;
@@ -19,6 +19,7 @@ export type ListingInput = {
   amenities: string[];
   photos: string[];
   status: ListingStatus;
+  deal_type: DealType;
 };
 
 async function savePhotos(
@@ -71,6 +72,7 @@ export async function createListing(input: ListingInput): Promise<{ id?: string;
       amenities: input.amenities,
       photo: input.photos[0] || null,
       status: input.status,
+      deal_type: input.deal_type,
     })
     .select("id")
     .single();
@@ -103,6 +105,7 @@ export async function updateListing(id: string, input: ListingInput): Promise<{ 
       amenities: input.amenities,
       photo: input.photos[0] || null,
       status: input.status,
+      deal_type: input.deal_type,
     })
     .eq("id", id)
     .eq("agent_id", agentId)

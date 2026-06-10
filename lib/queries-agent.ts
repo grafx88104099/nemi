@@ -11,7 +11,7 @@ export type AgentRow = Record<string, unknown> & {
 };
 
 export type AgentListingRow = {
-  id: string; title: string; price: number; status: string;
+  id: string; title: string; price: number; status: string; deal_type: string;
   district: string | null; photo: string | null; ai_score: number | null; created_at: string;
 };
 export type AgentLeadRow = {
@@ -47,7 +47,7 @@ export async function getAgentListings(agentId: string): Promise<AgentListingRow
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("listings")
-    .select("id, title, price, status, district, photo, ai_score, created_at")
+    .select("id, title, price, status, deal_type, district, photo, ai_score, created_at")
     .eq("agent_id", agentId)
     .order("created_at", { ascending: false });
   if (error) console.error("getAgentListings:", error.message);

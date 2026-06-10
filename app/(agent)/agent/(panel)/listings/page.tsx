@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { shortMNT } from "@/lib/format";
-import { LISTING_STATUS } from "@/lib/constants";
+import { LISTING_STATUS, DEAL_TYPE_LABEL, type DealType } from "@/lib/constants";
 
 const statusMeta = (s: string) =>
   LISTING_STATUS[s as keyof typeof LISTING_STATUS] ?? { label: s, tone: "neutral" as const };
@@ -46,6 +46,7 @@ export default async function MyListingsPage() {
           <thead className="border-b border-line bg-surface-2 text-left text-muted">
             <tr>
               <th scope="col" className="p-3 font-medium">Зар</th>
+              <th scope="col" className="p-3 font-medium">Төрөл</th>
               <th scope="col" className="p-3 font-medium">Үнэ</th>
               <th scope="col" className="p-3 font-medium">Дүүрэг</th>
               <th scope="col" className="p-3 font-medium">Төлөв</th>
@@ -66,7 +67,12 @@ export default async function MyListingsPage() {
                       </span>
                     )}
                   </td>
-                  <td className="p-3 text-ink">{shortMNT(l.price)}</td>
+                  <td className="p-3">
+                    <Badge tone={l.deal_type === "rent" ? "blue" : "brand"}>
+                      {DEAL_TYPE_LABEL[(l.deal_type as DealType) ?? "sale"]}
+                    </Badge>
+                  </td>
+                  <td className="p-3 text-ink">{shortMNT(l.price)}{l.deal_type === "rent" && <span className="text-muted">/сар</span>}</td>
                   <td className="p-3 text-muted">{l.district}</td>
                   <td className="p-3"><Badge tone={statusMeta(l.status).tone}>{statusMeta(l.status).label}</Badge></td>
                   <td className="p-3 text-muted">{l.ai_score ?? "—"}</td>
@@ -83,7 +89,7 @@ export default async function MyListingsPage() {
               );
             })}
             {listings.length === 0 && (
-              <tr><td colSpan={6} className="p-8 text-center text-muted">Зар алга. «Шинэ зар» дарж эхлүүлнэ үү.</td></tr>
+              <tr><td colSpan={7} className="p-8 text-center text-muted">Зар алга. «Шинэ зар» дарж эхлүүлнэ үү.</td></tr>
             )}
           </tbody>
         </table>

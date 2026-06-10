@@ -7,7 +7,7 @@ import { createListing, updateListing, type ListingInput } from "@/lib/actions/l
 import { Button } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
 import { MultiPhotoUpload } from "@/components/dashboard/MultiPhotoUpload";
-import { LISTING_STATUS, LISTING_STATUS_OPTIONS } from "@/lib/constants";
+import { LISTING_STATUS, LISTING_STATUS_OPTIONS, DEAL_TYPE_LABEL, type DealType } from "@/lib/constants";
 
 const TYPES = ["Орон сууц", "Хаус", "Газар", "Оффис", "Худалдааны талбай"];
 const DISTRICTS = ["Сүхбаатар", "Чингэлтэй", "Хан-Уул", "Баянгол", "Сонгинохайрхан", "Баянзүрх", "Налайх"];
@@ -37,7 +37,9 @@ export function ListingForm({
     amenities: initial?.amenities ?? [],
     photos: [],
     status: (initial?.status as ListingInput["status"]) ?? "active",
+    deal_type: (initial?.deal_type as DealType) ?? "sale",
   });
+  const isRent = f.deal_type === "rent";
 
   const set = (k: keyof ListingInput, v: unknown) => setF((s) => ({ ...s, [k]: v }));
   const sel = "h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none";
@@ -59,6 +61,24 @@ export function ListingForm({
 
   return (
     <form onSubmit={submit} className="space-y-5">
+      <Field label="Зарын төрөл">
+        <div className="inline-flex rounded-xl border border-line bg-surface-2 p-1">
+          {(["sale", "rent"] as const).map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => set("deal_type", d)}
+              aria-pressed={f.deal_type === d}
+              className={`rounded-lg px-4 py-1.5 text-sm font-semibold transition ${
+                f.deal_type === d ? "bg-brand-600 text-white" : "text-muted hover:text-ink"
+              }`}
+            >
+              {DEAL_TYPE_LABEL[d]}
+            </button>
+          ))}
+        </div>
+      </Field>
+
       <Field label="Зарын гарчиг" htmlFor="t">
         <Input id="t" required value={f.title} onChange={(e) => set("title", e.target.value)} placeholder="3 өрөө · River Garden" />
       </Field>
@@ -84,7 +104,7 @@ export function ListingForm({
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <Field label="Үнэ (₮)"><Input id="price" inputMode="numeric" required value={f.price ? f.price.toLocaleString("en-US") : ""} onChange={(e) => set("price", +e.target.value.replace(/\D/g, ""))} placeholder="1,000,000" /></Field>
+        <Field label={isRent ? "Үнэ (₮/сар)" : "Үнэ (₮)"}><Input id="price" inputMode="numeric" required value={f.price ? f.price.toLocaleString("en-US") : ""} onChange={(e) => set("price", +e.target.value.replace(/\D/g, ""))} placeholder={isRent ? "2,500,000" : "1,000,000"} /></Field>
         <Field label="Ашиглалтын он"><Input type="number" inputMode="numeric" value={f.year || ""} onChange={(e) => set("year", +e.target.value)} placeholder="2024" /></Field>
       </div>
 

@@ -4,7 +4,7 @@ import { getMyListing } from "@/lib/queries-agent";
 import { Card, CardBody } from "@/components/ui/card";
 import { ListingForm } from "@/components/dashboard/ListingForm";
 import { AiValuateButton } from "@/components/dashboard/AiValuateButton";
-import type { ListingStatus } from "@/lib/constants";
+import type { ListingStatus, DealType } from "@/lib/constants";
 
 export default async function EditListingPage({
   params,
@@ -41,6 +41,7 @@ export default async function EditListingPage({
                 .sort((a, b) => a.sort_order - b.sort_order)
                 .map((p) => p.url),
               status: (l.status as ListingStatus) ?? "active",
+              deal_type: (l.deal_type as DealType) ?? "sale",
             }}
           />
         </CardBody>
