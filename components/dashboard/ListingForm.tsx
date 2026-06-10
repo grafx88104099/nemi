@@ -28,6 +28,8 @@ export function ListingForm({
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [photos, setPhotos] = useState<string[]>(initial?.photos ?? []);
+  // amenities-г түүхий мөрөөр барина (таслал/зай бичих боломжтой); submit үед задална.
+  const [amenitiesText, setAmenitiesText] = useState((initial?.amenities ?? []).join(", "));
   const [f, setF] = useState<ListingInput>({
     title: initial?.title ?? "",
     type: initial?.type ?? TYPES[0],
@@ -54,16 +56,22 @@ export function ListingForm({
   const upfront = isRent && f.price ? (adv + dep) * f.price : 0;
 
   const set = (k: keyof ListingInput, v: unknown) => setF((s) => ({ ...s, [k]: v }));
+  // Сөрөг/NaN-аас хамгаалсан тоон оролт.
+  const num = (v: string) => { const n = Number(v); return Number.isFinite(n) && n >= 0 ? n : 0; };
   const sel = "h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none";
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
-    const payload = { ...f, photos };
+    if (!f.title.trim()) { setErr("Зарын гарчиг оруулна уу."); return; }
+    if (!(f.price > 0)) { setErr("Үнэ 0-ээс их байх ёстой."); return; }
+    const amenities = amenitiesText.split(",").map((s) => s.trim()).filter(Boolean);
+    const payload = { ...f, amenities, photos };
     startTransition(async () => {
       const res = id ? await updateListing(id, payload) : await createListing(payload);
-      if ("error" in res && res.error) {
-        setErr(res.error);
+      const failed = ("error" in res && res.error) || ("ok" in res && !res.ok);
+      if (failed) {
+        setErr(("error" in res && res.error) ? res.error : "Хадгалахад алдаа гарлаа.");
         return;
       }
       router.push("/agent/listings");
@@ -109,15 +117,15 @@ export function ListingForm({
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <Field label="Өрөө"><Input type="number" inputMode="numeric" value={f.rooms || ""} onChange={(e) => set("rooms", +e.target.value)} placeholder="3" /></Field>
-        <Field label="Талбай (м²)"><Input type="number" inputMode="numeric" value={f.area || ""} onChange={(e) => set("area", +e.target.value)} placeholder="96" /></Field>
+        <Field label="Өрөө"><Input type="number" inputMode="numeric" min={0} value={f.rooms || ""} onChange={(e) => set("rooms", num(e.target.value))} placeholder="3" /></Field>
+        <Field label="Талбай (м²)"><Input type="number" inputMode="numeric" min={0} value={f.area || ""} onChange={(e) => set("area", num(e.target.value))} placeholder="96" /></Field>
         <Field label="Давхар"><Input value={f.floor} onChange={(e) => set("floor", e.target.value)} placeholder="12/18" /></Field>
-        <Field label="Зогсоол"><Input type="number" inputMode="numeric" value={f.parking || ""} onChange={(e) => set("parking", +e.target.value)} placeholder="0" /></Field>
+        <Field label="Зогсоол"><Input type="number" inputMode="numeric" min={0} value={f.parking || ""} onChange={(e) => set("parking", num(e.target.value))} placeholder="0" /></Field>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <Field label={isRent ? "Үнэ (₮/сар)" : "Үнэ (₮)"}><Input id="price" inputMode="numeric" required value={f.price ? f.price.toLocaleString("en-US") : ""} onChange={(e) => set("price", +e.target.value.replace(/\D/g, ""))} placeholder={isRent ? "2,500,000" : "1,000,000"} /></Field>
-        <Field label="Ашиглалтын он"><Input type="number" inputMode="numeric" value={f.year || ""} onChange={(e) => set("year", +e.target.value)} placeholder="2024" /></Field>
+        <Field label={isRent ? "Үнэ (₮/сар)" : "Үнэ (₮)"}><Input id="price" inputMode="numeric" required value={f.price ? f.price.toLocaleString("en-US") : ""} onChange={(e) => set("price", num(e.target.value.replace(/\D/g, "")))} placeholder={isRent ? "2,500,000" : "1,000,000"} /></Field>
+        <Field label="Ашиглалтын он"><Input type="number" inputMode="numeric" min={0} value={f.year || ""} onChange={(e) => set("year", num(e.target.value))} placeholder="2024" /></Field>
       </div>
 
       {isRent && (
@@ -173,8 +181,8 @@ export function ListingForm({
 
       <Field label="Тохижилт (таслалаар тусгаарла)">
         <Input
-          value={f.amenities.join(", ")}
-          onChange={(e) => set("amenities", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))}
+          value={amenitiesText}
+          onChange={(e) => setAmenitiesText(e.target.value)}
           placeholder="Лифт, Зогсоол, Камер"
         />
       </Field>

@@ -5,6 +5,10 @@ import { Upload, X } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 
+const MAX_PHOTOS = 20;
+const MAX_SIZE = 8 * 1024 * 1024; // 8MB
+const ALLOWED_EXT = ["jpg", "jpeg", "png", "webp", "gif", "avif"];
+
 export function MultiPhotoUpload({
   value,
   onChange,
@@ -14,17 +18,35 @@ export function MultiPhotoUpload({
 }) {
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const full = value.length >= MAX_PHOTOS;
 
   async function onFiles(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-    if (!files.length) return;
-    setUploading(true);
+    const picked = Array.from(e.target.files ?? []);
+    e.target.value = ""; // ижил файлыг дахин сонгох боломжтой болгох
+    if (!picked.length) return;
     setErr(null);
+
+    const room = MAX_PHOTOS - value.length;
+    if (room <= 0) { setErr(`Дээд тал нь ${MAX_PHOTOS} зураг оруулна.`); return; }
+
+    // Тоо/хэмжээ/төрлийг шалгаж шүүнэ.
+    const problems: string[] = [];
+    const files: File[] = [];
+    for (const file of picked) {
+      if (files.length >= room) { problems.push(`${MAX_PHOTOS} зургийн хязгаар хэтэрсэн тул зарим нь алгассан`); break; }
+      if (!file.type.startsWith("image/")) { problems.push(`${file.name}: зураг биш`); continue; }
+      if (file.size > MAX_SIZE) { problems.push(`${file.name}: 8MB-аас том`); continue; }
+      files.push(file);
+    }
+    if (!files.length) { setErr(problems.join("; ")); return; }
+
+    setUploading(true);
     const supabase = createClient();
     // Зэрэг upload хийгээд дарааллыг хадгална (index map).
     const results = await Promise.all(
       files.map(async (file, i) => {
-        const ext = file.name.split(".").pop();
+        const raw = (file.name.split(".").pop() ?? "").toLowerCase();
+        const ext = ALLOWED_EXT.includes(raw) ? raw : "jpg";
         const path = `${Date.now()}-${i}-${Math.round(Math.random() * 1e6)}.${ext}`;
         const { error } = await supabase.storage.from("listings").upload(path, file);
         if (error) return { error: error.message, url: null as string | null };
@@ -32,9 +54,10 @@ export function MultiPhotoUpload({
       })
     );
     const urls = results.map((r) => r.url).filter((u): u is string => !!u);
-    const firstErr = results.find((r) => r.error)?.error;
-    if (firstErr) setErr(firstErr);
-    onChange([...value, ...urls]);
+    const failCount = results.filter((r) => r.error).length;
+    if (failCount) problems.push(`${failCount} зураг хуулж чадсангүй`);
+    if (problems.length) setErr(problems.join("; "));
+    if (urls.length) onChange([...value, ...urls]);
     setUploading(false);
   }
 
@@ -57,14 +80,16 @@ export function MultiPhotoUpload({
             </button>
           </div>
         ))}
-        <label className="flex h-24 w-32 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-line text-muted hover:border-brand-300 hover:text-brand-600">
-          <Upload className="size-5" />
-          <span className="text-xs">{uploading ? "Хуулж байна..." : "Зураг нэмэх"}</span>
-          <input type="file" accept="image/*" multiple className="hidden" onChange={onFiles} disabled={uploading} />
-        </label>
+        {!full && (
+          <label className="flex h-24 w-32 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-line text-muted hover:border-brand-300 hover:text-brand-600">
+            <Upload className="size-5" />
+            <span className="text-xs">{uploading ? "Хуулж байна..." : "Зураг нэмэх"}</span>
+            <input type="file" accept="image/*" multiple className="hidden" onChange={onFiles} disabled={uploading} />
+          </label>
+        )}
       </div>
       {err && <p className="text-xs text-danger">{err}</p>}
-      <p className="text-xs text-subtle">Эхний зураг үндсэн зураг болно.</p>
+      <p className="text-xs text-subtle">Эхний зураг үндсэн зураг болно. ({value.length}/{MAX_PHOTOS}, файл бүр ≤8MB)</p>
     </div>
   );
 }

@@ -41,6 +41,7 @@ export function LocationPicker({
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const skipNextFetch = useRef(false);
 
   function placeMarker(pos: LatLng, recenter = false) {
@@ -70,11 +71,18 @@ export function LocationPicker({
     setOptions({ key: KEY, v: "weekly" });
 
     (async () => {
-      const [{ Map }, markerLib, placesLib] = await Promise.all([
-        importLibrary("maps"),
-        importLibrary("marker"),
-        importLibrary("places"),
-      ]);
+      let libs;
+      try {
+        libs = await Promise.all([
+          importLibrary("maps"),
+          importLibrary("marker"),
+          importLibrary("places"),
+        ]);
+      } catch {
+        if (!cancelled) setLoadError(true);
+        return;
+      }
+      const [{ Map }, markerLib, placesLib] = libs;
       if (cancelled || !mapElRef.current) return;
       const start = initialRef.current ?? UB;
       const map = new Map(mapElRef.current, {
@@ -109,7 +117,7 @@ export function LocationPicker({
     if (skipNextFetch.current) { skipNextFetch.current = false; return; }
     const places = placesRef.current;
     const text = query.trim();
-    if (!places || text.length < 1) { setSuggestions([]); return; }
+    if (!places || text.length < 2) { setSuggestions([]); return; }
 
     let cancelled = false;
     setLoading(true);
@@ -171,6 +179,14 @@ export function LocationPicker({
     return (
       <div className="rounded-2xl border border-dashed border-line bg-surface-2 p-4 text-sm text-muted">
         Газрын зургийн түлхүүр (NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) тохируулаагүй тул байршил сонгох боломжгүй.
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="rounded-2xl border border-dashed border-line bg-surface-2 p-4 text-sm text-muted">
+        Газрын зураг ачаалагдсангүй (сүлжээ эсвэл түлхүүрийн тохиргоо). Байршилгүйгээр зар хадгалах боломжтой.
       </div>
     );
   }
