@@ -74,8 +74,11 @@ export async function getListings(f: ListingFilters = {}) {
   };
 }
 
+// Нийтийн хуудас тул агент/оффисоос зөвхөн харуулдаг баганыг л татна
+// (profile_id, offices.email/license_no зэрэг дотоод/нууц талбар ил гаргахгүй).
 const LISTING_DETAIL_SELECT =
-  "*, agent:agents(*, office:offices(*)), photos:listing_photos(url, sort_order, is_primary), " +
+  "*, agent:agents(id, display_name, avatar, avatar_url, verified, rating, reviews_count, phone, " +
+  "office:offices(name, color)), photos:listing_photos(url, sort_order, is_primary), " +
   "valuations:ai_valuations(score, note, model, created_at)";
 
 export async function getListingById(id: string) {
@@ -84,7 +87,7 @@ export async function getListingById(id: string) {
     .from("listings")
     .select(LISTING_DETAIL_SELECT)
     .eq("id", id)
-    .single();
+    .maybeSingle();
   return data as
     | (Record<string, unknown> & {
         agent: (Record<string, unknown> & { office: Record<string, unknown> | null }) | null;
@@ -201,9 +204,14 @@ export async function getAgentById(id: string) {
   const [{ data: agent }, { data: listings }, { data: reviews }] = await Promise.all([
     supabase
       .from("agents")
-      .select("*, office:offices(*)")
+      // profile_id/legacy_id зэрэг дотоод талбар оруулахгүй; оффисоос зөвхөн name,color
+      .select(
+        "id, display_name, phone, avatar, avatar_url, rating, reviews_count, years, sold, " +
+        "listings_count, verified, premier, response_time, languages, areas, specialty, bio, " +
+        "sub_ratings, office:offices(name, color)"
+      )
       .eq("id", id)
-      .single(),
+      .maybeSingle(),
     supabase.from("listings").select(CARD_SELECT).eq("agent_id", id).eq("status", "active"),
     supabase
       .from("reviews")
