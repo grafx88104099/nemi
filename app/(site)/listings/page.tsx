@@ -3,9 +3,9 @@ import Link from "next/link";
 import { getListings, type ListingFilters } from "@/lib/queries";
 import { ListingCard } from "@/components/listings/ListingCard";
 import { SaveSearchButton } from "@/components/listings/SaveSearchButton";
+import { PROPERTY_TYPES, DISTRICTS } from "@/lib/constants";
 
-const DISTRICTS = ["Сүхбаатар", "Чингэлтэй", "Хан-Уул", "Баянгол", "Сонгинохайрхан", "Баянзүрх", "Налайх"];
-const TYPES = ["Орон сууц", "Хаус", "Газар", "Оффис", "Худалдааны талбай"];
+const TYPES = PROPERTY_TYPES;
 const SORTS: [string, string][] = [
   ["new", "Шинэлэг"],
   ["price_asc", "Үнэ: бага → их"],

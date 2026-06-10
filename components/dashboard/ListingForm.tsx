@@ -10,12 +10,11 @@ import { MultiPhotoUpload } from "@/components/dashboard/MultiPhotoUpload";
 import { LocationPicker } from "@/components/dashboard/LocationPicker";
 import {
   LISTING_STATUS, LISTING_STATUS_OPTIONS, DEAL_TYPE_LABEL,
-  RENT_TERM_PRESETS, rentTermCode, rentTermLabel, type DealType,
+  RENT_TERM_PRESETS, rentTermCode, rentTermLabel, PROPERTY_TYPES, DISTRICTS, type DealType,
 } from "@/lib/constants";
 import { fmtMNT } from "@/lib/format";
 
-const TYPES = ["Орон сууц", "Хаус", "Газар", "Оффис", "Худалдааны талбай"];
-const DISTRICTS = ["Сүхбаатар", "Чингэлтэй", "Хан-Уул", "Баянгол", "Сонгинохайрхан", "Баянзүрх", "Налайх"];
+const TYPES = PROPERTY_TYPES;
 
 export function ListingForm({
   id,
@@ -215,7 +214,7 @@ export function ListingForm({
         <Button type="submit" disabled={pending}>
           {pending ? "Хадгалж байна..." : id ? "Шинэчлэх" : "Зар нийтлэх"}
         </Button>
-        <Button type="button" variant="ghost" onClick={() => router.back()}>Болих</Button>
+        <Button type="button" variant="ghost" disabled={pending} onClick={() => router.back()}>Болих</Button>
       </div>
     </form>
   );

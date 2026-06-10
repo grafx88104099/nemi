@@ -3,6 +3,7 @@ import { Search, ShieldCheck, Sparkles, TrendingUp, ArrowRight, Home as HomeIcon
 
 import { getFeaturedListings } from "@/lib/queries";
 import { ListingCard } from "@/components/listings/ListingCard";
+import { PROPERTY_TYPES } from "@/lib/constants";
 
 export default async function Home() {
   const featured = await getFeaturedListings(8);
@@ -41,7 +42,7 @@ export default async function Home() {
             </button>
           </form>
           <div className="mt-4 flex flex-wrap justify-center gap-2 text-sm">
-            {["Орон сууц", "Хаус", "Газар", "Оффис"].map((t) => (
+            {PROPERTY_TYPES.map((t) => (
               <Link
                 key={t}
                 href={`/listings?type=${encodeURIComponent(t)}`}
@@ -98,23 +99,25 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* Featured */}
-      <section className="mx-auto max-w-7xl px-4 py-14">
-        <div className="mb-6 flex items-end justify-between">
-          <div>
-            <h2 className="text-2xl font-extrabold text-ink">Онцлох зарууд</h2>
-            <p className="text-sm text-muted">AI-аар хамгийн өндөр үнэлгээтэй сонголтууд</p>
+      {/* Featured — зар байхгүй бол хэсгийг харуулахгүй */}
+      {featured.length > 0 && (
+        <section className="mx-auto max-w-7xl px-4 py-14">
+          <div className="mb-6 flex items-end justify-between">
+            <div>
+              <h2 className="text-2xl font-extrabold text-ink">Онцлох зарууд</h2>
+              <p className="text-sm text-muted">AI-аар хамгийн өндөр үнэлгээтэй сонголтууд</p>
+            </div>
+            <Link href="/listings" className="inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:underline">
+              Бүгдийг үзэх <ArrowRight className="size-4" />
+            </Link>
           </div>
-          <Link href="/listings" className="inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:underline">
-            Бүгдийг үзэх <ArrowRight className="size-4" />
-          </Link>
-        </div>
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {featured.map((l) => (
-            <ListingCard key={l.id} l={l} />
-          ))}
-        </div>
-      </section>
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {featured.map((l) => (
+              <ListingCard key={l.id} l={l} />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Why Nemi */}
       <section className="bg-surface py-14">

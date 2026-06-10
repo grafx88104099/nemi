@@ -19,6 +19,10 @@ export const LISTING_STATUS: Record<ListingStatus, { label: string; tone: Status
 /** Агент гараар сонгож болох төлвүүд (review нь системийн урсгал тул орохгүй ч засвар хийхэд харагдана). */
 export const LISTING_STATUS_OPTIONS: ListingStatus[] = ["active", "draft", "review", "sold"];
 
+// ── Үл хөдлөхийн төрөл ба дүүрэг (форм + шүүлт + нүүр хуудас нэг эх сурвалж) ──
+export const PROPERTY_TYPES = ["Орон сууц", "Хаус", "Газар", "Оффис", "Худалдааны талбай"] as const;
+export const DISTRICTS = ["Сүхбаатар", "Чингэлтэй", "Хан-Уул", "Баянгол", "Сонгинохайрхан", "Баянзүрх", "Налайх"] as const;
+
 // ── Гүйлгээний төрөл (худалдах / түрээс) ──────────────────
 export const DEAL_TYPES = ["sale", "rent"] as const;
 export type DealType = (typeof DEAL_TYPES)[number];
