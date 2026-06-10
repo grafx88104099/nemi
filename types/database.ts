@@ -691,6 +691,10 @@ export type Database = {
         Args: { p_id: string };
         Returns: { lng: number; lat: number }[];
       };
+      replace_listing_photos: {
+        Args: { p_listing_id: string; p_urls: string[] };
+        Returns: undefined;
+      };
     };
     Enums: {
       user_role: "buyer" | "agent" | "office_admin" | "admin";

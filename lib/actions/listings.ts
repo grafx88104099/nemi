@@ -4,6 +4,9 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import type { ListingStatus, DealType } from "@/lib/constants";
+import { validateListingInput } from "@/lib/validation/listing";
+
+const SAVE_ERR = "Зар хадгалахад алдаа гарлаа. Дахин оролдоно уу.";
 
 export type ListingInput = {
   title: string;
@@ -26,22 +29,31 @@ export type ListingInput = {
   lng: number | null;
 };
 
-/** lat/lng → PostGIS geography (EWKT). Хоёул байгаа үед л утга буцаана. */
+/**
+ * lat/lng → PostGIS geography (EWKT). Хоёул тоо байгаа үед л утга буцаана.
+ * (validateListingInput аль хэдийн тоо гэдгийг баталгаажуулсан ч давхар хамгаална.)
+ */
 function pointEWKT(lat: number | null, lng: number | null): string | null {
-  return lat != null && lng != null ? `SRID=4326;POINT(${lng} ${lat})` : null;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat! < -90 || lat! > 90 || lng! < -180 || lng! > 180) return null;
+  return `SRID=4326;POINT(${lng} ${lat})`;
 }
 
+/** Зарын зургийг атомик RPC-ээр сольж, алдааг буцаана. */
 async function savePhotos(
   supabase: Awaited<ReturnType<typeof createClient>>,
   listingId: string,
   photos: string[]
-) {
-  await supabase.from("listing_photos").delete().eq("listing_id", listingId);
-  if (photos.length) {
-    await supabase.from("listing_photos").insert(
-      photos.map((url, i) => ({ listing_id: listingId, url, sort_order: i, is_primary: i === 0 }))
-    );
+): Promise<{ error?: string }> {
+  const { error } = await supabase.rpc("replace_listing_photos", {
+    p_listing_id: listingId,
+    p_urls: photos,
+  });
+  if (error) {
+    console.error("savePhotos:", error.message);
+    return { error: SAVE_ERR };
   }
+  return {};
 }
 
 async function myAgentId() {
@@ -58,10 +70,14 @@ async function myAgentId() {
   return { supabase, agentId: (data?.id as string) ?? null, status: (data?.status as string) ?? null };
 }
 
-export async function createListing(input: ListingInput): Promise<{ id?: string; error?: string }> {
+export async function createListing(raw: ListingInput): Promise<{ id?: string; error?: string }> {
   const { supabase, agentId, status } = await myAgentId();
   if (!agentId) return { error: "Зөвхөн агент зар оруулна." };
   if (status !== "active") return { error: "Таны бүртгэл оффисын баталгаажуулалт хүлээж байна. Батлагдсаны дараа зар оруулах боломжтой." };
+
+  const parsed = validateListingInput(raw);
+  if ("error" in parsed) return { error: parsed.error };
+  const input = parsed.data;
 
   const { data, error } = await supabase
     .from("listings")
@@ -88,17 +104,26 @@ export async function createListing(input: ListingInput): Promise<{ id?: string;
     })
     .select("id")
     .single();
-  if (error) return { error: error.message };
+  if (error || !data) {
+    console.error("createListing:", error?.message);
+    return { error: SAVE_ERR };
+  }
 
-  await savePhotos(supabase, data.id, input.photos);
+  const photoRes = await savePhotos(supabase, data.id, input.photos);
+  if (photoRes.error) return { error: photoRes.error };
   revalidatePath("/agent/listings");
   return { id: data.id };
 }
 
-export async function updateListing(id: string, input: ListingInput): Promise<{ ok: boolean; error?: string }> {
+export async function updateListing(id: string, raw: ListingInput): Promise<{ ok: boolean; error?: string }> {
   const { supabase, agentId, status } = await myAgentId();
-  if (!agentId) return { ok: false, error: "auth" };
+  if (!agentId) return { ok: false, error: "Зөвхөн агент зар засна." };
   if (status !== "active") return { ok: false, error: "Таны бүртгэл баталгаажаагүй байна." };
+
+  const parsed = validateListingInput(raw);
+  if ("error" in parsed) return { ok: false, error: parsed.error };
+  const input = parsed.data;
+
   // Эзэмшлийг код түвшинд баталгаажуулна (agent_id шүүлт) — RLS дээр дан тулгуурлахгүй.
   const { data, error } = await supabase
     .from("listings")
@@ -125,9 +150,13 @@ export async function updateListing(id: string, input: ListingInput): Promise<{ 
     .eq("id", id)
     .eq("agent_id", agentId)
     .select("id");
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    console.error("updateListing:", error.message);
+    return { ok: false, error: SAVE_ERR };
+  }
   if (!data || data.length === 0) return { ok: false, error: "Зар олдсонгүй эсвэл танд засах эрхгүй." };
-  await savePhotos(supabase, id, input.photos);
+  const photoRes = await savePhotos(supabase, id, input.photos);
+  if (photoRes.error) return { ok: false, error: photoRes.error };
   revalidatePath("/agent/listings");
   revalidatePath(`/listings/${id}`);
   return { ok: true };
@@ -142,7 +171,10 @@ export async function deleteListing(id: string): Promise<{ ok: boolean; error?: 
     .eq("id", id)
     .eq("agent_id", agentId)
     .select("id");
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    console.error("deleteListing:", error.message);
+    return { ok: false, error: "Зар устгахад алдаа гарлаа." };
+  }
   if (!data || data.length === 0) return { ok: false, error: "Зар олдсонгүй эсвэл танд устгах эрхгүй." };
   revalidatePath("/agent/listings");
   return { ok: true };
