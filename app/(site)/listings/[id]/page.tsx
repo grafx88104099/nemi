@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { ShieldCheck, Flame, Star, Phone, MapPin, Check, Clock, Sparkles } from "lucide-react";
 
 import { getListingById, getListingPoint } from "@/lib/queries";
@@ -51,15 +52,21 @@ export default async function ListingDetailPage({
       <Link href="/listings" className="text-sm text-muted hover:underline">← Жагсаалт руу</Link>
 
       {/* Gallery */}
-      <div className="mt-4 grid gap-2 overflow-hidden rounded-2xl md:grid-cols-4 md:grid-rows-2">
+      <div className="mt-4 grid gap-2 overflow-hidden rounded-2xl md:h-[460px] md:grid-cols-4 md:grid-rows-2">
         {photos.slice(0, 5).map((src, i) => (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <div
             key={i}
-            src={src}
-            alt={l.title as string}
-            className={`h-full w-full object-cover ${i === 0 ? "md:col-span-2 md:row-span-2 aspect-[4/3] md:aspect-auto" : "aspect-[4/3]"}`}
-          />
+            className={`relative aspect-[4/3] md:aspect-auto ${i === 0 ? "md:col-span-2 md:row-span-2" : ""}`}
+          >
+            <Image
+              src={src}
+              alt={l.title as string}
+              fill
+              sizes={i === 0 ? "(min-width: 768px) 50vw, 100vw" : "(min-width: 768px) 25vw, 50vw"}
+              priority={i === 0}
+              className="object-cover"
+            />
+          </div>
         ))}
       </div>
 

@@ -1,4 +1,7 @@
+import { unstable_cache } from "next/cache";
+
 import { createClient } from "@/lib/supabase/server";
+import { createPublicClient } from "@/lib/supabase/public";
 import type { ListingCardData } from "@/components/listings/ListingCard";
 
 const CARD_SELECT =
@@ -6,18 +9,26 @@ const CARD_SELECT =
   "rent_advance_months, rent_deposit_months, created_at, " +
   "agent:agents(display_name, avatar, avatar_url, verified, office:offices(color))";
 
-/** Онцлох (featured) идэвхтэй зарууд. */
-export async function getFeaturedListings(limit = 8): Promise<ListingCardData[]> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("listings")
-    .select(CARD_SELECT)
-    .eq("status", "active")
-    .eq("featured", true)
-    .order("ai_score", { ascending: false })
-    .limit(limit);
-  return (data ?? []) as unknown as ListingCardData[];
-}
+/**
+ * Онцлох (featured) идэвхтэй зарууд — нийтийн, ховор өөрчлөгддөг тул 5 минут
+ * кэшлэв (зочин болгонд DB цохилгүй). cookie-гүй public client ашиглана
+ * (unstable_cache дотор cookies() хориотой).
+ */
+export const getFeaturedListings = unstable_cache(
+  async (limit = 8): Promise<ListingCardData[]> => {
+    const supabase = createPublicClient();
+    const { data } = await supabase
+      .from("listings")
+      .select(CARD_SELECT)
+      .eq("status", "active")
+      .eq("featured", true)
+      .order("ai_score", { ascending: false })
+      .limit(limit);
+    return (data ?? []) as unknown as ListingCardData[];
+  },
+  ["featured-listings"],
+  { tags: ["listings"], revalidate: 300 }
+);
 
 export type ListingFilters = {
   q?: string;

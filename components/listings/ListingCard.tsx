@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Flame, ShieldCheck, Star, Clock, Sparkles } from "lucide-react";
 
 import { shortMNT, relativeDate, isFresh } from "@/lib/format";
@@ -39,12 +40,12 @@ export function ListingCard({ l }: { l: ListingCardData }) {
     >
       <div className="relative aspect-[4/3] overflow-hidden bg-surface-2">
         {l.photo && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={l.photo}
             alt={l.title}
-            loading="lazy"
-            className="size-full object-cover transition duration-300 group-hover:scale-105"
+            fill
+            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
+            className="object-cover transition duration-300 group-hover:scale-105"
           />
         )}
         <div className="absolute left-3 top-3">
