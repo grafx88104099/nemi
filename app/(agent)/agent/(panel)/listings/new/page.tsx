@@ -41,7 +41,10 @@ export default async function NewListingPage({
   if (!dealType) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-12">
-        <h1 className="text-center text-2xl font-extrabold text-ink">Ямар зар оруулах вэ?</h1>
+        <Link href="/agent/listings" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink">
+          <ArrowLeft className="size-4" /> Миний зар руу буцах
+        </Link>
+        <h1 className="mt-4 text-center text-2xl font-extrabold text-ink">Ямар зар оруулах вэ?</h1>
         <p className="mt-2 text-center text-muted">Эхлээд зарын төрлөө сонгоно уу.</p>
         <div className="mt-8 grid gap-4 sm:grid-cols-2">
           <Link
