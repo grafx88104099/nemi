@@ -687,6 +687,10 @@ export type Database = {
         Args: { p_lng: number; p_lat: number; p_m: number };
         Returns: { id: string; title: string; price: number; district: string | null; ai_score: number | null; lng: number; lat: number; dist_m: number }[];
       };
+      listing_point: {
+        Args: { p_id: string };
+        Returns: { lng: number; lat: number }[];
+      };
     };
     Enums: {
       user_role: "buyer" | "agent" | "office_admin" | "admin";

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { getMyListing } from "@/lib/queries-agent";
+import { getListingPoint } from "@/lib/queries";
 import { Card, CardBody } from "@/components/ui/card";
 import { ListingForm } from "@/components/dashboard/ListingForm";
 import { AiValuateButton } from "@/components/dashboard/AiValuateButton";
@@ -14,6 +15,7 @@ export default async function EditListingPage({
   const { id } = await params;
   const l = await getMyListing(id);
   if (!l) notFound();
+  const point = await getListingPoint(id);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -44,6 +46,8 @@ export default async function EditListingPage({
               deal_type: (l.deal_type as DealType) ?? "sale",
               rent_advance_months: (l.rent_advance_months as number | null) ?? null,
               rent_deposit_months: (l.rent_deposit_months as number | null) ?? null,
+              lat: point?.lat ?? null,
+              lng: point?.lng ?? null,
             }}
           />
         </CardBody>

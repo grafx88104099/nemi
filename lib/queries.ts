@@ -94,6 +94,15 @@ export async function getListingById(id: string) {
     | null;
 }
 
+/** Зарын координат (lng/lat) — geography баганаас ST_X/ST_Y RPC-ээр. */
+export async function getListingPoint(id: string): Promise<{ lat: number; lng: number } | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("listing_point", { p_id: id });
+  if (error) { console.error("getListingPoint:", error.message); return null; }
+  const row = (data as { lng: number; lat: number }[] | null)?.[0];
+  return row ? { lat: row.lat, lng: row.lng } : null;
+}
+
 export type AgentListItem = {
   id: string;
   display_name: string;

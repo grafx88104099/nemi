@@ -7,6 +7,7 @@ import { createListing, updateListing, type ListingInput } from "@/lib/actions/l
 import { Button } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
 import { MultiPhotoUpload } from "@/components/dashboard/MultiPhotoUpload";
+import { LocationPicker } from "@/components/dashboard/LocationPicker";
 import {
   LISTING_STATUS, LISTING_STATUS_OPTIONS, DEAL_TYPE_LABEL,
   RENT_TERM_PRESETS, rentTermCode, rentTermLabel, type DealType,
@@ -44,6 +45,8 @@ export function ListingForm({
     deal_type: (initial?.deal_type as DealType) ?? "sale",
     rent_advance_months: initial?.rent_advance_months ?? 1,
     rent_deposit_months: initial?.rent_deposit_months ?? 1,
+    lat: initial?.lat ?? null,
+    lng: initial?.lng ?? null,
   });
   const isRent = f.deal_type === "rent";
   const adv = f.rent_advance_months ?? 1;
@@ -173,6 +176,14 @@ export function ListingForm({
           value={f.amenities.join(", ")}
           onChange={(e) => set("amenities", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))}
           placeholder="Лифт, Зогсоол, Камер"
+        />
+      </Field>
+
+      <Field label="Байршил (газрын зураг)">
+        <LocationPicker
+          lat={f.lat}
+          lng={f.lng}
+          onChange={(lat, lng) => setF((s) => ({ ...s, lat, lng }))}
         />
       </Field>
 

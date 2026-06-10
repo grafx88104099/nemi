@@ -22,7 +22,14 @@ export type ListingInput = {
   deal_type: DealType;
   rent_advance_months: number | null;
   rent_deposit_months: number | null;
+  lat: number | null;
+  lng: number | null;
 };
+
+/** lat/lng → PostGIS geography (EWKT). Хоёул байгаа үед л утга буцаана. */
+function pointEWKT(lat: number | null, lng: number | null): string | null {
+  return lat != null && lng != null ? `SRID=4326;POINT(${lng} ${lat})` : null;
+}
 
 async function savePhotos(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -77,6 +84,7 @@ export async function createListing(input: ListingInput): Promise<{ id?: string;
       deal_type: input.deal_type,
       rent_advance_months: input.deal_type === "rent" ? input.rent_advance_months : null,
       rent_deposit_months: input.deal_type === "rent" ? input.rent_deposit_months : null,
+      location: pointEWKT(input.lat, input.lng),
     })
     .select("id")
     .single();
@@ -112,6 +120,7 @@ export async function updateListing(id: string, input: ListingInput): Promise<{ 
       deal_type: input.deal_type,
       rent_advance_months: input.deal_type === "rent" ? input.rent_advance_months : null,
       rent_deposit_months: input.deal_type === "rent" ? input.rent_deposit_months : null,
+      location: pointEWKT(input.lat, input.lng),
     })
     .eq("id", id)
     .eq("agent_id", agentId)

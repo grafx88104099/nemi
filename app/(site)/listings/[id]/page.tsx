@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ShieldCheck, Flame, Star, Phone, MapPin, Check, Clock, Sparkles } from "lucide-react";
 
-import { getListingById } from "@/lib/queries";
+import { getListingById, getListingPoint } from "@/lib/queries";
 import { isFavorited } from "@/lib/queries-user";
 import { recordView } from "@/lib/actions/viewings";
 import { fmtMNT, shortMNT, relativeDate, fmtDate, isFresh } from "@/lib/format";
@@ -13,6 +13,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { FavoriteButton } from "@/components/listings/FavoriteButton";
 import { BookViewingButton } from "@/components/listings/BookViewingButton";
+import { ListingLocationMap } from "@/components/listings/ListingLocationMap";
 import { StartChatButton } from "@/components/chat/StartChatButton";
 
 export default async function ListingDetailPage({
@@ -24,7 +25,7 @@ export default async function ListingDetailPage({
   const l = await getListingById(id);
   if (!l) notFound();
 
-  const [favorited] = await Promise.all([isFavorited(id), recordView(id)]);
+  const [favorited, point] = await Promise.all([isFavorited(id), getListingPoint(id), recordView(id)]);
 
   const agent = l.agent as Record<string, unknown> | null;
   const office = (agent?.office ?? null) as Record<string, unknown> | null;
@@ -146,6 +147,15 @@ export default async function ListingDetailPage({
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {point && (
+            <div>
+              <h2 className="mb-2 flex items-center gap-1.5 text-lg font-bold text-ink">
+                <MapPin className="size-5 text-brand-600" /> Байршил
+              </h2>
+              <ListingLocationMap lat={point.lat} lng={point.lng} />
             </div>
           )}
 
