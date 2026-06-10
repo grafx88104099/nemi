@@ -26,6 +26,12 @@ export function Modal({
   const titleId = useId();
   const prevFocus = useRef<HTMLElement | null>(null);
 
+  // onClose-ийг эцэг компонент бүр render бүрт шинээр дамжуулдаг тул эффектийн
+  // хамаарлаас гаргаж, ref-ээр хамгийн сүүлийн утгыг уншина. Эс бөгөөс товчлуур
+  // дарах бүрт эффект дахин ажиллаж фокус эхний талбар руу үсэрнэ.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return;
     prevFocus.current = document.activeElement as HTMLElement | null;
@@ -43,7 +49,7 @@ export function Modal({
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key === "Tab") {
@@ -74,7 +80,7 @@ export function Modal({
       document.body.style.overflow = prevOverflow;
       prevFocus.current?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
