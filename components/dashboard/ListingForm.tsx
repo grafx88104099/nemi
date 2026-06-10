@@ -82,13 +82,14 @@ export function ListingForm({
   return (
     <form onSubmit={submit} className="space-y-5">
       <Field label="Зарын төрөл">
-        <div className="inline-flex rounded-xl border border-line bg-surface-2 p-1">
+        <div role="radiogroup" aria-label="Зарын төрөл" className="inline-flex rounded-xl border border-line bg-surface-2 p-1">
           {(["sale", "rent"] as const).map((d) => (
             <button
               key={d}
               type="button"
+              role="radio"
               onClick={() => set("deal_type", d)}
-              aria-pressed={f.deal_type === d}
+              aria-checked={f.deal_type === d}
               className={`rounded-lg px-4 py-1.5 text-sm font-semibold transition ${
                 f.deal_type === d ? "bg-brand-600 text-white" : "text-muted hover:text-ink"
               }`}
@@ -136,15 +137,17 @@ export function ListingForm({
               «{rentTermCode(adv, dep)}» = {rentTermLabel(adv, dep)}. Эхэлж төлөх дүн.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div role="radiogroup" aria-label="Түрээсийн төлбөрийн нөхцөл" className="flex flex-wrap gap-2">
             {RENT_TERM_PRESETS.map((p) => {
               const active = adv === p.advance && dep === p.deposit;
               return (
                 <button
                   key={rentTermCode(p.advance, p.deposit)}
                   type="button"
+                  role="radio"
+                  aria-checked={active}
+                  aria-label={rentTermLabel(p.advance, p.deposit)}
                   onClick={() => { set("rent_advance_months", p.advance); set("rent_deposit_months", p.deposit); }}
-                  aria-pressed={active}
                   className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
                     active ? "bg-brand-600 text-white" : "border border-line bg-surface text-muted hover:text-ink"
                   }`}
