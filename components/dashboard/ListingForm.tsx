@@ -29,6 +29,8 @@ export function ListingForm({
   const [photos, setPhotos] = useState<string[]>(initial?.photos ?? []);
   // amenities-г түүхий мөрөөр барина (таслал/зай бичих боломжтой); submit үед задална.
   const [amenitiesText, setAmenitiesText] = useState((initial?.amenities ?? []).join(", "));
+  // Талбайг түүхий мөрөөр барина (бутархай "96.5" бичих боломжтой); submit үед тоо болгоно.
+  const [areaText, setAreaText] = useState(initial?.area != null && initial.area > 0 ? String(initial.area) : "");
   const [f, setF] = useState<ListingInput>({
     title: initial?.title ?? "",
     type: initial?.type ?? TYPES[0],
@@ -65,7 +67,8 @@ export function ListingForm({
     if (!f.title.trim()) { setErr("Зарын гарчиг оруулна уу."); return; }
     if (!(f.price > 0)) { setErr("Үнэ 0-ээс их байх ёстой."); return; }
     const amenities = amenitiesText.split(",").map((s) => s.trim()).filter(Boolean);
-    const payload = { ...f, amenities, photos };
+    const area = Math.max(0, Number(areaText.replace(",", ".")) || 0); // бутархай дэмжих
+    const payload = { ...f, amenities, area, photos };
     startTransition(async () => {
       const res = id ? await updateListing(id, payload) : await createListing(payload);
       const failed = ("error" in res && res.error) || ("ok" in res && !res.ok);
@@ -118,7 +121,7 @@ export function ListingForm({
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Field label="Өрөө"><Input type="number" inputMode="numeric" min={0} value={f.rooms || ""} onChange={(e) => set("rooms", num(e.target.value))} placeholder="3" /></Field>
-        <Field label="Талбай (м²)"><Input type="number" inputMode="numeric" min={0} value={f.area || ""} onChange={(e) => set("area", num(e.target.value))} placeholder="96" /></Field>
+        <Field label="Талбай (м²)"><Input inputMode="decimal" value={areaText} onChange={(e) => setAreaText(e.target.value.replace(/[^\d.,]/g, ""))} placeholder="96.5" /></Field>
         <Field label="Давхар"><Input value={f.floor} onChange={(e) => set("floor", e.target.value)} placeholder="12/18" /></Field>
         <Field label="Зогсоол"><Input type="number" inputMode="numeric" min={0} value={f.parking || ""} onChange={(e) => set("parking", num(e.target.value))} placeholder="0" /></Field>
       </div>
