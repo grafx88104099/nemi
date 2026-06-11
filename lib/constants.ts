@@ -20,7 +20,7 @@ export const LISTING_STATUS: Record<ListingStatus, { label: string; tone: Status
 export const LISTING_STATUS_OPTIONS: ListingStatus[] = ["active", "draft", "review", "sold"];
 
 // ── Үл хөдлөхийн төрөл ба дүүрэг (форм + шүүлт + нүүр хуудас нэг эх сурвалж) ──
-export const PROPERTY_TYPES = ["Орон сууц", "Хаус", "Газар", "Оффис", "Худалдааны талбай"] as const;
+export const PROPERTY_TYPES = ["Орон сууц", "Хаус", "Газар", "Оффис", "Худалдааны талбай", "Обьект"] as const;
 export const DISTRICTS = ["Сүхбаатар", "Чингэлтэй", "Хан-Уул", "Баянгол", "Сонгинохайрхан", "Баянзүрх", "Налайх"] as const;
 
 // ── Гүйлгээний төрөл (худалдах / түрээс) ──────────────────
