@@ -6,7 +6,7 @@ import { getMyViewings } from "@/lib/queries-user";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { LoginPrompt } from "@/components/auth/LoginPrompt";
-import { shortMNT } from "@/lib/format";
+import { fmtMNT } from "@/lib/format";
 import { BackLink } from "@/components/ui/back-link";
 
 const STATUS: Record<string, { label: string; tone: "amber" | "green" | "neutral" | "rose" }> = {
@@ -47,7 +47,7 @@ export default async function ToursPage() {
                   </Link>
                   <div className="mt-1 flex items-center gap-3 text-sm text-muted">
                     <span className="flex items-center gap-1"><MapPin className="size-3.5" /> {v.listing?.district}</span>
-                    {v.listing && <span>{shortMNT(v.listing.price)}</span>}
+                    {v.listing && <span>{fmtMNT(v.listing.price)}</span>}
                   </div>
                   <div className="mt-1 flex items-center gap-1 text-sm text-muted">
                     <Calendar className="size-3.5" />

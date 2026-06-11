@@ -8,7 +8,7 @@ import { ShareListingButton } from "@/components/dashboard/ShareListingButton";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
-import { shortMNT } from "@/lib/format";
+import { fmtMNT } from "@/lib/format";
 import { LISTING_STATUS, DEAL_TYPE_LABEL, type DealType } from "@/lib/constants";
 
 const statusMeta = (s: string) =>
@@ -72,7 +72,7 @@ export default async function MyListingsPage() {
                       {DEAL_TYPE_LABEL[(l.deal_type as DealType) ?? "sale"]}
                     </Badge>
                   </td>
-                  <td className="p-3 text-ink">{shortMNT(l.price)}{l.deal_type === "rent" && <span className="text-muted">/сар</span>}</td>
+                  <td className="p-3 text-ink">{fmtMNT(l.price)}{l.deal_type === "rent" && <span className="text-muted">/сар</span>}</td>
                   <td className="p-3 text-muted">{l.district}</td>
                   <td className="p-3"><Badge tone={statusMeta(l.status).tone}>{statusMeta(l.status).label}</Badge></td>
                   <td className="p-3 text-muted">{l.ai_score ?? "—"}</td>
@@ -121,7 +121,7 @@ export default async function MyListingsPage() {
                     <td className="p-3">
                       <Link href={`/listings/${s.listing!.id}`} className="font-medium text-ink hover:underline">{s.listing!.title}</Link>
                     </td>
-                    <td className="p-3 text-ink">{shortMNT(s.listing!.price)}</td>
+                    <td className="p-3 text-ink">{fmtMNT(s.listing!.price)}</td>
                     <td className="p-3 text-muted">{s.listing!.district}</td>
                     <td className="p-3 text-muted">{s.owner?.display_name ?? "—"}</td>
                     <td className="p-3"><Badge tone={statusMeta(s.listing!.status).tone}>{statusMeta(s.listing!.status).label}</Badge></td>

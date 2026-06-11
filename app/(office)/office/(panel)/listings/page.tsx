@@ -4,7 +4,7 @@ import { getMyOffice } from "@/lib/queries-office";
 import { Card, CardBody } from "@/components/ui/card";
 import { VerifyToggle } from "@/components/office/VerifyToggle";
 import { Badge } from "@/components/ui/badge";
-import { shortMNT } from "@/lib/format";
+import { fmtMNT } from "@/lib/format";
 
 export const metadata = { title: "Зарууд — Оффис" };
 
@@ -35,7 +35,7 @@ export default async function OfficeListingsPage() {
                     <Link href={`/listings/${l.id}`} className="font-medium text-ink hover:underline">{l.title}</Link>
                     <div className="text-xs text-muted">{l.district} · {l.agent?.display_name}</div>
                   </td>
-                  <td className="p-3 text-ink">{shortMNT(l.price)}</td>
+                  <td className="p-3 text-ink">{fmtMNT(l.price)}</td>
                   <td className="p-3"><Badge tone={l.status === "active" ? "green" : "neutral"}>{l.status}</Badge></td>
                   <td className="p-3"><VerifyToggle kind="listing" id={l.id} initial={l.verified} /></td>
                 </tr>

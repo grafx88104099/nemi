@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { VerifyToggle } from "@/components/office/VerifyToggle";
 import { AgentApproval } from "@/components/office/AgentApproval";
 import { DeactivateAgentButton } from "@/components/office/DeactivateAgentButton";
-import { shortMNT } from "@/lib/format";
+import { fmtMNT } from "@/lib/format";
 
 export const metadata = { title: "Агент удирдах — Оффис" };
 
@@ -164,7 +164,7 @@ export default async function OfficeAgentManagePage({
             {listings.map((l) => (
               <tr key={l.id} className="border-b border-line last:border-0">
                 <td className="p-3"><Link href={`/listings/${l.id}`} className="font-medium text-ink hover:underline">{l.title}</Link></td>
-                <td className="p-3 text-ink">{shortMNT(l.price)}</td>
+                <td className="p-3 text-ink">{fmtMNT(l.price)}</td>
                 <td className="p-3 text-muted">{l.district}</td>
                 <td className="p-3"><Badge tone={l.status === "active" ? "green" : "neutral"}>{l.status}</Badge></td>
               </tr>

@@ -6,7 +6,7 @@ import { ShieldCheck, Flame, Star, Phone, MapPin, Check, Clock, Sparkles } from 
 import { getListingById, getListingPoint } from "@/lib/queries";
 import { isFavorited } from "@/lib/queries-user";
 import { recordView } from "@/lib/actions/viewings";
-import { fmtMNT, shortMNT, relativeDate, fmtDate, isFresh } from "@/lib/format";
+import { fmtMNT, relativeDate, fmtDate, isFresh } from "@/lib/format";
 import { rentTermCode, rentTermLabel } from "@/lib/constants";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -83,7 +83,7 @@ export default async function ListingDetailPage({
               ) : null}
             </div>
             <h1 className="mt-3 text-3xl font-extrabold text-ink">
-              {shortMNT(l.price as number)}
+              {fmtMNT(l.price as number)}
               {isRent && <span className="text-xl font-medium text-muted">/сар</span>}
             </h1>
             <p className="mt-1 text-lg text-ink">{l.title as string}</p>

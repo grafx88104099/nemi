@@ -5,7 +5,7 @@ import { getMyAgent, getAgentListings, getAgentViewingsCount } from "@/lib/queri
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
-import { shortMNT } from "@/lib/format";
+import { fmtMNT } from "@/lib/format";
 import { LISTING_STATUS } from "@/lib/constants";
 
 const statusMeta = (s: string) =>
@@ -57,7 +57,7 @@ export default async function RentalManagerPage() {
             {listings.map((l) => (
               <tr key={l.id} className="border-b border-line last:border-0">
                 <td className="p-3"><Link href={`/listings/${l.id}`} className="font-medium text-ink hover:underline">{l.title}</Link></td>
-                <td className="p-3 text-ink">{shortMNT(l.price)}</td>
+                <td className="p-3 text-ink">{fmtMNT(l.price)}</td>
                 <td className="p-3 text-muted">{l.district}</td>
                 <td className="p-3"><Badge tone={statusMeta(l.status).tone}>{statusMeta(l.status).label}</Badge></td>
               </tr>

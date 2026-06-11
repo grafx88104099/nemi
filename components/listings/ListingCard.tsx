@@ -2,7 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Flame, ShieldCheck, Star, Clock, Sparkles } from "lucide-react";
 
-import { shortMNT, relativeDate, isFresh } from "@/lib/format";
+import { fmtMNT, relativeDate, isFresh } from "@/lib/format";
 import { rentTermCode } from "@/lib/constants";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -71,7 +71,7 @@ export function ListingCard({ l }: { l: ListingCardData }) {
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-lg font-extrabold text-ink">
             <span>
-              {shortMNT(l.price)}
+              {fmtMNT(l.price)}
               {l.deal_type === "rent" && <span className="text-sm font-medium text-muted">/сар</span>}
             </span>
             {l.deal_type === "rent" && l.rent_advance_months != null && l.rent_deposit_months != null && (

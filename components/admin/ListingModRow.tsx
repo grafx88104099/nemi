@@ -7,7 +7,7 @@ import { Trash2, ShieldCheck } from "lucide-react";
 
 import { setListingStatus, deleteListingAdmin } from "@/lib/actions/admin";
 import { setVerified } from "@/lib/actions/offices";
-import { shortMNT } from "@/lib/format";
+import { fmtMNT } from "@/lib/format";
 
 const STATUSES = ["active", "draft", "review", "sold"];
 
@@ -28,7 +28,7 @@ export function ListingModRow({
         <Link href={`/listings/${id}`} className="font-medium text-ink hover:underline">{title}</Link>
         <div className="text-xs text-muted">{district} · {agent}</div>
       </td>
-      <td className="p-3 text-ink">{shortMNT(price)}</td>
+      <td className="p-3 text-ink">{fmtMNT(price)}</td>
       <td className="p-3">
         <select
           value={st}
