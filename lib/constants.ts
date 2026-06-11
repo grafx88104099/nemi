@@ -23,6 +23,47 @@ export const LISTING_STATUS_OPTIONS: ListingStatus[] = ["active", "draft", "revi
 export const PROPERTY_TYPES = ["Орон сууц", "Хаус", "Газар", "Оффис", "Худалдааны талбай", "Обьект"] as const;
 export const DISTRICTS = ["Сүхбаатар", "Чингэлтэй", "Хан-Уул", "Баянгол", "Сонгинохайрхан", "Баянзүрх", "Налайх"] as const;
 
+// ── Даалгавар (Task Management) ───────────────────────────
+export const TASK_STATUSES = ["pending", "in_progress", "completed", "deferred"] as const;
+export type TaskStatus = (typeof TASK_STATUSES)[number];
+
+export const TASK_STATUS_LABEL: Record<TaskStatus, { label: string; tone: StatusTone }> = {
+  pending: { label: "Хүлээгдэж буй", tone: "neutral" },
+  in_progress: { label: "Хийгдэж буй", tone: "blue" },
+  completed: { label: "Дууссан", tone: "green" },
+  deferred: { label: "Хойшлуулсан", tone: "amber" },
+};
+
+export const TASK_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
+export type TaskPriority = (typeof TASK_PRIORITIES)[number];
+
+export const TASK_PRIORITY_LABEL: Record<TaskPriority, { label: string; tone: StatusTone }> = {
+  low: { label: "Бага", tone: "neutral" },
+  normal: { label: "Энгийн", tone: "blue" },
+  high: { label: "Өндөр", tone: "amber" },
+  urgent: { label: "Яаралтай", tone: "rose" },
+};
+
+export const TASK_MEMBER_ROLES = ["observer", "participant"] as const;
+export type TaskMemberRole = (typeof TASK_MEMBER_ROLES)[number];
+
+export const TASK_MEMBER_ROLE_LABEL: Record<TaskMemberRole, string> = {
+  observer: "Ажиглагч",
+  participant: "Оролцогч",
+};
+
+/** Bitrix маягийн «миний үүрэг» шүүлт. */
+export const TASK_ROLE_FILTERS = ["all", "responsible", "creator", "observer", "participant"] as const;
+export type TaskRoleFilter = (typeof TASK_ROLE_FILTERS)[number];
+
+export const TASK_ROLE_FILTER_LABEL: Record<TaskRoleFilter, string> = {
+  all: "Бүх үүрэг",
+  responsible: "Би хариуцагч",
+  creator: "Би үүсгэсэн",
+  observer: "Би ажиглагч",
+  participant: "Би оролцогч",
+};
+
 // ── Гүйлгээний төрөл (худалдах / түрээс) ──────────────────
 export const DEAL_TYPES = ["sale", "rent"] as const;
 export type DealType = (typeof DEAL_TYPES)[number];

@@ -442,6 +442,98 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["projects"]["Insert"]>;
         Relationships: [];
       };
+      tasks: {
+        Row: {
+          id: string;
+          office_id: string;
+          created_by: string;
+          responsible_id: string;
+          title: string;
+          description: string | null;
+          status: Database["public"]["Enums"]["task_status"];
+          priority: Database["public"]["Enums"]["task_priority"];
+          deadline: string | null;
+          project_id: string | null;
+          tags: string[];
+          completed_at: string | null;
+          last_activity_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id: string;
+          created_by: string;
+          responsible_id: string;
+          title: string;
+          description?: string | null;
+          status?: Database["public"]["Enums"]["task_status"];
+          priority?: Database["public"]["Enums"]["task_priority"];
+          deadline?: string | null;
+          project_id?: string | null;
+          tags?: string[];
+          completed_at?: string | null;
+          last_activity_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["tasks"]["Insert"]>;
+        Relationships: [];
+      };
+      task_members: {
+        Row: {
+          task_id: string;
+          profile_id: string;
+          role: Database["public"]["Enums"]["task_member_role"];
+          created_at: string;
+        };
+        Insert: {
+          task_id: string;
+          profile_id: string;
+          role?: Database["public"]["Enums"]["task_member_role"];
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["task_members"]["Insert"]>;
+        Relationships: [];
+      };
+      task_comments: {
+        Row: {
+          id: string;
+          task_id: string;
+          author_id: string;
+          body: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          task_id: string;
+          author_id: string;
+          body: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["task_comments"]["Insert"]>;
+        Relationships: [];
+      };
+      task_checklist_items: {
+        Row: {
+          id: string;
+          task_id: string;
+          label: string;
+          done: boolean;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          task_id: string;
+          label: string;
+          done?: boolean;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["task_checklist_items"]["Insert"]>;
+        Relationships: [];
+      };
       conversations: {
         Row: {
           id: string;
@@ -709,6 +801,9 @@ export type Database = {
       deal_type: "sale" | "rent";
       agent_status: "pending" | "active" | "rejected";
       office_request_status: "pending" | "approved" | "rejected";
+      task_status: "pending" | "in_progress" | "completed" | "deferred";
+      task_priority: "low" | "normal" | "high" | "urgent";
+      task_member_role: "observer" | "participant";
     };
     CompositeTypes: Record<string, never>;
   };
