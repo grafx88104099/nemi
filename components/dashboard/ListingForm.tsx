@@ -31,6 +31,10 @@ export function ListingForm({
   const [amenitiesText, setAmenitiesText] = useState((initial?.amenities ?? []).join(", "));
   // Талбайг түүхий мөрөөр барина (бутархай "96.5" бичих боломжтой); submit үед тоо болгоно.
   const [areaText, setAreaText] = useState(initial?.area != null && initial.area > 0 ? String(initial.area) : "");
+  // Худалдах зарын 1м² үнэ (₮). Талбайгаар үржиж нийт үнэ автоматаар гарна.
+  const [perM2Text, setPerM2Text] = useState(
+    initial?.price && initial?.area ? String(Math.round(initial.price / initial.area)) : ""
+  );
   const [f, setF] = useState<ListingInput>({
     title: initial?.title ?? "",
     type: initial?.type ?? TYPES[0],
@@ -59,6 +63,35 @@ export function ListingForm({
   const set = (k: keyof ListingInput, v: unknown) => setF((s) => ({ ...s, [k]: v }));
   // Сөрөг/NaN-аас хамгаалсан тоон оролт.
   const num = (v: string) => { const n = Number(v); return Number.isFinite(n) && n >= 0 ? n : 0; };
+  const areaNumOf = (t: string) => Math.max(0, Number(t.replace(",", ".")) || 0);
+
+  // 1м² үнэ → нийт үнэ = 1м² үнэ × талбай.
+  function onPerM2(raw: string) {
+    const digits = raw.replace(/\D/g, "");
+    setPerM2Text(digits);
+    const a = areaNumOf(areaText);
+    const pm2 = Number(digits) || 0;
+    if (pm2 > 0 && a > 0) set("price", Math.round(pm2 * a));
+  }
+  // Талбай өөрчлөгдөхөд: бутархай хадгалж, худалдах үед нийт үнийг дахин тооцоо.
+  function onArea(raw: string) {
+    const v = raw.replace(/[^\d.,]/g, "");
+    setAreaText(v);
+    if (!isRent) {
+      const a = areaNumOf(v);
+      const pm2 = Number(perM2Text) || 0;
+      if (pm2 > 0 && a > 0) set("price", Math.round(pm2 * a));
+    }
+  }
+  // Нийт үнэ гараар → 1м² үнийг буцаан тооцоо (хоёр чигийн sync).
+  function onTotal(raw: string) {
+    const n = num(raw.replace(/\D/g, ""));
+    set("price", n);
+    if (!isRent) {
+      const a = areaNumOf(areaText);
+      if (a > 0 && n > 0) setPerM2Text(String(Math.round(n / a)));
+    }
+  }
   const sel = "h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none";
 
   function submit(e: React.FormEvent) {
@@ -121,15 +154,32 @@ export function ListingForm({
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Field label="Өрөө"><Input type="number" inputMode="numeric" min={0} value={f.rooms || ""} onChange={(e) => set("rooms", num(e.target.value))} placeholder="3" /></Field>
-        <Field label="Талбай (м²)"><Input inputMode="decimal" value={areaText} onChange={(e) => setAreaText(e.target.value.replace(/[^\d.,]/g, ""))} placeholder="96.5" /></Field>
+        <Field label="Талбай (м²)"><Input inputMode="decimal" value={areaText} onChange={(e) => onArea(e.target.value)} placeholder="96.5" /></Field>
         <Field label="Давхар"><Input value={f.floor} onChange={(e) => set("floor", e.target.value)} placeholder="12/18" /></Field>
         <Field label="Зогсоол"><Input type="number" inputMode="numeric" min={0} value={f.parking || ""} onChange={(e) => set("parking", num(e.target.value))} placeholder="0" /></Field>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <Field label={isRent ? "Үнэ (₮/сар)" : "Үнэ (₮)"}><Input id="price" inputMode="numeric" required value={f.price ? f.price.toLocaleString("en-US") : ""} onChange={(e) => set("price", num(e.target.value.replace(/\D/g, "")))} placeholder={isRent ? "2,500,000" : "1,000,000"} /></Field>
-        <Field label="Ашиглалтын он"><Input type="number" inputMode="numeric" min={0} value={f.year || ""} onChange={(e) => set("year", num(e.target.value))} placeholder="2024" /></Field>
-      </div>
+      {isRent ? (
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Үнэ (₮/сар)"><Input id="price" inputMode="numeric" required value={f.price ? f.price.toLocaleString("en-US") : ""} onChange={(e) => set("price", num(e.target.value.replace(/\D/g, "")))} placeholder="2,500,000" /></Field>
+          <Field label="Ашиглалтын он"><Input type="number" inputMode="numeric" min={0} value={f.year || ""} onChange={(e) => set("year", num(e.target.value))} placeholder="2024" /></Field>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="1м² үнэ (₮)"><Input inputMode="numeric" value={perM2Text ? Number(perM2Text).toLocaleString("en-US") : ""} onChange={(e) => onPerM2(e.target.value)} placeholder="3,500,000" /></Field>
+            <Field label="Ашиглалтын он"><Input type="number" inputMode="numeric" min={0} value={f.year || ""} onChange={(e) => set("year", num(e.target.value))} placeholder="2024" /></Field>
+          </div>
+          <Field label="Нийт үнэ (₮)">
+            <Input id="price" inputMode="numeric" required value={f.price ? f.price.toLocaleString("en-US") : ""} onChange={(e) => onTotal(e.target.value)} placeholder="1,000,000" />
+            {Number(perM2Text) > 0 && areaNumOf(areaText) > 0 && (
+              <p className="mt-1 text-xs text-muted">
+                {Number(perM2Text).toLocaleString("en-US")}₮/м² × {areaText} м² = <b className="text-ink">{fmtMNT(f.price)}</b>
+              </p>
+            )}
+          </Field>
+        </>
+      )}
 
       {isRent && (
         <div className="space-y-3 rounded-2xl border border-line bg-surface-2 p-4">
