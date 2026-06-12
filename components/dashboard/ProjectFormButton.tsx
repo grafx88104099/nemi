@@ -28,6 +28,11 @@ export type ProjectInitial = {
 
 const sel = "h-10 w-full rounded-xl border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none";
 
+function toMoney(raw: string): number | null {
+  const digits = raw.replace(/\D/g, "");
+  return digits ? Number(digits) : null;
+}
+
 export function ProjectFormButton({
   mode,
   initial,
@@ -123,11 +128,11 @@ export function ProjectFormButton({
           <div className="grid grid-cols-2 gap-3">
             <label className="space-y-1">
               <span className="text-xs font-medium text-muted">Төсөв доод (₮)</span>
-              <input type="number" inputMode="numeric" className={sel} value={f.budgetMin ?? ""} onChange={(e) => set("budgetMin", e.target.value ? Number(e.target.value) : null)} placeholder="—" />
+              <input inputMode="numeric" className={sel} value={f.budgetMin != null ? f.budgetMin.toLocaleString("en-US") : ""} onChange={(e) => set("budgetMin", toMoney(e.target.value))} placeholder="2,300,000,000" />
             </label>
             <label className="space-y-1">
               <span className="text-xs font-medium text-muted">Төсөв дээд (₮)</span>
-              <input type="number" inputMode="numeric" className={sel} value={f.budgetMax ?? ""} onChange={(e) => set("budgetMax", e.target.value ? Number(e.target.value) : null)} placeholder="—" />
+              <input inputMode="numeric" className={sel} value={f.budgetMax != null ? f.budgetMax.toLocaleString("en-US") : ""} onChange={(e) => set("budgetMax", toMoney(e.target.value))} placeholder="—" />
             </label>
           </div>
           <div className="grid grid-cols-2 gap-3">
