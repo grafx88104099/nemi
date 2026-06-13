@@ -7,8 +7,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { validateTaskInput, validateComment, validateChecklistLabel, type TaskInput } from "@/lib/validation/task";
 import { TASK_STATUSES, type TaskStatus } from "@/lib/constants";
 
-export type { TaskInput };
-
 const SAVE_ERR = "Даалгавар хадгалахад алдаа гарлаа. Дахин оролдоно уу.";
 
 /** Дуудагчийн контекст — userId, role, officeId (profiles → agents fallback). */

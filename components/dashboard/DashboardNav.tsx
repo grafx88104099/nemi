@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Building2, Users, UserCircle, FolderKanban } from "lucide-react";
+import { LayoutDashboard, Building2, Users, UserCircle, FolderKanban, ClipboardList } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -11,6 +11,7 @@ const items = [
   ["/agent/listings", "Миний зар", Building2],
   ["/agent/leads", "Лид (CRM)", Users],
   ["/agent/projects", "Төслүүд", FolderKanban],
+  ["/agent/tasks", "Даалгавар", ClipboardList],
   ["/agent/profile", "Миний профайл", UserCircle],
 ] as const;
 
