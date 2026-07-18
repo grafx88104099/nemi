@@ -1,0 +1,17 @@
+<svg viewBox="0 0 324 324" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(162,162) scale(0.41) translate(-162,-162)">
+    <g transform="translate(-647.039012,-1592.302406) translate(1,2)">
+      <g transform="matrix(7.08041,0,0,7.08041,-6972.709199,-10396.509937)">
+        <g transform="matrix(-0.059534,0,0.027041,0.046809,1071.995945,1644.824353)">
+          <rect x="178.755" y="1274.149" width="127.915" height="479.788" fill="#FFA52E"/>
+        </g>
+        <g transform="matrix(0.059534,0,-0.025052,0.070214,1109.4707,1615.003436)">
+          <rect x="178.755" y="1274.149" width="127.915" height="479.788" fill="#FFA52E"/>
+        </g>
+        <g transform="matrix(0.059534,0,-0.025052,0.070214,1134.752825,1603.774204)">
+          <rect x="178.755" y="1274.149" width="127.915" height="479.788" fill="#FFA52E"/>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

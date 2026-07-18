@@ -1,0 +1,9 @@
+# Release гарын үсгийн тохиргооны ЗАГВАР.
+# Бодит утгуудаа android/key.properties файлд хуулж бөглөнө (git-д ОРДОГГҮЙ).
+# Keystore үүсгэх:
+#   keytool -genkey -v -keystore ~/nemi-upload.jks -keyalg RSA -keysize 2048 \
+#     -validity 10000 -alias upload
+storeFile=/ABSOLUTE/PATH/TO/nemi-upload.jks
+storePassword=CHANGE_ME
+keyAlias=upload
+keyPassword=CHANGE_ME

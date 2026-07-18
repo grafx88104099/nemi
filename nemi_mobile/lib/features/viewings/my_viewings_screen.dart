@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:nemi_mobile/core/auth.dart';
+import 'package:nemi_mobile/core/errors.dart';
 import 'package:nemi_mobile/core/format.dart';
 import 'package:nemi_mobile/core/image_url.dart';
 import 'package:nemi_mobile/core/theme.dart';
@@ -102,14 +103,14 @@ class _ViewingsBody extends ConsumerWidget {
     if (confirmed != true) return;
     try {
       await cancelViewing(v.id);
-    } catch (_) {
+    } catch (e) {
       // Хуучирсан мөр (зэрэг устсан/өөрчлөгдсөн) байж болзошгүй тул
       // жагсаалтыг дахин ачаална.
       ref.invalidate(myViewingsProvider);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Алдаа гарлаа. Дахин оролдоно уу.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(mnErrorMessage(e))));
       }
       return;
     }
@@ -117,7 +118,7 @@ class _ViewingsBody extends ConsumerWidget {
     if (context.mounted) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Үзэлт цуцлагдлаа')));
+      ).showSnackBar(const SnackBar(content: Text('Үзэлт цуцлагдлаа.')));
     }
   }
 
@@ -126,18 +127,17 @@ class _ViewingsBody extends ConsumerWidget {
     final async = ref.watch(myViewingsProvider);
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (_, _) => Center(
+      error: (e, _) => Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Алдаа гарлаа. Дахин оролдоно уу.',
-              style: TextStyle(color: kMuted),
-            ),
+            const Icon(Icons.wifi_off, size: 40, color: kMuted),
+            const SizedBox(height: 12),
+            Text(mnErrorMessage(e), style: const TextStyle(color: kMuted)),
             const SizedBox(height: 12),
             OutlinedButton(
               onPressed: () => ref.invalidate(myViewingsProvider),
-              child: const Text('Дахин ачаалах'),
+              child: const Text('Дахин оролдох'),
             ),
           ],
         ),
@@ -154,7 +154,7 @@ class _ViewingsBody extends ConsumerWidget {
                   Padding(
                     padding: EdgeInsets.symmetric(horizontal: 32),
                     child: Text(
-                      'Одоогоор товлосон үзэлт алга. Зар дээрээс «Үзэлт товлох» дарна уу.',
+                      'Товлосон үзэлт алга байна.\nЗар дээрээс «Үзэлт товлох» дарна уу.',
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 14, color: kMuted),
                     ),

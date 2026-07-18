@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:nemi_mobile/core/errors.dart';
 import 'package:nemi_mobile/core/supabase.dart';
 import 'package:nemi_mobile/features/auth/auth_validators.dart';
 
@@ -44,13 +45,17 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
         _loading = false;
         _done = true;
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error =
-            'Холбоос хүчингүй эсвэл хугацаа дууссан байж магадгүй. '
-            'Дахин оролдоно уу.';
+        // Сүлжээний алдааг «холбоос хүчингүй» гэж төөрөгдүүлэхгүй.
+        _error = mnErrorMessage(
+          e,
+          fallback:
+              'Холбоос хүчингүй эсвэл хугацаа дууссан байж магадгүй. '
+              'Дахин оролдоно уу.',
+        );
       });
     }
   }

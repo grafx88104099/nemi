@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:nemi_mobile/core/errors.dart';
 import 'package:nemi_mobile/core/supabase.dart';
 import 'package:nemi_mobile/features/auth/auth_validators.dart';
 
@@ -51,6 +52,13 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _password.text,
       );
       _popLoggedIn();
+    } on AuthRetryableFetchException {
+      // Сүлжээний алдаа — «нууц үг буруу» гэж ТӨӨРӨГДҮҮЛЭХГҮЙ.
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = kNetworkErrorMessage;
+      });
     } on AuthApiException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -65,11 +73,11 @@ class _LoginScreenState extends State<LoginScreen> {
         _loading = false;
         _error = 'И-мэйл эсвэл нууц үг буруу байна.';
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'Алдаа гарлаа. Сүлжээгээ шалгаад дахин оролдоно уу.';
+        _error = mnErrorMessage(e);
       });
     }
   }
@@ -103,7 +111,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Нэми дансаараа нэвтэрнэ үү',
+                      'Nemi бүртгэлээрээ нэвтэрнэ үү',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),

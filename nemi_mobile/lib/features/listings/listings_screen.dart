@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:nemi_mobile/core/analytics.dart';
 import 'package:nemi_mobile/core/constants.dart';
+import 'package:nemi_mobile/core/errors.dart';
 import 'package:nemi_mobile/core/theme.dart';
 import 'package:nemi_mobile/features/listings/filter_sheet.dart';
 import 'package:nemi_mobile/features/listings/listing_filters.dart';
@@ -102,7 +103,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
       if (!mounted || seq != _requestSeq) return;
       setState(() {
         _loading = false;
-        _error = 'Ачаалахад алдаа гарлаа';
+        _error = mnErrorMessage(e);
       });
     }
   }

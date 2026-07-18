@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:nemi_mobile/core/auth.dart';
+import 'package:nemi_mobile/core/errors.dart';
 import 'package:nemi_mobile/core/theme.dart';
 import 'package:nemi_mobile/features/favorites/favorites_providers.dart';
 import 'package:nemi_mobile/widgets/listing_card_tile.dart';
@@ -68,18 +69,17 @@ class _FavoritesBody extends ConsumerWidget {
     final async = ref.watch(favoriteListingsProvider);
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (_, _) => Center(
+      error: (e, _) => Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Алдаа гарлаа. Дахин оролдоно уу.',
-              style: TextStyle(color: kMuted),
-            ),
+            const Icon(Icons.wifi_off, size: 40, color: kMuted),
+            const SizedBox(height: 12),
+            Text(mnErrorMessage(e), style: const TextStyle(color: kMuted)),
             const SizedBox(height: 12),
             OutlinedButton(
               onPressed: () => ref.invalidate(favoriteListingsProvider),
-              child: const Text('Дахин ачаалах'),
+              child: const Text('Дахин оролдох'),
             ),
           ],
         ),
@@ -117,12 +117,12 @@ class _FavoritesListState extends ConsumerState<_FavoritesList> {
     setState(() => _rows.removeAt(index));
     try {
       await setFavorite(row.listingId, false);
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() => _rows.insert(index.clamp(0, _rows.length), row));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Алдаа гарлаа. Дахин оролдоно уу.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(mnErrorMessage(e))));
       return;
     }
     // ids + keep-alive жагсаалт хоёуланг нь шинэчилнэ — кэш дэх устгагдсан
@@ -132,7 +132,7 @@ class _FavoritesListState extends ConsumerState<_FavoritesList> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Хадгалснаас хаслаа'),
+        content: const Text('Хадгалснаас хаслаа.'),
         action: SnackBarAction(
           label: 'Буцаах',
           onPressed: () => _undo(row, index),
@@ -144,11 +144,11 @@ class _FavoritesListState extends ConsumerState<_FavoritesList> {
   Future<void> _undo(FavoriteRow row, int index) async {
     try {
       await setFavorite(row.listingId, true);
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Алдаа гарлаа. Дахин оролдоно уу.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(mnErrorMessage(e))));
       }
       return;
     }
@@ -171,7 +171,7 @@ class _FavoritesListState extends ConsumerState<_FavoritesList> {
             Icon(Icons.favorite_outline, size: 56, color: kMuted),
             SizedBox(height: 16),
             Text(
-              'Хадгалсан зар алга.\nЗар дээрх зүрхэн дээр дарж хадгалаарай.',
+              'Хадгалсан зар алга байна.\nЗар дээрх зүрхэн дээр дарж хадгалаарай.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 14, color: kMuted),
             ),

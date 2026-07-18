@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Release build-д ЗААВАЛ: debug/profile manifest-ууд INTERNET-ийг
+         (hot reload-д зориулж) өөрсдөө нэмдэг ч release-д энд зарлаагүй бол
+         апп сүлжээгүй гарна (Supabase холбогдохгүй). -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="nemi_mobile"
+        android:label="Nemi"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

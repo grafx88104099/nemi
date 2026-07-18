@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:nemi_mobile/core/constants.dart';
+import 'package:nemi_mobile/core/errors.dart';
 import 'package:nemi_mobile/core/theme.dart';
 import 'package:nemi_mobile/features/listings/listings_queries.dart';
 import 'package:nemi_mobile/features/listings/listings_screen.dart'
@@ -82,7 +83,6 @@ class HomeScreen extends ConsumerWidget {
                       onSubmitted: (v) => _go(context, {
                         if (v.trim().isNotEmpty) 'q': v.trim(),
                       }),
-                      onTap: null,
                       decoration: InputDecoration(
                         hintText: 'Дүүрэг, хороолол, зарын нэрээр хайх...',
                         prefixIcon: const Icon(Icons.search, size: 20),
@@ -160,9 +160,9 @@ class HomeScreen extends ConsumerWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 20),
                       child: Column(
                         children: [
-                          const Text(
-                            'Ачаалахад алдаа гарлаа',
-                            style: TextStyle(color: kMuted),
+                          Text(
+                            mnErrorMessage(e),
+                            style: const TextStyle(color: kMuted),
                           ),
                           const SizedBox(height: 8),
                           OutlinedButton(

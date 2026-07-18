@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -67,45 +68,51 @@ class UpdateRequiredScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Icon(Icons.system_update, size: 64, color: kBrand),
-              const SizedBox(height: 24),
-              const Text(
-                'Шинэчлэх шаардлагатай',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Таны ашиглаж буй хувилбар хуучирсан байна. '
-                'Үргэлжлүүлэхийн тулд аппаа шинэчилнэ үү.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 15, color: kMuted),
-              ),
-              const SizedBox(height: 32),
-              FilledButton(
-                onPressed: kAppStoreUrl.isEmpty
-                    ? null
-                    : () => launchUrl(
-                        Uri.parse(kAppStoreUrl),
-                        mode: LaunchMode.externalApplication,
-                      ),
-                child: const Text('App Store-оос шинэчлэх'),
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: () => launchUrl(
-                  Uri.parse(kPlayStoreUrl),
-                  mode: LaunchMode.externalApplication,
+        // Landscape/жижиг өндөрт overflow хийхгүй scroll wrapper.
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Icon(Icons.system_update, size: 64, color: kBrand),
+                const SizedBox(height: 24),
+                const Text(
+                  'Шинэчлэх шаардлагатай',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
                 ),
-                child: const Text('Google Play-ээс шинэчлэх'),
-              ),
-            ],
+                const SizedBox(height: 12),
+                const Text(
+                  'Таны ашиглаж буй хувилбар хуучирсан байна. '
+                  'Үргэлжлүүлэхийн тулд аппаа шинэчилнэ үү.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 15, color: kMuted),
+                ),
+                const SizedBox(height: 32),
+                // Платформ бүрт зөвхөн өөрийнх нь store-ийн товч (iOS дээр
+                // Google Play линк харуулах нь App Review 2.3.10 эрсдэлтэй).
+                if (defaultTargetPlatform == TargetPlatform.iOS)
+                  FilledButton(
+                    onPressed: kAppStoreUrl.isEmpty
+                        ? null
+                        : () => launchUrl(
+                            Uri.parse(kAppStoreUrl),
+                            mode: LaunchMode.externalApplication,
+                          ),
+                    child: const Text('App Store-оос шинэчлэх'),
+                  )
+                else
+                  FilledButton(
+                    onPressed: () => launchUrl(
+                      Uri.parse(kPlayStoreUrl),
+                      mode: LaunchMode.externalApplication,
+                    ),
+                    child: const Text('Google Play-ээс шинэчлэх'),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

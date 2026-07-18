@@ -104,6 +104,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                       ),
                     ),
                     IconButton(
+                      tooltip: 'Хаах',
                       onPressed: () => Navigator.of(context).pop(),
                       icon: const Icon(Icons.close),
                     ),

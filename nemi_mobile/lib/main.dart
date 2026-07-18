@@ -59,14 +59,20 @@ class _NemiAppState extends State<NemiApp> {
       return MaterialApp(
         title: 'Nemi',
         debugShowCheckedModeBanner: false,
+        // Зориуд light-only (§11): системийн dark mode UI-г урвуулахгүй.
         theme: buildTheme(),
+        darkTheme: buildTheme(),
+        themeMode: ThemeMode.light,
         home: const UpdateRequiredScreen(),
       );
     }
     return MaterialApp.router(
       title: 'Nemi',
       debugShowCheckedModeBanner: false,
+      // Зориуд light-only (§11): системийн dark mode UI-г урвуулахгүй.
       theme: buildTheme(),
+      darkTheme: buildTheme(),
+      themeMode: ThemeMode.light,
       routerConfig: router,
     );
   }

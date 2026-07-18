@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:nemi_mobile/core/auth.dart';
+import 'package:nemi_mobile/core/errors.dart';
 import 'package:nemi_mobile/core/supabase.dart';
 import 'package:nemi_mobile/core/theme.dart';
 import 'package:nemi_mobile/features/account/account_queries.dart';
@@ -217,8 +218,11 @@ class _AccountBody extends ConsumerWidget {
       await supa.functions.invoke('delete-account');
     } on FunctionException catch (e) {
       errorMessage = _functionErrorMessage(e);
-    } catch (_) {
-      errorMessage = 'Бүртгэл устгаж чадсангүй. Дахин оролдоно уу.';
+    } catch (e) {
+      errorMessage = mnErrorMessage(
+        e,
+        fallback: 'Бүртгэл устгаж чадсангүй. Дахин оролдоно уу.',
+      );
     } finally {
       rootNavigator.pop(); // progress dialog-ийг ЯМАГТ хаана
     }
@@ -389,11 +393,18 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
         phone: _phone.text.trim(),
       );
       if (mounted) Navigator.of(context).pop(true);
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Хадгалж чадсангүй. Дахин оролдоно уу.')),
+        SnackBar(
+          content: Text(
+            mnErrorMessage(
+              e,
+              fallback: 'Хадгалж чадсангүй. Дахин оролдоно уу.',
+            ),
+          ),
+        ),
       );
     }
   }

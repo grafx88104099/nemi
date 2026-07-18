@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:nemi_mobile/core/analytics.dart';
 import 'package:nemi_mobile/core/auth.dart';
+import 'package:nemi_mobile/core/errors.dart';
 import 'package:nemi_mobile/core/format.dart';
 import 'package:nemi_mobile/core/image_url.dart';
 import 'package:nemi_mobile/core/theme.dart';
@@ -45,7 +46,8 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
       appBar: AppBar(title: const Text('Зарын дэлгэрэнгүй')),
       body: detail.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, _) => _ErrorView(
+        error: (e, _) => _ErrorView(
+          message: mnErrorMessage(e),
           onRetry: () => ref.invalidate(listingDetailProvider(id)),
         ),
         data: (l) =>
@@ -94,9 +96,10 @@ class _NotFoundView extends StatelessWidget {
 }
 
 class _ErrorView extends StatelessWidget {
+  final String message;
   final VoidCallback onRetry;
 
-  const _ErrorView({required this.onRetry});
+  const _ErrorView({required this.message, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -104,10 +107,9 @@ class _ErrorView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text(
-            'Алдаа гарлаа. Дахин оролдоно уу.',
-            style: TextStyle(color: kMuted),
-          ),
+          const Icon(Icons.wifi_off, size: 40, color: kMuted),
+          const SizedBox(height: 12),
+          Text(message, style: const TextStyle(color: kMuted)),
           const SizedBox(height: 12),
           FilledButton(onPressed: onRetry, child: const Text('Дахин оролдох')),
         ],
@@ -699,27 +701,37 @@ class _AgentCard extends StatelessWidget {
 }
 
 /// Sticky доод мөр: зүрх · байршил · үзэлт товлох · залгах.
-class _BottomBar extends ConsumerWidget {
+class _BottomBar extends ConsumerStatefulWidget {
   final ListingDetail listing;
 
   const _BottomBar({required this.listing});
 
+  @override
+  ConsumerState<_BottomBar> createState() => _BottomBarState();
+}
+
+class _BottomBarState extends ConsumerState<_BottomBar> {
+  ListingDetail get listing => widget.listing;
+
+  /// Зүрхний хүсэлт явж буй эсэх — давхар дарахаас сэргийлнэ.
+  bool _favBusy = false;
+
   /// Зүрх: нэвтрэлт шаардана → own-row insert/delete → provider invalidate.
-  Future<void> _toggleFavorite(
-    BuildContext context,
-    WidgetRef ref,
-    bool isFav,
-  ) async {
+  Future<void> _toggleFavorite(BuildContext context, bool isFav) async {
+    if (_favBusy) return;
     if (!await ensureLoggedIn(context)) return;
+    setState(() => _favBusy = true);
     try {
       await setFavorite(listing.id, !isFav);
-    } catch (_) {
+    } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Алдаа гарлаа. Дахин оролдоно уу.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(mnErrorMessage(e))));
       }
       return;
+    } finally {
+      if (mounted) setState(() => _favBusy = false);
     }
     // Зүрхний төлөв (ids) БА «Хадгалсан» табын keep-alive жагсаалтыг хоёуланг
     // нь invalidate хийнэ — эс бөгөөс таб дахин нээхэд хуучин кэш харагдана.
@@ -728,14 +740,14 @@ class _BottomBar extends ConsumerWidget {
     if (context.mounted && !isFav) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Хадгалагдлаа')));
+      ).showSnackBar(const SnackBar(content: Text('Хадгалагдлаа.')));
     }
   }
 
   /// Үзэлт товлох: нэвтрэлт шаардана → booking sheet (§6 #3).
   /// Амжилтын snackbar-ыг sheet өөрөө үзүүлдэг («Хүсэлт илгээгдлээ») тул
   /// энд давхардуулж үзүүлэхгүй.
-  Future<void> _book(BuildContext context, WidgetRef ref) async {
+  Future<void> _book(BuildContext context) async {
     if (!await ensureLoggedIn(context)) return;
     if (!context.mounted) return;
     final booked = await showBookingSheet(
@@ -775,7 +787,7 @@ class _BottomBar extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final phone = listing.agent?.phone;
     // Нэвтрээгүй/ачаалж буй үед {} — зүрх хоосон харагдана.
     final favIds = ref.watch(favoriteIdsProvider).value ?? const <String>{};
@@ -793,7 +805,9 @@ class _BottomBar extends ConsumerWidget {
             children: [
               IconButton(
                 tooltip: isFav ? 'Хадгалснаас хасах' : 'Хадгалах',
-                onPressed: () => _toggleFavorite(context, ref, isFav),
+                onPressed: _favBusy
+                    ? null
+                    : () => _toggleFavorite(context, isFav),
                 icon: Icon(
                   isFav ? Icons.favorite : Icons.favorite_border,
                   color: isFav ? const Color(0xFFE11D48) : kMuted,
@@ -807,7 +821,7 @@ class _BottomBar extends ConsumerWidget {
               const SizedBox(width: 4),
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () => _book(context, ref),
+                  onPressed: () => _book(context),
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(0, 44),
                     shape: RoundedRectangleBorder(

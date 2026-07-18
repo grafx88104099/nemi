@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:nemi_mobile/core/auth.dart';
+import 'package:nemi_mobile/core/errors.dart';
 import 'package:nemi_mobile/core/theme.dart';
 import 'package:nemi_mobile/features/account/login_prompt.dart';
 import 'package:nemi_mobile/features/account/recently_queries.dart';
@@ -34,14 +35,13 @@ class _RecentlyList extends ConsumerWidget {
     final async = ref.watch(recentlyViewedProvider);
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (_, _) => Center(
+      error: (e, _) => Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Жагсаалт ачаалж чадсангүй.',
-              style: TextStyle(color: kMuted),
-            ),
+            const Icon(Icons.wifi_off, size: 40, color: kMuted),
+            const SizedBox(height: 12),
+            Text(mnErrorMessage(e), style: const TextStyle(color: kMuted)),
             const SizedBox(height: 12),
             FilledButton(
               onPressed: () => ref.invalidate(recentlyViewedProvider),

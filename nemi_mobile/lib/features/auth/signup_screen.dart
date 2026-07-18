@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:nemi_mobile/core/analytics.dart';
 import 'package:nemi_mobile/core/auth.dart';
+import 'package:nemi_mobile/core/errors.dart';
 import 'package:nemi_mobile/core/supabase.dart';
 import 'package:nemi_mobile/features/auth/auth_validators.dart';
 
@@ -80,11 +81,11 @@ class _SignupScreenState extends State<SignupScreen> {
             ? 'Энэ и-мэйл бүртгэлтэй байна.'
             : 'Бүртгэл амжилтгүй боллоо. Дахин оролдоно уу.';
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'Алдаа гарлаа. Сүлжээгээ шалгаад дахин оролдоно уу.';
+        _error = mnErrorMessage(e);
       });
     }
   }
