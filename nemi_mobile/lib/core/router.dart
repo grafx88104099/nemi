@@ -2,22 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:nemi_mobile/features/account/account_screen.dart';
+import 'package:nemi_mobile/features/account/recently_viewed_screen.dart';
+import 'package:nemi_mobile/features/auth/forgot_password_screen.dart';
+import 'package:nemi_mobile/features/auth/login_screen.dart';
+import 'package:nemi_mobile/features/auth/new_password_screen.dart';
+import 'package:nemi_mobile/features/auth/signup_screen.dart';
 import 'package:nemi_mobile/features/favorites/favorites_screen.dart';
 import 'package:nemi_mobile/features/home/home_screen.dart';
 import 'package:nemi_mobile/features/listing_detail/listing_detail_screen.dart';
 import 'package:nemi_mobile/features/listings/listing_filters.dart';
 import 'package:nemi_mobile/features/listings/listings_screen.dart';
+import 'package:nemi_mobile/features/viewings/my_viewings_screen.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 
 /// go_router — StatefulShellRoute bottom nav (Нүүр · Хайх · Хадгалсан · Профайл)
 /// + зарын дэлгэрэнгүй shell-ийн ДЭЭР push хийгддэг (parentNavigatorKey: root).
 ///
-/// DEFERRAL (Phase 0 → Phase 2): auth redirect guard-ийг ухамсартайгаар
-/// Phase 2 руу хойшлуулав — /login route хараахан байхгүй бөгөөд /favorites,
-/// /account нь өөрсдөө «Нэвтрэх шаардлагатай» placeholder үзүүлдэг тул одоо
-/// guard хийх юмгүй. Phase 2-т auth орж ирэхэд энд `redirect:` callback нэмж
-/// (supa.auth.currentSession == null && gated route → /login) залгана.
+/// ШИЙДВЭР (Phase 2, эцсийн): router түвшний `redirect:` guard-ийг ЗОРИУД
+/// хэрэгжүүлээгүй. Anonymous-first (§6) тул хамгаалагдсан дэлгэцүүд
+/// (/favorites, /viewings, /recently, /account) тус бүр өөрөө найрсаг
+/// in-screen LoginPrompt үзүүлж, ensureLoggedIn → sessionProvider rebuild-ээр
+/// үргэлжилдэг — dead-end байхгүй. Global redirect нэмбэл энэ prompt UX-ийг
+/// эвдэх тул нэмэхгүй байхаар шийдсэн (redirect бус LoginPrompt = design).
 final GoRouter router = GoRouter(
   navigatorKey: rootNavigatorKey,
   initialLocation: '/',
@@ -76,6 +83,40 @@ final GoRouter router = GoRouter(
           ],
         ),
       ],
+    ),
+    // ---- Auth (Phase 2) — shell-ийн ГАДНА, root navigator дээр push хийгддэг.
+    // LoginScreen амжилттай нэвтэрмэгц pop хийдэг тул ensureLoggedIn
+    // (core/auth.dart) push-ээ await хийгээд session-ээ дахин шалгадаг.
+    GoRoute(
+      path: '/login',
+      name: 'login',
+      builder: (context, state) => const LoginScreen(),
+    ),
+    GoRoute(
+      path: '/signup',
+      name: 'signup',
+      builder: (context, state) => const SignupScreen(),
+    ),
+    GoRoute(
+      path: '/forgot-password',
+      name: 'forgot-password',
+      builder: (context, state) => const ForgotPasswordScreen(),
+    ),
+    GoRoute(
+      path: '/new-password',
+      name: 'new-password',
+      builder: (context, state) => const NewPasswordScreen(),
+    ),
+    // ---- Хамгаалагдсан жагсаалтууд (дэлгэцүүдийг FavVie/Account agent эзэмшинэ).
+    GoRoute(
+      path: '/viewings',
+      name: 'viewings',
+      builder: (context, state) => const MyViewingsScreen(),
+    ),
+    GoRoute(
+      path: '/recently',
+      name: 'recently',
+      builder: (context, state) => const RecentlyViewedScreen(),
     ),
   ],
 );

@@ -155,25 +155,25 @@ class HomeScreen extends ConsumerWidget {
                 error: (e, st) {
                   debugPrint('FEATURED ERROR: $e\n$st');
                   return _railSection(
-                  context,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Column(
-                      children: [
-                        const Text(
-                          'Ачаалахад алдаа гарлаа',
-                          style: TextStyle(color: kMuted),
-                        ),
-                        const SizedBox(height: 8),
-                        OutlinedButton(
-                          onPressed: () =>
-                              ref.invalidate(featuredListingsProvider),
-                          child: const Text('Дахин оролдох'),
-                        ),
-                      ],
+                    context,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Column(
+                        children: [
+                          const Text(
+                            'Ачаалахад алдаа гарлаа',
+                            style: TextStyle(color: kMuted),
+                          ),
+                          const SizedBox(height: 8),
+                          OutlinedButton(
+                            onPressed: () =>
+                                ref.invalidate(featuredListingsProvider),
+                            child: const Text('Дахин оролдох'),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                );
+                  );
                 },
                 data: (items) => items.isEmpty
                     ? const SizedBox.shrink()

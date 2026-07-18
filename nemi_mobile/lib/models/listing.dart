@@ -125,6 +125,10 @@ class ListingDetail {
   final int? rentAdvanceMonths;
   final int? rentDepositMonths;
   final String? createdAt;
+
+  /// Түүхий FK багана (select '*' тул ирдэг). Viewings insert-д ЗААВАЛ
+  /// хэрэгтэй — null agent_id-тай хүсэлт агентад харагдахгүй (§6 #3).
+  final String? agentId;
   final AgentInfo? agent; // NULLABLE
   final List<ListingPhoto> photos; // sort_order-оор эрэмбэлэгдсэн
   final List<AiValuation> valuations;
@@ -153,6 +157,7 @@ class ListingDetail {
     this.rentAdvanceMonths,
     this.rentDepositMonths,
     this.createdAt,
+    this.agentId,
     this.agent,
     this.photos = const [],
     this.valuations = const [],
@@ -192,6 +197,7 @@ class ListingDetail {
       rentAdvanceMonths: (json['rent_advance_months'] as num?)?.toInt(),
       rentDepositMonths: (json['rent_deposit_months'] as num?)?.toInt(),
       createdAt: json['created_at'] as String?,
+      agentId: json['agent_id'] as String?,
       agent: json['agent'] is Map<String, dynamic>
           ? AgentInfo.fromJson(json['agent'] as Map<String, dynamic>)
           : null,

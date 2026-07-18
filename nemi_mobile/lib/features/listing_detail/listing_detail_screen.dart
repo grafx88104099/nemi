@@ -4,23 +4,42 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:nemi_mobile/core/analytics.dart';
+import 'package:nemi_mobile/core/auth.dart';
 import 'package:nemi_mobile/core/format.dart';
 import 'package:nemi_mobile/core/image_url.dart';
 import 'package:nemi_mobile/core/theme.dart';
+import 'package:nemi_mobile/features/account/recently_queries.dart';
+import 'package:nemi_mobile/features/favorites/favorites_providers.dart';
 import 'package:nemi_mobile/features/listing_detail/detail_queries.dart';
 import 'package:nemi_mobile/features/listing_detail/detail_view_logic.dart';
+import 'package:nemi_mobile/features/viewings/booking_sheet.dart';
+import 'package:nemi_mobile/features/viewings/viewings_queries.dart';
 import 'package:nemi_mobile/models/agent.dart';
 import 'package:nemi_mobile/models/listing.dart';
 
 /// Зарын дэлгэрэнгүй дэлгэц (§6 #3). Deep-link аюулгүй: зар олдохгүй/идэвхгүй
 /// бол crash хийхгүй «Зар олдсонгүй» төлөв үзүүлнэ.
-class ListingDetailScreen extends ConsumerWidget {
+class ListingDetailScreen extends ConsumerStatefulWidget {
   final String id;
 
   const ListingDetailScreen({super.key, required this.id});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ListingDetailScreen> createState() =>
+      _ListingDetailScreenState();
+}
+
+class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Сүүлд үзсэн — fire-and-forget upsert; нэвтрээгүй бол чимээгүй no-op.
+    recordView(widget.id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final id = widget.id;
     final detail = ref.watch(listingDetailProvider(id));
     return Scaffold(
       appBar: AppBar(title: const Text('Зарын дэлгэрэнгүй')),
@@ -680,15 +699,53 @@ class _AgentCard extends StatelessWidget {
 }
 
 /// Sticky доод мөр: зүрх · байршил · үзэлт товлох · залгах.
-class _BottomBar extends StatelessWidget {
+class _BottomBar extends ConsumerWidget {
   final ListingDetail listing;
 
   const _BottomBar({required this.listing});
 
-  void _phase2Snack(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Нэвтрэх шаардлагатай (Phase 2)')),
+  /// Зүрх: нэвтрэлт шаардана → own-row insert/delete → provider invalidate.
+  Future<void> _toggleFavorite(
+    BuildContext context,
+    WidgetRef ref,
+    bool isFav,
+  ) async {
+    if (!await ensureLoggedIn(context)) return;
+    try {
+      await setFavorite(listing.id, !isFav);
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Алдаа гарлаа. Дахин оролдоно уу.')),
+        );
+      }
+      return;
+    }
+    // Зүрхний төлөв (ids) БА «Хадгалсан» табын keep-alive жагсаалтыг хоёуланг
+    // нь invalidate хийнэ — эс бөгөөс таб дахин нээхэд хуучин кэш харагдана.
+    ref.invalidate(favoriteIdsProvider);
+    ref.invalidate(favoriteListingsProvider);
+    if (context.mounted && !isFav) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Хадгалагдлаа')));
+    }
+  }
+
+  /// Үзэлт товлох: нэвтрэлт шаардана → booking sheet (§6 #3).
+  /// Амжилтын snackbar-ыг sheet өөрөө үзүүлдэг («Хүсэлт илгээгдлээ») тул
+  /// энд давхардуулж үзүүлэхгүй.
+  Future<void> _book(BuildContext context, WidgetRef ref) async {
+    if (!await ensureLoggedIn(context)) return;
+    if (!context.mounted) return;
+    final booked = await showBookingSheet(
+      context,
+      listingId: listing.id,
+      agentId: listing.agentId,
     );
+    // Шинэ товлолт «Миний үзэлтүүд»-ийн keep-alive кэшэд шууд орж ирэхийн
+    // тулд амжилттай товлолтын дараа жагсаалтыг invalidate хийнэ.
+    if (booked) ref.invalidate(myViewingsProvider);
   }
 
   Future<void> _openMap(BuildContext context) async {
@@ -713,13 +770,16 @@ class _BottomBar extends StatelessWidget {
   }
 
   Future<void> _call(String phone) async {
-    logEvent('call_tap', {'listing_id': listing.id}); // fire-and-forget (§9)
+    logEvent(kEvCallTap, {'listing_id': listing.id}); // fire-and-forget (§9)
     await launchUrl(Uri(scheme: 'tel', path: phone));
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final phone = listing.agent?.phone;
+    // Нэвтрээгүй/ачаалж буй үед {} — зүрх хоосон харагдана.
+    final favIds = ref.watch(favoriteIdsProvider).value ?? const <String>{};
+    final isFav = favIds.contains(listing.id);
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -732,9 +792,12 @@ class _BottomBar extends StatelessWidget {
           child: Row(
             children: [
               IconButton(
-                tooltip: 'Хадгалах',
-                onPressed: () => _phase2Snack(context),
-                icon: const Icon(Icons.favorite_border, color: kMuted),
+                tooltip: isFav ? 'Хадгалснаас хасах' : 'Хадгалах',
+                onPressed: () => _toggleFavorite(context, ref, isFav),
+                icon: Icon(
+                  isFav ? Icons.favorite : Icons.favorite_border,
+                  color: isFav ? const Color(0xFFE11D48) : kMuted,
+                ),
               ),
               IconButton(
                 tooltip: 'Байршил',
@@ -744,7 +807,7 @@ class _BottomBar extends StatelessWidget {
               const SizedBox(width: 4),
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () => _phase2Snack(context),
+                  onPressed: () => _book(context, ref),
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(0, 44),
                     shape: RoundedRectangleBorder(
