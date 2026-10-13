@@ -34,10 +34,14 @@ export function LocationPicker({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tokenRef = useRef<any>(null);
   const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   const initialRef = useRef<LatLng | null>(lat != null && lng != null ? { lat, lng } : null);
-  const [picked, setPicked] = useState<LatLng | null>(initialRef.current);
+  const [picked, setPicked] = useState<LatLng | null>(() =>
+    lat != null && lng != null ? { lat, lng } : null
+  );
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [activeIdx, setActiveIdx] = useState(-1);
@@ -139,7 +143,6 @@ export function LocationPicker({
           sessionToken: tokenRef.current,
         });
         if (cancelled) return;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const list: Suggestion[] = (res ?? [])
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           .filter((s: any) => s.placePrediction)

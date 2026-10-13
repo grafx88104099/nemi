@@ -11,7 +11,6 @@ import { rentTermCode, rentTermLabel } from "@/lib/constants";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
 import { FavoriteButton } from "@/components/listings/FavoriteButton";
 import { BookViewingButton } from "@/components/listings/BookViewingButton";
 import { ListingLocationMap } from "@/components/listings/ListingLocationMap";

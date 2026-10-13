@@ -30,7 +30,9 @@ export function Modal({
   // хамаарлаас гаргаж, ref-ээр хамгийн сүүлийн утгыг уншина. Эс бөгөөс товчлуур
   // дарах бүрт эффект дахин ажиллаж фокус эхний талбар руу үсэрнэ.
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;

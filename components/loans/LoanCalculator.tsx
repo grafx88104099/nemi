@@ -76,7 +76,7 @@ export function LoanCalculator() {
 
           {/* Жагсаалт */}
           <div className="space-y-3">
-            {result.quotes.map((q, i) => {
+            {result.quotes.map((q) => {
               const isBest = best != null && q === best;
               return (
                 <div

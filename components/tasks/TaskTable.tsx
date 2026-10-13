@@ -3,7 +3,7 @@ import { MessageSquare, AlertTriangle } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { fmtDateTime, relativeDate } from "@/lib/format";
+import { fmtDateTime } from "@/lib/format";
 import { TASK_PRIORITY_LABEL } from "@/lib/constants";
 import type { TaskRow } from "@/lib/queries-tasks";
 import { TaskStatusSelect } from "./TaskStatusSelect";
