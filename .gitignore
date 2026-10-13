@@ -47,3 +47,7 @@ next-env.d.ts
 /test-results
 /playwright-report
 /playwright/.cache
+
+# PMC-ийн хяналттай дотоод баримт (ToR) ба түүний шууд хураангуй — нийтийн репод орохгүй
+/docs/crm/PMC-CRM-TOR-001-v1.0.txt
+/docs/crm/spec/

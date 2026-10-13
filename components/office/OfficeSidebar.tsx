@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, UserCheck, Home, Settings, LogOut, ExternalLink, BookOpen, ClipboardList, FolderKanban } from "lucide-react";
+import { LayoutDashboard, UserCheck, Home, Settings, LogOut, ExternalLink, BookOpen, ClipboardList, FolderKanban, Briefcase } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/brand/Logo";
@@ -13,6 +13,7 @@ const items = [
   { href: "/office/about", label: "Танилцуулга", icon: BookOpen },
   { href: "/office/agents", label: "Агентууд", icon: UserCheck },
   { href: "/office/tasks", label: "Даалгавар", icon: ClipboardList },
+  { href: "/office/crm", label: "CRM", icon: Briefcase },
   { href: "/office/projects", label: "Төсөл", icon: FolderKanban },
   { href: "/office/listings", label: "Зарууд", icon: Home },
   { href: "/office/settings", label: "Тохиргоо", icon: Settings },

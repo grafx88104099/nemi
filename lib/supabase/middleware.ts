@@ -64,6 +64,27 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // CRM §1.1(г) — эрхийн тэлэлтийн хаалт: panel_admin=false CRM ажилтанд оффис
+  // панелийн CRM-ээс ГАДУУРХ хуудсууд хаалттай → /office/crm руу буцаана.
+  // (Бичих эрх нь DB түвшинд crm_is_panel_admin() policy-уудаар аль хэдийн
+  // нарийссан — энэ нь навигацийн давхар хаалт. crm_staff хүснэгт байхгүй /
+  // мөргүй / panel_admin=true бол хуучин зан төлөв хэвээр.)
+  const inCrmArea = path === "/office/crm" || path.startsWith("/office/crm/");
+  if (user && inOfficeArea && !inCrmArea && path !== "/office/login") {
+    const { data: crmStaff } = await supabase
+      .from("crm_staff")
+      .select("panel_admin")
+      .eq("profile_id", user.id)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (crmStaff && crmStaff.panel_admin === false) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/office/crm";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+  }
+
   // Агентын талбар (/agent, /agent/*) — агентын нэвтрэлт (/agent/login).
   // ТЭМДЭГЛЭЛ: "/agent/" (зураастай) ашиглана — нийтийн "/agents"-ийг барихгүй.
   const inAgentArea = path === "/agent" || path.startsWith("/agent/");
