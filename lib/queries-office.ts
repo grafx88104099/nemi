@@ -43,6 +43,20 @@ export async function getMyOffice() {
   };
 }
 
+/** Өгсөн заруудаас нэг зураг (үндсэн нь түрүүлж) — тамганы урьдчилсан харагдацад. */
+export async function getSampleListingPhoto(listingIds: string[]): Promise<string | null> {
+  if (!listingIds.length) return null;
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("listing_photos")
+    .select("url")
+    .in("listing_id", listingIds.slice(0, 30))
+    .order("is_primary", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data?.url as string | undefined) ?? null;
+}
+
 /** Оффисын админ өөрийн оффисын ТУХАЙН агентыг удирдах дэлгэрэнгүй. */
 export async function getOfficeAgent(agentId: string) {
   const supabase = await createClient();

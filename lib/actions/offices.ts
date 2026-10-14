@@ -149,6 +149,25 @@ export async function updateMyOffice(input: {
   return { ok: true };
 }
 
+/** Оффисын агентуудын зарын зурагт лого тамга дарах эсэхийг асаах/унтраах. */
+export async function updateMyOfficeWatermark(enabled: boolean) {
+  const ctx = await requireRole("office_admin");
+  if ("error" in ctx) return ctx;
+  const officeId = ctx.profile?.office_id;
+  if (!officeId) return { error: "no_office" };
+  const { error } = await ctx.supabase
+    .from("offices")
+    .update({ watermark_enabled: enabled })
+    .eq("id", officeId);
+  if (error) {
+    console.error("updateMyOfficeWatermark:", error.message);
+    return { error: "Тохиргоо хадгалахад алдаа гарлаа. Дахин оролдоно уу." };
+  }
+  revalidatePath("/office/settings");
+  revalidatePath("/agent/listings", "layout");
+  return { ok: true };
+}
+
 /** Оффисын баялаг танилцуулга — лого/ковер, сошл, тусгай чиглэл, бүс г.м. */
 export async function updateMyOfficeAbout(input: {
   description: string;

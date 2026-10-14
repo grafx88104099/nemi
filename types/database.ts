@@ -74,6 +74,7 @@ export type Database = {
           instagram: string | null;
           specialties: string[];
           service_areas: string[];
+          watermark_enabled: boolean;
           created_at: string;
         };
         Insert: {
@@ -99,6 +100,7 @@ export type Database = {
           instagram?: string | null;
           specialties?: string[];
           service_areas?: string[];
+          watermark_enabled?: boolean;
           created_at?: string;
         };
         Update: {
@@ -124,6 +126,7 @@ export type Database = {
           instagram?: string | null;
           specialties?: string[];
           service_areas?: string[];
+          watermark_enabled?: boolean;
           created_at?: string;
         };
         Relationships: [];

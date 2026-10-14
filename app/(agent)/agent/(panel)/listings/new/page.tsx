@@ -6,6 +6,7 @@ import { getMyAgent } from "@/lib/queries-agent";
 import { Card, CardBody } from "@/components/ui/card";
 import { ListingForm } from "@/components/dashboard/ListingForm";
 import { DEAL_TYPE_LABEL, type DealType } from "@/lib/constants";
+import { watermarkFromOffice } from "@/lib/watermark";
 
 export default async function NewListingPage({
   searchParams,
@@ -83,7 +84,7 @@ export default async function NewListingPage({
       </h1>
       <Card className="mt-5">
         <CardBody>
-          <ListingForm initial={{ deal_type: dealType }} />
+          <ListingForm initial={{ deal_type: dealType }} watermark={watermarkFromOffice(agent.office)} />
         </CardBody>
       </Card>
     </div>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Upload, X } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
+import { applyWatermark, type WatermarkConfig } from "@/lib/watermark";
 
 const MAX_PHOTOS = 20;
 const MAX_SIZE = 8 * 1024 * 1024; // 8MB
@@ -12,11 +13,15 @@ const ALLOWED_EXT = ["jpg", "jpeg", "png", "webp", "gif", "avif"];
 export function MultiPhotoUpload({
   value,
   onChange,
+  watermark = null,
 }: {
   value: string[];
   onChange: (urls: string[]) => void;
+  /** Оффис тамга асаасан бол зураг бүрд лого тамга дарж байж upload хийнэ. */
+  watermark?: WatermarkConfig | null;
 }) {
-  const [uploading, setUploading] = useState(false);
+  const [stage, setStage] = useState<"idle" | "stamping" | "uploading">("idle");
+  const uploading = stage !== "idle";
   const [err, setErr] = useState<string | null>(null);
   const full = value.length >= MAX_PHOTOS;
 
@@ -40,11 +45,27 @@ export function MultiPhotoUpload({
     }
     if (!files.length) { setErr(problems.join("; ")); return; }
 
-    setUploading(true);
+    // Тамга: санах ой дүүргэхгүйн тулд зургийг нэг нэгээр нь боловсруулна.
+    // Тамга дарж чадаагүй зургийг тамгагүйгээр upload хийхгүй — алгасна.
+    let ready = files;
+    if (watermark) {
+      setStage("stamping");
+      ready = [];
+      for (const file of files) {
+        try {
+          ready.push(await applyWatermark(file, watermark));
+        } catch {
+          problems.push(`${file.name}: тамга дарж чадсангүй (формат дэмжигдэхгүй) — алгассан`);
+        }
+      }
+      if (!ready.length) { setErr(problems.join("; ")); setStage("idle"); return; }
+    }
+
+    setStage("uploading");
     const supabase = createClient();
     // Зэрэг upload хийгээд дарааллыг хадгална (index map).
     const results = await Promise.all(
-      files.map(async (file, i) => {
+      ready.map(async (file, i) => {
         const raw = (file.name.split(".").pop() ?? "").toLowerCase();
         const ext = ALLOWED_EXT.includes(raw) ? raw : "jpg";
         const path = `${Date.now()}-${i}-${Math.round(Math.random() * 1e6)}.${ext}`;
@@ -58,7 +79,7 @@ export function MultiPhotoUpload({
     if (failCount) problems.push(`${failCount} зураг хуулж чадсангүй`);
     if (problems.length) setErr(problems.join("; "));
     if (urls.length) onChange([...value, ...urls]);
-    setUploading(false);
+    setStage("idle");
   }
 
   return (
@@ -83,13 +104,20 @@ export function MultiPhotoUpload({
         {!full && (
           <label className="flex h-24 w-32 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-line text-muted hover:border-brand-300 hover:text-brand-600">
             <Upload className="size-5" />
-            <span className="text-xs">{uploading ? "Хуулж байна..." : "Зураг нэмэх"}</span>
+            <span className="text-xs">
+              {stage === "stamping" ? "Тамга дарж байна..." : stage === "uploading" ? "Хуулж байна..." : "Зураг нэмэх"}
+            </span>
             <input type="file" accept="image/*" multiple className="hidden" onChange={onFiles} disabled={uploading} />
           </label>
         )}
       </div>
       {err && <p className="text-xs text-danger">{err}</p>}
       <p className="text-xs text-subtle">Эхний зураг үндсэн зураг болно. ({value.length}/{MAX_PHOTOS}, файл бүр ≤8MB)</p>
+      {watermark && (
+        <p className="text-xs text-subtle">
+          Шинээр оруулах зураг бүрд «{watermark.label}»-ийн лого бүдэг тамга болж автоматаар дарагдана.
+        </p>
+      )}
     </div>
   );
 }

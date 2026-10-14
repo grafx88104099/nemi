@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 
-import { getMyListing } from "@/lib/queries-agent";
+import { getMyAgent, getMyListing } from "@/lib/queries-agent";
 import { getListingPoint } from "@/lib/queries";
+import { watermarkFromOffice } from "@/lib/watermark";
 import { Card, CardBody } from "@/components/ui/card";
 import { ListingForm } from "@/components/dashboard/ListingForm";
 import { AiValuateButton } from "@/components/dashboard/AiValuateButton";
@@ -15,7 +16,7 @@ export default async function EditListingPage({
   const { id } = await params;
   const l = await getMyListing(id);
   if (!l) notFound();
-  const point = await getListingPoint(id);
+  const [point, agent] = await Promise.all([getListingPoint(id), getMyAgent()]);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -27,6 +28,7 @@ export default async function EditListingPage({
         <CardBody>
           <ListingForm
             id={id}
+            watermark={watermarkFromOffice(agent?.office)}
             initial={{
               title: l.title as string,
               type: (l.type as string) ?? "",

@@ -13,15 +13,18 @@ import {
   RENT_TERM_PRESETS, rentTermCode, rentTermLabel, PROPERTY_TYPES, DISTRICTS, type DealType,
 } from "@/lib/constants";
 import { fmtMNT } from "@/lib/format";
+import type { WatermarkConfig } from "@/lib/watermark";
 
 const TYPES = PROPERTY_TYPES;
 
 export function ListingForm({
   id,
   initial,
+  watermark = null,
 }: {
   id?: string;
   initial?: Partial<ListingInput>;
+  watermark?: WatermarkConfig | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -251,7 +254,7 @@ export function ListingForm({
       </Field>
 
       <Field label="Зураг (олон)">
-        <MultiPhotoUpload value={photos} onChange={setPhotos} />
+        <MultiPhotoUpload value={photos} onChange={setPhotos} watermark={watermark} />
       </Field>
 
       <Field label="Төлөв">
