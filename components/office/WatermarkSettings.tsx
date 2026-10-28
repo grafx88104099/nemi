@@ -4,9 +4,10 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ImageOff } from "lucide-react";
 
-import { updateMyOfficeWatermark } from "@/lib/actions/offices";
+import { updateMyOfficeWatermark, updateMyOfficeWatermarkLogo } from "@/lib/actions/offices";
 import { applyWatermark } from "@/lib/watermark";
 import { cn } from "@/lib/utils";
+import { OfficeImageUpload } from "@/components/office/OfficeImageUpload";
 
 /** Урьдчилсан харагдацын эх зураг: оффисын зарын зураг, эс бөгөөс зурсан жишээ. */
 async function sampleFile(url: string | null): Promise<File> {
@@ -45,17 +46,23 @@ async function sampleFile(url: string | null): Promise<File> {
 
 export function WatermarkSettings({
   initialEnabled,
-  logoUrl,
+  officeLogoUrl,
+  initialStampLogoUrl,
   label,
   samplePhotoUrl,
 }: {
   initialEnabled: boolean;
-  logoUrl: string | null;
+  /** Оффисын үндсэн лого — тусгай тамганы лого байхгүй үед хэрэглэгдэнэ. */
+  officeLogoUrl: string | null;
+  /** Зөвхөн тамгад хэрэглэх лого (жишээ нь цагаан хувилбар). */
+  initialStampLogoUrl: string | null;
   label: string;
   samplePhotoUrl: string | null;
 }) {
   const router = useRouter();
   const [enabled, setEnabled] = useState(initialEnabled);
+  const [stampLogoUrl, setStampLogoUrl] = useState(initialStampLogoUrl ?? "");
+  const logoUrl = stampLogoUrl || officeLogoUrl;
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -79,6 +86,21 @@ export function WatermarkSettings({
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [samplePhotoUrl, logoUrl, label]);
+
+  function changeStampLogo(url: string) {
+    const prev = stampLogoUrl;
+    setErr(null);
+    setStampLogoUrl(url);
+    startTransition(async () => {
+      const r = await updateMyOfficeWatermarkLogo(url);
+      if ("error" in r && r.error) {
+        setStampLogoUrl(prev);
+        setErr("Тамганы лого хадгалахад алдаа гарлаа. Дахин оролдоно уу.");
+        return;
+      }
+      router.refresh();
+    });
+  }
 
   function toggle() {
     const next = !enabled;
@@ -124,6 +146,20 @@ export function WatermarkSettings({
             )}
           />
         </button>
+      </div>
+
+      <div className="flex flex-wrap items-start gap-4">
+        <OfficeImageUpload
+          label="Тамганы лого"
+          variant="square"
+          previewClassName="bg-slate-700 object-contain p-2"
+          value={stampLogoUrl}
+          onChange={changeStampLogo}
+        />
+        <p className="max-w-sm pt-7 text-xs text-subtle">
+          Тамгад тусдаа лого (жишээ нь тунгалаг дэвсгэртэй цагаан PNG) оруулж болно. Оруулаагүй бол оффисын
+          үндсэн лого хэрэглэгдэнэ. Сайт дээрх оффисын лого өөрчлөгдөхгүй.
+        </p>
       </div>
 
       {!logoUrl && (

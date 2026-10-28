@@ -12,8 +12,13 @@
 //   node scripts/watermark-backfill.mjs --office <id> --apply --manifest <file.json>
 //   node scripts/watermark-backfill.mjs --rollback <file.json>
 //
+// Тамганы лого солигдсон бол: өмнөх тамгатай зургийг эх зургаас нь шинэ логоор
+// дахин үүсгэхийн тулд өмнөх manifest-уудыг --originals <a.json,b.json> гэж өгнө.
+// Лого бүрийн тамга wm/<логоны хэш>/ дор тусдаа хадгалагдана (CDN кэш хуучрахгүй).
+//
 // .env.local: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL
 // ============================================================
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -112,22 +117,22 @@ async function markLuma(mark) {
 
 /**
  * Тамга байгаа эсэхийг илрүүлнэ. Тамга дарахад тэмдэг доорх пиксел яг
- * `(1−α)·эх + α·тэмдэг` болдог. Тэмдгийн ирмэгийн хоёр талын хос пикселийг
- * (k px зайтай, дотор нь бүрэн тэмдэг, гадна нь бүрэн тэмдэггүй) харьцуулахад
- * эх зураг ирмэг даяар бараг ижил тул (дотор − α·тэмдэг)/гадна харьцаа
- * тамгатай зурагт ≈ 1−α (0.65), тамгагүй зурагт ≈ 1 гарна. Байшингийн шугам
- * зэрэг ирмэгтэй санамсаргүй давхцсан хосыг медиан шүүнэ.
+ * `дотор = (1−α)·эх + α·тэмдэг` болдог. Тэмдгийн ирмэгийн хоёр талын хос
+ * пикселийг (k px зайтай, дотор нь бүрэн тэмдэг, гадна нь бүрэн тэмдэггүй)
+ * харьцуулахад эх зураг ирмэг даяар бараг ижил (эх ≈ гадна) тул тунгалагийг
+ * шууд тооцож болно: α = (гадна − дотор) / (гадна − тэмдэг). Тамгатай зурагт
+ * α ≈ 0.35, тамгагүйд ≈ 0 — тэмдэг бараан ч, цагаан ч ижил ажиллана.
+ * Байшингийн шугам зэрэг ирмэгтэй санамсаргүй давхцсан хосыг медиан шүүнэ.
  */
 async function stampScore(buf, mark) {
   const { data, info } = await sharp(buf).rotate().greyscale().raw().toBuffer({ resolveWithObject: true });
   const W = info.width, H = info.height;
   const r = stampRect(W, H, mark.w, mark.h);
-  if (r.w < 16 || r.h < 16) return { ratio: 1, pairs: 0 };
+  if (r.w < 16 || r.h < 16) return { alpha: 0, pairs: 0 };
   const m = await sharp(mark.png).resize(r.w, r.h, { fit: "fill" }).ensureAlpha().extractChannel(3).raw().toBuffer();
-  const offset = WATERMARK_OPACITY * mark.luma;
   const k = Math.max(3, Math.round(r.w / 120));
   const maskAt = (x, y) => (x < 0 || y < 0 || x >= r.w || y >= r.h ? 0 : m[y * r.w + x]);
-  const ratios = [];
+  const alphas = [];
   for (let y = 0; y < r.h; y++) {
     for (let x = 0; x < r.w; x++) {
       if (m[y * r.w + x] < 245) continue;
@@ -136,25 +141,23 @@ async function stampScore(buf, mark) {
         const gx = r.x + x + dx, gy = r.y + y + dy;
         if (gx < 0 || gy < 0 || gx >= W || gy >= H) continue;
         const outV = data[gy * W + gx];
-        if (outV < 40) continue; // харанхуйд харьцаа найдваргүй
-        ratios.push((data[(r.y + y) * W + r.x + x] - offset) / outV);
+        const span = outV - mark.luma;
+        if (Math.abs(span) < 40) continue; // эх нь тэмдгийн өнгөтэй ойр — α тодорхойгүй
+        alphas.push((outV - data[(r.y + y) * W + r.x + x]) / span);
       }
     }
   }
-  if (!ratios.length) return { ratio: 1, pairs: 0 };
-  ratios.sort((a, b) => a - b);
-  return { ratio: ratios[Math.floor(ratios.length / 2)], pairs: ratios.length };
+  if (!alphas.length) return { alpha: 0, pairs: 0 };
+  alphas.sort((a, b) => a - b);
+  return { alpha: alphas[Math.floor(alphas.length / 2)], pairs: alphas.length };
 }
 
-/**
- * Хангалттай хос байх үед медиан харьцаа 0.72-оос доош бол тамгатай. Манай тамга
- * 0.647–0.658 өгдөг; PMC-ийн 771 тамгагүй зургийн хамгийн бага нь 0.795 байсан
- * (мод, бараан модон эдлэл зэрэг бүдүүлэг бүтэцтэй зураг).
- */
+/** Хангалттай хос байх үед медиан α нь 0 (тамгагүй) ба 0.35-ын (тамгатай) дунджаас дээш бол тамгатай. */
 const MIN_PAIRS = 300;
-const isStamped = ({ ratio, pairs }) => pairs >= MIN_PAIRS && ratio < 0.72;
+const STAMP_ALPHA_THRESHOLD = WATERMARK_OPACITY / 2;
+const isStamped = ({ alpha, pairs }) => pairs >= MIN_PAIRS && alpha > STAMP_ALPHA_THRESHOLD;
 const isUncertain = ({ pairs }) => pairs < MIN_PAIRS;
-const fmtScore = ({ ratio, pairs }) => `ratio=${ratio.toFixed(3)} pairs=${pairs}`;
+const fmtScore = ({ alpha, pairs }) => `α=${alpha.toFixed(3)} pairs=${pairs}`;
 
 async function stampBuffer(buf, mark) {
   const { data, info } = await sharp(buf)
@@ -172,7 +175,25 @@ async function stampBuffer(buf, mark) {
 }
 
 const objectName = (url) => decodeURIComponent(new URL(url).pathname.split(PUBLIC_PREFIX)[1] ?? "");
-const wmName = (name) => `${WM_DIR}${name.replace(/\.[^.]+$/, "")}.jpg`;
+/** Логоны хувилбарын богино хэш — лого солигдвол тамгатай файл шинэ замд очно. */
+const logoVersion = (logoUrl) => crypto.createHash("sha1").update(logoUrl).digest("hex").slice(0, 8);
+/** Эх зургийн нэрээс тамгатай файлын зам (эх нэр нь wm/-гүй байх ёстой). */
+const wmName = (ver, originalName) => `${WM_DIR}${ver}/${originalName.replace(/\.[^.]+$/, "")}.jpg`;
+
+/** Өмнөх manifest-уудаас «тамгатай URL → эх URL» зураглал. */
+function loadOriginals(files) {
+  const map = new Map();
+  for (const f of files) {
+    for (const r of JSON.parse(fs.readFileSync(f, "utf8")).replaced ?? []) map.set(r.to, r.original ?? r.from);
+  }
+  // Гинжин зураглалыг (v1 → v2 → ...) эх рүү нь хүртэл задална.
+  for (const [k, v] of map) {
+    let cur = v;
+    for (let i = 0; i < 10 && map.has(cur); i++) cur = map.get(cur);
+    map.set(k, cur);
+  }
+  return map;
+}
 
 async function pool(items, n, fn) {
   const out = new Array(items.length);
@@ -218,8 +239,11 @@ async function main() {
 
   const db = dbClient();
   await db.connect();
-  const office = (await db.query("select name, logo_url from offices where id = $1", [officeId])).rows[0];
-  if (!office?.logo_url) throw new Error("Оффис эсвэл лого олдсонгүй");
+  const office = (await db.query("select name, logo_url, watermark_logo_url from offices where id = $1", [officeId])).rows[0];
+  const logoUrl = office?.watermark_logo_url || office?.logo_url;
+  if (!logoUrl) throw new Error("Оффис эсвэл лого олдсонгүй");
+  const ver = logoVersion(logoUrl);
+  const originals = loadOriginals((arg("--originals") ?? "").split(",").filter(Boolean));
 
   // Оффисын агентуудын зарын бүх зураг + ковер (давхардалгүй).
   const rows = (await db.query(
@@ -232,16 +256,29 @@ async function main() {
     [officeId]
   )).rows.map((r) => r.url);
   const own = rows.filter((u) => u.includes(PUBLIC_PREFIX));
+  const current = own.filter((u) => objectName(u).startsWith(`${WM_DIR}${ver}/`));
+  // Өмнөх логоор тамгатай: эх зураг нь manifest-д байвал эхээс нь дахин үүсгэнэ.
+  const oldStamped = own.filter((u) => objectName(u).startsWith(WM_DIR) && !current.includes(u));
+  const restamp = oldStamped.filter((u) => originals.has(u)).map((u) => ({ url: u, source: originals.get(u) }));
+  const orphan = oldStamped.filter((u) => !originals.has(u));
   const todo = own.filter((u) => !objectName(u).startsWith(WM_DIR));
-  console.log(`${office.name}: ${rows.length} зураг (${own.length} манай bucket-д, ${own.length - todo.length} аль хэдийн wm/)`);
+  console.log(
+    `${office.name}: ${rows.length} зураг — одоогийн логоор тамгатай ${current.length}, ` +
+      `өмнөх логоор тамгатай ${oldStamped.length} (эх нь олдсон ${restamp.length}), тамгагүй ${todo.length}`
+  );
+  if (orphan.length) {
+    console.log(`  АНХААР: ${orphan.length} зургийн эх олдсонгүй (--originals өгнө үү) — алгасна:`);
+    for (const u of orphan.slice(0, 10)) console.log(`    ${u}`);
+  }
 
-  const mark = await buildMark(office.logo_url);
-  console.log(`Тэмдэг: ${mark.w}x${mark.h}`);
+  const mark = await buildMark(logoUrl);
+  console.log(`Тэмдэг: ${mark.w}x${mark.h} (хувилбар ${ver})`);
 
   if (sampleN > 0) {
     const outDir = arg("--out") ?? path.join(ROOT, "watermark-sample");
     fs.mkdirSync(outDir, { recursive: true });
-    for (const [i, url] of todo.slice(0, sampleN).entries()) {
+    const sources = [...restamp.map((r) => r.source), ...todo];
+    for (const [i, url] of sources.slice(0, sampleN).entries()) {
       const buf = await fetchBuf(url);
       const score = await stampScore(buf, mark);
       const stamped = await stampBuffer(buf, mark);
@@ -269,18 +306,21 @@ async function main() {
   const already = analysed.filter((a) => a.stamped);
   const uncertain = analysed.filter((a) => !a.error && !a.stamped && isUncertain(a.score));
   const need = analysed.filter((a) => !a.error && !a.stamped && !isUncertain(a.score));
-  console.log(`Дүн: тамга дарах ${need.length}, аль хэдийн тамгатай ${already.length}, эргэлзээтэй ${uncertain.length}, татаж чадаагүй ${errors.length}`);
+  console.log(
+    `Дүн: тамга дарах ${need.length}, шинэ логоор дахин үүсгэх ${restamp.length}, ` +
+      `аль хэдийн тамгатай ${already.length}, эргэлзээтэй ${uncertain.length}, татаж чадаагүй ${errors.length}`
+  );
   for (const a of already) console.log(`  тамгатай: ${fmtScore(a.score)} ${a.url}`);
   for (const a of uncertain) console.log(`  эргэлзээтэй (алгасна): ${fmtScore(a.score)} ${a.url}`);
   // Босгын ойролцоох тамгагүй зургууд — нүдээр шалгахад.
-  const near = need.filter((a) => a.score.ratio < 0.92).sort((x, y) => x.score.ratio - y.score.ratio);
+  const near = need.filter((a) => a.score.alpha > 0.08).sort((x, y) => y.score.alpha - x.score.alpha);
   for (const a of near.slice(0, 15)) console.log(`  босгод ойр (тамгагүй гэж үзсэн): ${fmtScore(a.score)} ${a.url}`);
   const hist = {};
   for (const a of analysed.filter((x) => !x.error && x.score.pairs >= MIN_PAIRS)) {
-    const b = (Math.floor(a.score.ratio * 20) / 20).toFixed(2);
+    const b = (Math.floor(a.score.alpha * 20) / 20).toFixed(2);
     hist[b] = (hist[b] ?? 0) + 1;
   }
-  console.log("Харьцааны тархалт:", Object.entries(hist).sort().map(([k, v]) => `${k}:${v}`).join("  "));
+  console.log("α-ийн тархалт:", Object.entries(hist).sort().map(([k, v]) => `${k}:${v}`).join("  "));
   for (const a of errors) console.log(`  алдаа: ${a.error} ${a.url}`);
 
   if (!apply) {
@@ -293,18 +333,20 @@ async function main() {
   if (!manifestFile) throw new Error("--apply-д --manifest <файл.json> заавал");
   const bucket = storage();
   const replaced = [];
+  // Тамгагүй зураг өөрөө эх; өмнөх логоор тамгатайг эх зургаас нь дахин үүсгэнэ.
+  const jobs = [...need.map((a) => ({ url: a.url, source: a.url })), ...restamp];
   done = 0;
-  await pool(need, CONCURRENCY, async (a) => {
+  await pool(jobs, CONCURRENCY, async (j) => {
     try {
-      const name = wmName(objectName(a.url));
-      const out = await stampBuffer(await fetchBuf(a.url), mark);
+      const name = wmName(ver, objectName(j.source));
+      const out = await stampBuffer(await fetchBuf(j.source), mark);
       const { error } = await bucket.upload(name, out, { contentType: "image/jpeg", upsert: true, cacheControl: "31536000" });
       if (error) throw new Error(error.message);
-      replaced.push({ from: a.url, to: bucket.getPublicUrl(name).data.publicUrl });
+      replaced.push({ from: j.url, to: bucket.getPublicUrl(name).data.publicUrl, original: j.source });
     } catch (e) {
-      errors.push({ url: a.url, error: e.message });
+      errors.push({ url: j.url, error: e.message });
     }
-    if (++done % 50 === 0) console.log(`  тамга дарсан ${done}/${need.length}`);
+    if (++done % 50 === 0) console.log(`  тамга дарсан ${done}/${jobs.length}`);
   });
 
   // Manifest-ийг DB өөрчлөхөөс ӨМНӨ бичнэ — буцаахад заавал хэрэгтэй.

@@ -11,6 +11,7 @@ export type AgentRow = Record<string, unknown> & {
     name: string;
     color: string | null;
     logo_url: string | null;
+    watermark_logo_url: string | null;
     watermark_enabled: boolean;
   } | null;
 };
@@ -40,7 +41,7 @@ export const getMyAgent = cache(async (): Promise<AgentRow | null> => {
   if (!user) return null;
   const { data, error } = await supabase
     .from("agents")
-    .select(`${AGENT_COLUMNS}, office:offices(name, color, logo_url, watermark_enabled)`)
+    .select(`${AGENT_COLUMNS}, office:offices(name, color, logo_url, watermark_logo_url, watermark_enabled)`)
     .eq("profile_id", user.id)
     .maybeSingle();
   if (error) console.error("getMyAgent:", error.message);

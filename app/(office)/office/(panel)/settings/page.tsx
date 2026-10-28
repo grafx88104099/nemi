@@ -33,7 +33,8 @@ export default async function OfficeSettingsPage() {
         <CardBody>
           <WatermarkSettings
             initialEnabled={(office.watermark_enabled as boolean) ?? false}
-            logoUrl={(office.logo_url as string | null) ?? null}
+            officeLogoUrl={(office.logo_url as string | null) ?? null}
+            initialStampLogoUrl={(office.watermark_logo_url as string | null) ?? null}
             label={(office.name as string) ?? ""}
             samplePhotoUrl={samplePhoto}
           />

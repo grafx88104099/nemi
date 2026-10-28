@@ -10,11 +10,14 @@ export function OfficeImageUpload({
   onChange,
   label,
   variant = "wide",
+  previewClassName = "object-cover",
 }: {
   value: string;
   onChange: (url: string) => void;
   label: string;
   variant?: "wide" | "square";
+  /** Урьдчилсан зургийн нэмэлт класс (ж: цагаан логог бараан дэвсгэр дээр харуулах). */
+  previewClassName?: string;
 }) {
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -46,7 +49,7 @@ export function OfficeImageUpload({
         {value ? (
           <div className="relative">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={value} alt="" className={`${box} rounded-xl border border-line object-cover`} />
+            <img src={value} alt="" className={`${box} rounded-xl border border-line ${previewClassName}`} />
             <button type="button" onClick={() => onChange("")} className="absolute -right-2 -top-2 rounded-full bg-danger p-0.5 text-white">
               <X className="size-3.5" />
             </button>

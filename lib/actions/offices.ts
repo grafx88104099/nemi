@@ -168,6 +168,27 @@ export async function updateMyOfficeWatermark(enabled: boolean) {
   return { ok: true };
 }
 
+/** Тамганы тусгай лого (хоосон бол оффисын үндсэн лого хэрэглэгдэнэ). */
+export async function updateMyOfficeWatermarkLogo(url: string) {
+  const ctx = await requireRole("office_admin");
+  if ("error" in ctx) return ctx;
+  const officeId = ctx.profile?.office_id;
+  if (!officeId) return { error: "no_office" };
+  const value = url.trim();
+  if (value && !/^https:\/\/[^\s]+$/.test(value)) return { error: "Логоны холбоос буруу байна." };
+  const { error } = await ctx.supabase
+    .from("offices")
+    .update({ watermark_logo_url: value || null })
+    .eq("id", officeId);
+  if (error) {
+    console.error("updateMyOfficeWatermarkLogo:", error.message);
+    return { error: "Тохиргоо хадгалахад алдаа гарлаа. Дахин оролдоно уу." };
+  }
+  revalidatePath("/office/settings");
+  revalidatePath("/agent/listings", "layout");
+  return { ok: true };
+}
+
 /** Оффисын баялаг танилцуулга — лого/ковер, сошл, тусгай чиглэл, бүс г.м. */
 export async function updateMyOfficeAbout(input: {
   description: string;

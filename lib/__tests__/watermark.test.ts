@@ -34,6 +34,21 @@ describe("watermarkFromOffice", () => {
     });
     expect(watermarkFromOffice({ name: "PMC", watermark_enabled: true })).toEqual({ logoUrl: null, label: "PMC" });
   });
+
+  it("тамганы тусгай лого байвал үндсэн логоос давуу", () => {
+    expect(
+      watermarkFromOffice({
+        name: "PMC",
+        logo_url: "https://navy.png",
+        watermark_logo_url: "https://white.png",
+        watermark_enabled: true,
+      })?.logoUrl
+    ).toBe("https://white.png");
+    expect(
+      watermarkFromOffice({ name: "PMC", logo_url: "https://navy.png", watermark_logo_url: "", watermark_enabled: true })
+        ?.logoUrl
+    ).toBe("https://navy.png");
+  });
 });
 
 describe("fitWithin", () => {
@@ -93,6 +108,15 @@ describe("keyOutBackground", () => {
     const a = data[(1 * 3 + 1) * 4 + 3];
     expect(a).toBeGreaterThan(0);
     expect(a).toBeLessThan(255);
+  });
+
+  it("ирмэг хүртэл тайрсан тунгалаг логод булангийн пикселийг дэвсгэр гэж арилгахгүй", () => {
+    // Цагаан тэмдэг бүх ирмэгт хүрнэ; зөвхөн дунд хэсэгт тунгалаг нүх (үсэг) бий.
+    const WHITE = [255, 255, 255, 255];
+    const data = image(5, 4, WHITE, CLEAR, [[2, 1], [2, 2]]);
+    expect(keyOutBackground(data, 5, 4)).toEqual({ x: 0, y: 0, w: 5, h: 4 });
+    expect(data[3]).toBe(255); // (0,0) цагаан тэмдэг хэвээр
+    expect(data[(1 * 5 + 2) * 4 + 3]).toBe(0); // нүх тунгалаг хэвээр
   });
 
   it("зөвхөн дэвсгэртэй зурагт null", () => {

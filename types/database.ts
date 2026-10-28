@@ -75,6 +75,7 @@ export type Database = {
           specialties: string[];
           service_areas: string[];
           watermark_enabled: boolean;
+          watermark_logo_url: string | null;
           created_at: string;
         };
         Insert: {
@@ -101,6 +102,7 @@ export type Database = {
           specialties?: string[];
           service_areas?: string[];
           watermark_enabled?: boolean;
+          watermark_logo_url?: string | null;
           created_at?: string;
         };
         Update: {
@@ -127,6 +129,7 @@ export type Database = {
           specialties?: string[];
           service_areas?: string[];
           watermark_enabled?: boolean;
+          watermark_logo_url?: string | null;
           created_at?: string;
         };
         Relationships: [];

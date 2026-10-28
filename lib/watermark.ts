@@ -31,12 +31,24 @@ const ALPHA_VISIBLE = 16;
 
 export type Rect = { x: number; y: number; w: number; h: number };
 
-/** Оффисын мөрөөс тамганы тохиргоо гаргана; унтраалттай бол null. */
+/**
+ * Оффисын мөрөөс тамганы тохиргоо гаргана; унтраалттай бол null.
+ * Тамганы тусгай лого (watermark_logo_url, ж: цагаан хувилбар) байвал түүнийг,
+ * эс бөгөөс оффисын үндсэн логог ашиглана.
+ */
 export function watermarkFromOffice(
-  office: { name?: string | null; logo_url?: string | null; watermark_enabled?: boolean | null } | null | undefined
+  office:
+    | {
+        name?: string | null;
+        logo_url?: string | null;
+        watermark_logo_url?: string | null;
+        watermark_enabled?: boolean | null;
+      }
+    | null
+    | undefined
 ): WatermarkConfig | null {
   if (!office?.watermark_enabled) return null;
-  return { logoUrl: office.logo_url ?? null, label: office.name ?? "" };
+  return { logoUrl: office.watermark_logo_url || office.logo_url || null, label: office.name ?? "" };
 }
 
 /** Харьцааг хадгалж урт талыг max-аас хэтрүүлэхгүйгээр багасгана (томруулахгүй). */
@@ -64,9 +76,11 @@ export function stampRect(
 
 /**
  * Логоны дэвсгэрийг арилгаж, үлдсэн тэмдгийн хүрээг буцаана. data-г шууд өөрчилнө.
- * - Тунгалаг дэвсгэртэй PNG: зөвхөн харагдах пикселийн хүрээг тооцно.
- * - Битүү дэвсгэртэй (жишээ нь PMC-ийн саарал квадрат): зүүн дээд булангийн өнгийг
- *   дэвсгэр гэж үзээд ойролцоо пикселийг тунгалаг болгоно; ирмэгийг зөөлөн шилжүүлнэ.
+ * - Тунгалаг дэвсгэртэй PNG (тунгалаг пиксел 1%-аас их): дэвсгэр арилгахгүй, зөвхөн
+ *   харагдах пикселийн хүрээг тооцно. Ирмэг хүртэл тайрсан логод (ж: PMC-ийн цагаан
+ *   тамга) булангийн пиксел логоны хэсэг байдаг тул булангаар дэвсгэр таамаглахгүй.
+ * - Бүрэн битүү зураг (жишээ нь PMC-ийн саарал квадрат лого): зүүн дээд булангийн
+ *   өнгийг дэвсгэр гэж үзээд ойролцоо пикселийг тунгалаг болгоно; ирмэгийг зөөлөн шилжүүлнэ.
  * Тэмдэг олдохгүй бол null.
  */
 export function keyOutBackground(
@@ -76,8 +90,10 @@ export function keyOutBackground(
   tolerance = 40
 ): Rect | null {
   if (w <= 0 || h <= 0 || data.length < w * h * 4) return null;
-  const [br, bg, bb, ba] = [data[0], data[1], data[2], data[3]];
-  const opaqueBg = ba >= ALPHA_VISIBLE;
+  const [br, bg, bb] = [data[0], data[1], data[2]];
+  let transparent = 0;
+  for (let i = 3; i < w * h * 4; i += 4) if (data[i] < ALPHA_VISIBLE) transparent++;
+  const opaqueBg = transparent <= w * h * 0.01;
 
   let minX = w, minY = h, maxX = -1, maxY = -1;
   for (let y = 0; y < h; y++) {
