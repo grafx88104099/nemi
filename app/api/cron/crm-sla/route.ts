@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { cronAuthError } from "@/lib/crm/cron-auth";
 import { getRuleMap, ruleGate, conditionParam, logRuleRun, hasRuleRun, listCrmOffices, type AdminClient, type AutomationRule } from "@/lib/crm/rules";
 import { notifyCrm, deliverDeferredNotifications } from "@/lib/crm/notify";
 import { assignLead, type AssignMode, type AssignRule } from "@/lib/crm/scoring";
@@ -114,12 +115,8 @@ async function createTask(
 }
 
 export async function GET(request: Request) {
-  const secret = process.env.CRON_SECRET;
-  const { searchParams } = new URL(request.url);
-  const auth = request.headers.get("authorization");
-  if (secret && auth !== `Bearer ${secret}` && searchParams.get("key") !== secret) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
-  }
+  const denied = cronAuthError(request);
+  if (denied) return NextResponse.json({ ok: false, error: denied.error }, { status: denied.status });
 
   const admin = createAdminClient();
   const now = new Date();

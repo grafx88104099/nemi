@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { cronAuthError } from "@/lib/crm/cron-auth";
 import { recomputeMatchesCore, type StrongMatchInfo } from "@/lib/queries-crm-matching";
 import { deliveryTier, DELIVERY_TIER_LABEL } from "@/lib/crm/matching";
 
@@ -83,12 +84,8 @@ async function notifyStrongMatches(admin: Admin, officeId: string, propertyId: s
 }
 
 export async function GET(request: Request) {
-  const secret = process.env.CRON_SECRET;
-  const { searchParams } = new URL(request.url);
-  const auth = request.headers.get("authorization");
-  if (secret && auth !== `Bearer ${secret}` && searchParams.get("key") !== secret) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
-  }
+  const denied = cronAuthError(request);
+  if (denied) return NextResponse.json({ ok: false, error: denied.error }, { status: denied.status });
 
   const admin = createAdminClient();
   const { data: pending, error } = await admin

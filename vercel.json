@@ -8,11 +8,11 @@
     },
     {
       "path": "/api/cron/crm-sla",
-      "schedule": "*/10 * * * *"
+      "schedule": "0 0 * * *"
     },
     {
       "path": "/api/cron/crm-matching",
-      "schedule": "*/10 * * * *"
+      "schedule": "0 2 * * *"
     },
     {
       "path": "/api/cron/crm-daily",
