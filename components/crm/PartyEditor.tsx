@@ -81,7 +81,7 @@ export function PartyEditor({
       {parties.length === 0 ? (
         <p className="py-4 text-center text-sm text-muted">
           Тал бүртгэгдээгүй — «Гэрээ» төлөвт орохын өмнө {relevantRoles.map((r) => PARTY_ROLE_LABEL[r]).join(" + ")}{" "}
-          хоёул заавал (F-402).
+          хоёул заавал.
         </p>
       ) : (
         <ul className="divide-y divide-line rounded-xl border border-line bg-surface">

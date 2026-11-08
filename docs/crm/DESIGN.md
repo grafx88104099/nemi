@@ -17,7 +17,7 @@
 | D5 | **Multi-tenancy:** бүх `crm_` хүснэгт `office_id not null` + RLS суурь нөхцөл `office_id = crm_office_id()`; салбар (Төв/Яармаг-Нисэх) = `crm_branches` хүснэгт | Нэми олон оффистой платформ; PMC = нэг office. Салбар нь оффис ДОТОРХ ойлголт тул branches тусдаа. |
 | D6 | **Статусын машин DB түвшинд**: төлөвтэй объект бүрд шилжилтийн lookup (`crm_stage_transitions` / хатуу CHECK+trigger) + trigger guard; заагаагүй шилжилт exception; шилжилт бүр `crm_audit_log`-т | ToR 0.2. UI шалгалт = давхар хамгаалалт, DB = эцсийн үнэн. |
 | D7 | **МУТСТ хязгаарлагдмал бүс = тусдаа хүснэгтүүд + хатуу RLS** (`crm_contact_aml`, `crm_aml_cases`, `crm_aml_alerts`) — зөвхөн `aml_officer` дүр; бусдад denormalized `kyc_public_status` талбар л харагдана; дохио үүсгэгч агент INSERT эрхтэй, SELECT эрхгүй | ToR зарчим 7, §7.6 (tipping-off хориглол). Системийн админд ч арилжааны/МУТСТ өгөгдөлд давуу эрх ҮГҮЙ. |
-| D8 | **Cron = Vercel Cron → `app/api/cron/crm-*` route + admin client** (pg_cron-д түшиглэхгүй); синхрон enforcement = DB trigger | Гейт/түгжээ/immutability шиг «хориглох» логик trigger-ээр; хугацаанд суурилсан (сарын үүсгэлт, SLA, сануулга) — cron route. CRON_SECRET header-ээр хамгаална. |
+| D8 | **Cron = `app/api/cron/crm-*` route + admin client; давтамжтай дуудлагыг Supabase pg_cron + pg_net хийнэ** (2026-11, PRO-001 v2.1 — шинэчилсэн); синхрон enforcement = DB trigger | Гейт/түгжээ/immutability шиг «хориглох» логик trigger-ээр; хугацаанд суурилсан (SLA, сануулга) — cron route. Vercel Hobby өдөрт 1 удаа тул 15 минутын SLA-д хангалтгүй: pg_cron `crm-sla` 5 мин, `crm-matching` 10 мин тутам route-ыг `Authorization: Bearer <Vault crm_cron_secret>`-тэй дуудна (migration 20261107000600). Vault-д нууц байхгүй бол ажил чимээгүй алгасна. vercel.json-ийн өдрийн дуудлага нөөц хэвээр. Route-ууд `cronAuthError()`-оор хамгаалагдана. |
 | D9 | **Soft delete / архив:** ямар ч CRM хүснэгтэд hard delete policy байхгүй (админаас бусад); FK бүгд RESTRICT (холбоостой устгал DB-ээс боломжгүй); төлөв «archived» | ToR зарчим 10. `on delete cascade` зөвхөн жинхэнэ дэд мөрөнд (мөр-задаргаа). |
 | D10 | **Баримт = шинэ PRIVATE bucket `crm-docs`** + `crm_documents` мета + M:N холбоос; signed URL-ээр үзүүлж, хязгаарлагдмал ангиллын үзэлт бүр аудитад | Одоогийн `listings` bucket public тул CRM баримтад тохирохгүй. |
 | D11 | **PDF (нэхэмжлэх, өмчлөгчийн тайлан, тооцооны хуудас) = v1-д print-оптимизацитай HTML хуудас** (`/office/crm/.../print`) — сервер талын PDF lib оруулахгүй; и-мэйл илгээлт INT- заглушка | Хамаарал багасгана; ToR «PDF татах» шаардлагыг хөтчийн print-to-PDF-ээр UAT-д хангана. Resend-ээр и-мэйл илгээх нь дараагийн шат. |
@@ -1615,15 +1615,23 @@ app/api/cron/crm-daily/route.ts     — өдөр бүр: Д-15/16 (сануул�
                                        Д-27 refresh, Д-28/29 (эргэн холбогдолт), F-105/125 integrity,
                                        F-655 escalation, идэвхгүйн тоолуур/эргэлт (P-10), NPS илгээлт (F-751),
                                        listing agreement сануулга (F-205), менежментийн гэрээний сунгалт (F-512)
-app/api/cron/crm-matching/route.ts  — 10 мин тутам: pending дахин тооцоолол (F-259)
-app/api/cron/crm-sla/route.ts       — 5–10 мин тутам: Д-02/03/04 (сэжимийн эхний холболт/дахин оролдлого/эскалаци),
-                                       Д-20 (засварын sla_respond_by/sla_resolve_by хэтрэлт → мэдэгдэл + ҮА-ЧМТ шилжүүлэлт),
-                                       Д-26 (СГТ 24ц тоолуур дөхөлт/хэтрэлтийн эскалаци)
+app/api/cron/crm-matching/route.ts  — pg_cron 10 мин тутам (нөөц: Vercel өдөрт 1): pending дахин тооцоолол,
+                                       хүчтэй/боломжит тохироонд ангиллаар ялгасан нэгдсэн дохио (match_found).
+                                       Листинг идэвхжихэд тооцоолол setPropertyStatus дотор шууд хийгдэнэ.
+app/api/cron/crm-sla/route.ts       — pg_cron 5 мин тутам (нөөц: Vercel 01:05 UTC = 09:05 УБ):
+                                       Д-01 дарааллын хуваарилалт (оффис бүрийн ажлын цаг = sla_policy + crm_calendar_days, УБ),
+                                       Д-02 хугацаа хэтрэлт, Д-03 сэжим ирснээс 24ц дотор хоёр дахь оролдлого,
+                                       Д-04 48ц-т утга бүхий холболтгүй → ахлагч; утга бүхий холболт = crm_leads.first_contact_at
+                                       (crm_activities.reached ≠ false бүртгэлийн trigger), Д-20 засвар, Д-25/26 МУТСТ
 ```
+
+**pg_cron тохиргоо (20261107000600):** `public.crm_cron_call(path)` нь Vault-ийн `crm_cron_secret`-ийг уншиж `net.http_get`-ээр `https://www.nemi.mn<path>`-ийг дуудна; нууц байхгүй бол `null` буцааж юу ч хийхгүй. Нууц = Vercel-ийн `CRON_SECRET`-тэй ижил утга (`select vault.create_secret('<утга>', 'crm_cron_secret')` — утгыг репод бичихгүй). Хуваарь: `crm-sla-5min` (`*/5 * * * *`), `crm-matching-10min` (`*/10 * * * *`). Нэмэлт: `crm-accept-expire-5min` (`*/5`, хүлээн аваагүй сэжмийг дараалалд буцаана — HTTP-гүй, 20261107001300), `crm-weekly-hourly` (цаг бүрийн 7 дахь минутад /api/cron/crm-weekly — 20261107002000), `crm-agent-daily-stats` (15:50 UTC = 23:50 УБ, HTTP-гүй). Ажлын цаг/амралтын өдрийг route өөрөө шийднэ.
+
+**Мэдэгдлийн хүлээн авагч (notifyCrm):** `crm_notification_matrix.recipient_roles` — `agent` = дуудагчийн өгсөн хариуцагч, `team_lead` = тэдгээрийн багийн ахлагч, бусад дүр = оффисын тухайн дүртэй бүх ажилтан; `includeRoles` = журмын заавал хүлээн авагч. Холбоос хүлээн авагчийн панельд автоматаар тааруулагдана (`panelLink`). Push (`lib/crm/push.ts`, `crm_push_subscriptions`) — заавал ангилал, матрицад `push`, эсвэл хэрэглэгчийн сонголтод `push` байвал; VAPID env байхгүй бол алгасна. Оффисын панелд хонх + `/office/crm/notifications`.
 
 Бүгд `Authorization: Bearer ${CRON_SECRET}` шалгаад `createAdminClient()`-ээр ажиллана; үр дүн бүр `crm_rule_runs`-д; алдаа sysadmin-д notification (F-602). vercel.json-д цагийн хуваарь.
 
-- **Vercel төлөвлөгөө:** минут/цагийн давтамжтай cron нь Vercel **Pro** шаарддаг (Hobby: өдөрт 1 удаа, цөөн тоо). Дизайн Pro-г урьдач нөхцөл гэж үзнэ; Hobby fallback — GitHub Actions/Upstash QStash зэрэг гадаад scheduler-ээс ижил route-уудыг `CRON_SECRET`-тэй дуудах (route-ууд өөрчлөгдөхгүй), matching-ийг нэмэлтээр хэрэглэгчийн үйлдлийн дараах recompute-д тулгуулах.
+- **Vercel төлөвлөгөө:** Hobby (өдөрт 1 удаа) хэвээр — минутын давтамжийг Supabase pg_cron + pg_net хангана (дээрх). pg_cron ажиллахгүй үед ч Vercel-ийн өдрийн дуудлага 09:05 УБ-д дарааллыг хуваарилж, бусад шалгалтыг гүйцээнэ; листинг идэвхжихэд тохируулга шууд тооцогдоно.
 - **Cron-оос үүсэх даалгаврын `tasks.created_by`:** `tasks.created_by` NOT NULL (profiles FK) тул систем-profile байхгүй нөхцөлд конвенц: **created_by = даалгаврын хариуцагч (responsible_id)**, хариуцагч тодорхойгүй бол оффисын идэвхтэй office_admin-ы profile. Автомат гэдгийг `crm_task_links.rule_code` ялгана.
 
 ---

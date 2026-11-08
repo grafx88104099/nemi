@@ -1,4 +1,15 @@
-import type { CommissionRole } from "@/lib/constants-crm";
+import { COMMISSION_ROLE_LABEL, type CommissionRole } from "@/lib/constants-crm";
+
+/** Дэлгэцийн мессежид дотоод код биш, үүргийн монгол нэр. */
+function roleName(role: string): string {
+  return (COMMISSION_ROLE_LABEL as Record<string, string>)[role] ?? "Тодорхойгүй үүрэг";
+}
+
+const VARIANT_NAME: Record<string, string> = {
+  intl_lead_gen: "Сэжим үүсгэгч",
+  deal_manager: "Хэлцлийн менежер",
+  full_cycle: "Бүрэн мөчлөг",
+};
 
 /**
  * Шимтгэлийн тооцооллын цэвэр хөдөлгүүр (U7 — F-450–474, DB-гүй, unit тестийн бай).
@@ -223,12 +234,12 @@ export function calcCommission({
       amount: 0,
       evidence: { replacement: true, role_record_id: a.refId ?? null },
     }));
-    notes.push("Дахин түрээслүүлэлт: хөлс 0₮, урамшуулал 0 (F-414).");
+    notes.push("Дахин түрээслүүлэлт: хөлс 0₮, урамшуулал 0.");
     return { rows, locked: false, errors, notes, totalRatePct: 0 };
   }
 
   if (!Number.isFinite(baseAmount) || baseAmount < 0) {
-    return { rows: [], locked: false, errors: ["Тооцооллын суурь дүн буруу (F-455)."], notes, totalRatePct: 0 };
+    return { rows: [], locked: false, errors: ["Тооцооллын суурь дүн буруу."], notes, totalRatePct: 0 };
   }
 
   // Олон улсын журам — 3 хувилбар (F-467).
@@ -248,7 +259,7 @@ export function calcCommission({
   if (coBrokerage) {
     const dropped = effective.filter((a) => a.role === "selling");
     if (dropped.length) {
-      notes.push("Хамтын зуучлалын туг идэвхтэй: стандарт борлуулагчийн үүргийн тооцоолол хаагдав (F-468).");
+      notes.push("Хамтын зуучлалын туг идэвхтэй: стандарт борлуулагчийн үүргийн тооцоолол хаагдав.");
     }
     effective = effective.filter((a) => a.role !== "selling");
   }
@@ -264,7 +275,7 @@ export function calcCommission({
   for (const [role, group] of byRole) {
     const cfg = roleConfigs.get(role);
     if (!cfg) {
-      notes.push(`«${role}» үүрэг энэ журамд тохируулагдаагүй — 0 хувь (F-452).`);
+      notes.push(`«${roleName(role)}» үүрэг энэ журамд тохируулагдаагүй — 0 хувь.`);
       continue;
     }
     const fullRate = roleRate(cfg, above);
@@ -272,7 +283,7 @@ export function calcCommission({
     const missingSplit = multi && group.some((a) => a.splitPct == null);
     if (missingSplit) {
       errors.push(
-        `«${role}» үүргийг ${group.length} агент хамтран гүйцэтгэсэн ч хуваарилалт бүртгэгдээгүй — «Хянасан» руу шилжихгүй (F-458).`
+        `«${roleName(role)}» үүргийг ${group.length} агент хамтран гүйцэтгэсэн ч хуваарилалт бүртгэгдээгүй — «Хянасан» руу шилжихгүй.`
       );
     }
     for (const a of group) {
@@ -313,7 +324,7 @@ export function calcCommission({
       }
       const kept = agentRows.reduce((a, b) => (b.amount > a.amount ? b : a));
       const dropped = agentRows.filter((r) => r !== kept).map((r) => r.role);
-      notes.push("Давхарлан тооцохгүй тохиргоотой: хамгийн өндөр хувьтай нэг үүрэг үлдэв (F-457).");
+      notes.push("Давхарлан тооцохгүй тохиргоотой: хамгийн өндөр хувьтай нэг үүрэг үлдэв.");
       finalRows.push({ ...kept, evidence: { ...kept.evidence, dropped_roles: dropped } });
     }
   }
@@ -325,7 +336,7 @@ export function calcCommission({
   if (typeof payload.total_cap_pct === "number" && totalRatePct > payload.total_cap_pct + 1e-9) {
     locked = true;
     errors.push(
-      `Бүх хүлээн авагчийн хувийн нийлбэр (${totalRatePct}%) батлагдсан дээд хязгаараас (${payload.total_cap_pct}%) хэтэрлээ — тооцоо түгжигдэв (F-459).`
+      `Бүх хүлээн авагчийн хувийн нийлбэр (${totalRatePct}%) батлагдсан дээд хязгаараас (${payload.total_cap_pct}%) хэтэрлээ — тооцоо түгжигдэв.`
     );
   }
 
@@ -352,7 +363,7 @@ function calcInternational({
   const byAgent = new Map<string, RoleAssignment[]>();
   for (const a of assignments) {
     if (a.role !== "intl_lead_gen" && a.role !== "deal_manager") {
-      notes.push(`«${a.role}» үүрэг олон улсын журмын хувилбарт хамаарахгүй — алгасав (F-467).`);
+      notes.push(`«${roleName(a.role)}» үүрэг олон улсын журмын хувилбарт хамаарахгүй — алгасав.`);
       continue;
     }
     if (!byAgent.has(a.agentProfileId)) byAgent.set(a.agentProfileId, []);
@@ -369,7 +380,7 @@ function calcInternational({
       // зөвхөн full_cycle хувь; тохируулагдаагүй бол алдаа.
       if (typeof variants.full_cycle !== "number") {
         errors.push(
-          "Олон улсын журмын хувилбаруудыг давхардуулахыг хориглоно: бүрэн мөчлөгийн (full_cycle) хувь тохируулагдаагүй байна (F-467)."
+          "Олон улсын журмын хувилбаруудыг давхардуулахыг хориглоно: бүрэн мөчлөгийн (full_cycle) хувь тохируулагдаагүй байна."
         );
         continue;
       }
@@ -384,13 +395,13 @@ function calcInternational({
     }
     let rate = variants[variant];
     if (typeof rate !== "number") {
-      errors.push(`Олон улсын журмын «${variant}» хувилбарын хувь тохируулагдаагүй байна (F-452/467).`);
+      errors.push(`Олон улсын журмын «${VARIANT_NAME[variant] ?? variant}» хувилбарын хувь тохируулагдаагүй байна.`);
       continue;
     }
     // F-467: агент талын нийт урамшуулал дээд хэмжээнээс хэтрэхгүй.
     if (typeof payload.agent_total_cap_pct === "number" && rate > payload.agent_total_cap_pct) {
       notes.push(
-        `Агентын нийт урамшууллын дээд хэмжээ (${payload.agent_total_cap_pct}%) хэрэглэгдэв (F-467).`
+        `Агентын нийт урамшууллын дээд хэмжээ (${payload.agent_total_cap_pct}%) хэрэглэгдэв.`
       );
       rate = payload.agent_total_cap_pct;
     }
@@ -413,7 +424,7 @@ function calcInternational({
   if (typeof payload.total_cap_pct === "number" && totalRatePct > payload.total_cap_pct + 1e-9) {
     locked = true;
     errors.push(
-      `Хувийн нийлбэр (${totalRatePct}%) дээд хязгаараас (${payload.total_cap_pct}%) хэтэрлээ — түгжигдэв (F-459).`
+      `Хувийн нийлбэр (${totalRatePct}%) дээд хязгаараас (${payload.total_cap_pct}%) хэтэрлээ — түгжигдэв.`
     );
   }
   return { rows, locked, errors, notes, totalRatePct };

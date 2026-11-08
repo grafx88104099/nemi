@@ -202,7 +202,7 @@ export function RentalsPageShell({
       </div>
 
       {/* R-08 тоон картууд */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardBody className="flex items-center gap-3">
             <FileText className="size-8 text-brand-600" />
@@ -221,7 +221,7 @@ export function RentalsPageShell({
                 <span className="ml-1 text-sm font-normal text-muted">/ {summary.expiring30}</span>
               </p>
               <button className="text-xs text-brand-700 hover:underline" onClick={() => applyFilter({ expiringDays: 60 })}>
-                60/30 хоногт дуусах (F-570)
+                60/30 хоногт дуусах
               </button>
             </div>
           </CardBody>
@@ -349,7 +349,7 @@ export function RentalsPageShell({
       {/* Менежментийн гэрээнүүд */}
       {agreements.length > 0 && (
         <div>
-          <h2 className="mb-2 text-lg font-semibold text-ink">Менежментийн гэрээ (F-510)</h2>
+          <h2 className="mb-2 text-lg font-semibold text-ink">Менежментийн гэрээ</h2>
           <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
             <table className="w-full min-w-[700px] text-sm">
               <thead>
@@ -391,7 +391,7 @@ export function RentalsPageShell({
       <Modal
         open={leaseOpen}
         onClose={() => setLeaseOpen(false)}
-        title="Шинэ түрээсийн гэрээ (F-500)"
+        title="Шинэ түрээсийн гэрээ"
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setLeaseOpen(false)}>
@@ -450,7 +450,7 @@ export function RentalsPageShell({
             <Field label="Эхлэх огноо">
               <Input type="date" value={f.startOn} onChange={(e) => setF({ ...f, startOn: e.target.value })} />
             </Field>
-            <Field label="Дуусах огноо" hint="Хугацааны шатлал автомат ангилагдана (F-502)">
+            <Field label="Дуусах огноо" hint="Хугацааны шатлал автомат ангилагдана">
               <Input type="date" value={f.endOn} onChange={(e) => setF({ ...f, endOn: e.target.value })} />
             </Field>
           </div>
@@ -471,7 +471,7 @@ export function RentalsPageShell({
                 onChange={(e) => setF({ ...f, paymentDay: e.target.value })}
               />
             </Field>
-            <Field label="Grace (хоног)" hint="Хоцролтын босготой уялдана (F-603)">
+            <Field label="Grace (хоног)" hint="Хоцролтын босготой уялдана">
               <Input
                 type="number"
                 min={0}
@@ -480,7 +480,7 @@ export function RentalsPageShell({
               />
             </Field>
           </div>
-          <Field label="Барьцаа төлбөрийн дүн (₮) — F-540">
+          <Field label="Барьцаа төлбөрийн дүн (₮)">
             <Input
               type="number"
               value={f.depositAmount}
@@ -488,7 +488,7 @@ export function RentalsPageShell({
             />
           </Field>
           <div>
-            <p className="mb-2 text-sm font-medium text-ink">Зардлын хариуцлагын хуваарь (F-505)</p>
+            <p className="mb-2 text-sm font-medium text-ink">Зардлын хариуцлагын хуваарь</p>
             <div className="grid grid-cols-2 gap-2">
               {EXPENSE_TYPES.map(([code, label]) => (
                 <div key={code} className="flex items-center justify-between gap-2 rounded-xl border border-line px-3 py-2">
@@ -512,7 +512,7 @@ export function RentalsPageShell({
           </div>
           {f.isManaged && (
             <p className="text-sm text-blue-700">
-              Менежменттэй объект — сарын нэхэмжлэх/бүртгэл автомат үүснэ (Д-13/Д-14). Объектын менежментийн
+              Менежменттэй объект — сарын нэхэмжлэх/бүртгэл автомат үүснэ. Объектын менежментийн
               гэрээ автоматаар холбогдоно.
             </p>
           )}
@@ -524,7 +524,7 @@ export function RentalsPageShell({
       <Modal
         open={agrOpen}
         onClose={() => setAgrOpen(false)}
-        title="Менежментийн гэрээ (F-510)"
+        title="Менежментийн гэрээ"
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setAgrOpen(false)}>
@@ -559,7 +559,7 @@ export function RentalsPageShell({
             <Field label="Үйлчилгээний хөлс (%)">
               <Input type="number" value={a.feePct} onChange={(e) => setA({ ...a, feePct: e.target.value })} />
             </Field>
-            <Field label="Засварын босго (₮)" hint="F-513 → F-548">
+            <Field label="Засварын босго (₮)" hint="Энэ дүнгээс дээш засварт өмчлөгчийн зөвшөөрөл шаардана">
               <Input
                 type="number"
                 value={a.repairApprovalLimit}
@@ -570,7 +570,7 @@ export function RentalsPageShell({
               <Input type="number" value={a.noticeDays} onChange={(e) => setA({ ...a, noticeDays: e.target.value })} />
             </Field>
           </div>
-          <Field label="Объектууд (F-511 — нэг гэрээ, олон объект)">
+          <Field label="Объектууд (нэг гэрээ, олон үл хөдлөх)">
             <div className="max-h-48 space-y-1 overflow-y-auto rounded-xl border border-line p-2">
               {properties.map((p) => (
                 <label key={p.id} className="flex items-center gap-2 text-sm text-ink">

@@ -5,8 +5,12 @@ import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getCrmStaffContext, type CrmStaffContext } from "@/lib/queries-crm-core";
+import { getCrmStaffContext, getSettingValue, type CrmStaffContext } from "@/lib/queries-crm-core";
 import { getTransactions, type TxnFilters } from "@/lib/queries-crm-transactions";
+import { notifyCrm } from "@/lib/crm/notify";
+import { authorizeExport } from "@/lib/actions/crm-exports";
+import { canExportDeals, normalizeDealFlow, parseClosingChecks } from "@/lib/crm/deal-flow";
+import { validateDealContract, type DealContractInput } from "@/lib/validation/crm-deals";
 import {
   TXN_TYPES,
   TXN_STATUSES,
@@ -42,9 +46,15 @@ export type TxnActionResult = {
 
 function revalidateTxnPaths(id?: string) {
   revalidatePath("/office/crm/transactions");
+  revalidatePath("/agent/crm/transactions");
   revalidatePath("/office/crm/pipeline");
+  revalidatePath("/agent/crm/pipeline");
+  revalidatePath("/office/crm/finance");
   revalidatePath("/office/crm");
-  if (id) revalidatePath(`/office/crm/transactions/${id}`);
+  if (id) {
+    revalidatePath(`/office/crm/transactions/${id}`);
+    revalidatePath(`/agent/crm/transactions/${id}`);
+  }
 }
 
 async function ctxOrError(): Promise<{ ctx: CrmStaffContext } | { error: string }> {
@@ -53,27 +63,29 @@ async function ctxOrError(): Promise<{ ctx: CrmStaffContext } | { error: string 
   return { ctx };
 }
 
-async function notify(recipientIds: string[], type: string, title: string, body: string, link?: string) {
-  try {
-    const targets = [...new Set(recipientIds)].filter(Boolean);
-    if (!targets.length) return;
-    const admin = createAdminClient();
-    const { data: profiles } = await admin.from("profiles").select("id, role").in("id", targets);
-    const rows = (profiles ?? []).map((p) => ({
-      user_id: p.id,
-      type,
-      title,
-      body: body.slice(0, 120),
-      link:
-        link ??
-        (p.role === "office_admin" || p.role === "admin"
-          ? "/office/crm/transactions"
-          : "/agent/crm/pipeline"),
-    }));
-    if (rows.length) await admin.from("notifications").insert(rows);
-  } catch {
-    // мэдэгдэл амжилтгүй ч үндсэн үйлдэл хэвээр
-  }
+/**
+ * Мэдэгдэл — notifyCrm (матриц, чимээгүй цаг, push). Холбоосыг агентын
+ * панелийн замаар өгнө; оффисын хэрэглэгчид автоматаар хөрвөнө.
+ */
+async function notify(
+  officeId: string,
+  recipientIds: (string | null | undefined)[],
+  title: string,
+  body: string,
+  txnId: string,
+  extra?: { event?: string; includeRoles?: CrmStaffContext["roles"] }
+) {
+  await notifyCrm({
+    officeId,
+    event: extra?.event ?? "txn_status_changed",
+    recipients: recipientIds,
+    includeRoles: extra?.includeRoles,
+    title,
+    body,
+    link: `/agent/crm/transactions/${txnId}`,
+    entity: "crm_transactions",
+    entityId: txnId,
+  });
 }
 
 async function logRuleRun(
@@ -139,7 +151,14 @@ function parseGateMissing(message: string): string[] | null {
 function friendlyTxnError(message: string): string {
   const idx = message.indexOf("CRM_TXN:");
   if (idx !== -1) {
-    return message.slice(idx + "CRM_TXN:".length).trim() || SAVE_ERR;
+    // Хуучин DB мессежүүдийн дотоод кодыг дэлгэцэнд гаргахгүй.
+    return (
+      message
+        .slice(idx + "CRM_TXN:".length)
+        .replace(/\s*\((?:F|Д)-[^)]*\)/g, "")
+        .replace(/\s*\(§[^)]*\)/g, "")
+        .trim() || SAVE_ERR
+    );
   }
   if (message.indexOf("CRM_AML:") !== -1) {
     return message.slice(message.indexOf("CRM_AML:") + "CRM_AML:".length).trim() || SAVE_ERR;
@@ -150,7 +169,7 @@ function friendlyTxnError(message: string): string {
   if (message.includes("crm_sequences")) {
     return "Дугаарлалтын тохиргоо (crm_sequences) хийгдээгүй байна — сисадминд хандана уу.";
   }
-  if (message.includes("өөрчлөх хориотой талбар")) return "Өөрчлөх хориотой талбар байна (F-401/417).";
+  if (message.includes("өөрчлөх хориотой талбар")) return "Өөрчлөх хориотой талбар байна.";
   if (message.includes("эрх алга") || message.includes("оффисын эрхгүй")) {
     return "Танд энэ үйлдлийг хийх эрх алга.";
   }
@@ -170,7 +189,7 @@ async function resolveFxRate(
   const table = (data ?? {}) as Record<string, Record<string, number>>;
   const rate = table?.[today]?.[currency];
   if (typeof rate !== "number" || rate <= 0) {
-    return { error: `Өнөөдрийн (${today}) ${currency} ханш тохируулагдаагүй байна — Санхүү 'fx_rates'-д нэмнэ үү (F-419).` };
+    return { error: `Өнөөдрийн (${today}) ${currency} ханш тохируулагдаагүй байна — Санхүү 'fx_rates'-д нэмнэ үү.` };
   }
   return { rate };
 }
@@ -206,7 +225,7 @@ export async function createTransaction(
   const input = parsed.data;
 
   if (input.type === "replacement" && !input.originalTransactionId) {
-    return { error: "Replacement хэлцэлд анхны хэлцлийн холбоос заавал (F-413)." };
+    return { error: "Replacement хэлцэлд анхны хэлцлийн холбоос заавал." };
   }
 
   const { data: opp } = await supabase
@@ -216,9 +235,23 @@ export async function createTransaction(
     .eq("office_id", ctx.officeId)
     .maybeSingle();
   if (!opp) return { error: "Боломж олдсонгүй эсвэл танд эрх алга." };
-  if (opp.state === "lost") return { error: "Алдсан боломж дээр хэлцэл үүсгэхгүй." };
+  if (opp.state !== "open") return { error: "Хаагдсан боломж дээр хэлцэл үүсгэхгүй." };
   if (!opp.property_id) {
-    return { error: "Боломжид объект холбогдоогүй байна — эхлээд объектоо сонгоно уу (F-402)." };
+    return { error: "Боломжид үл хөдлөх холбогдоогүй байна — картын «Засах» хэсгээс үл хөдлөхөө сонгоно уу." };
+  }
+  // Нэг үл хөдлөх дээр зэрэг хоёр идэвхтэй хэлцэл нээхгүй (листинг, худалдан
+  // авагч тал нэг хэлцлийн хавтсаар ажиллана).
+  const { data: activeOnProperty } = await createAdminClient()
+    .from("crm_transactions")
+    .select("id, number, opportunity_id")
+    .eq("office_id", ctx.officeId)
+    .eq("property_id", opp.property_id)
+    .in("status", ["draft", "contract", "payment"])
+    .limit(1);
+  if (activeOnProperty?.length) {
+    return {
+      error: `Энэ үл хөдлөх дээр идэвхтэй хэлцэл (${activeOnProperty[0].number}) аль хэдийн нээгдсэн. Тэр хэлцлийн хавтсаар үргэлжлүүлнэ үү.`,
+    };
   }
 
   const currency = input.currency || "MNT";
@@ -251,14 +284,16 @@ export async function createTransaction(
   });
   if (opp.owner_id !== ctx.profileId) {
     await notify(
+      ctx.officeId,
       [opp.owner_id],
-      "crm_txn_status",
       "Шинэ хэлцэл үүслээ",
       `${TXN_TYPE_LABEL[input.type]} хэлцэл (${row.number}) үүсгэгдлээ.`,
-      `/office/crm/transactions/${row.id}`
+      row.id
     );
   }
   revalidateTxnPaths(row.id);
+  revalidatePath(`/agent/crm/pipeline/${input.opportunityId}`);
+  revalidatePath(`/office/crm/deals/${input.opportunityId}`);
   return { id: row.id };
 }
 
@@ -294,7 +329,7 @@ export async function updateTransaction(raw: UpdateTransactionInput): Promise<Tx
     .maybeSingle();
   if (!before) return { ok: false, error: "Хэлцэл олдсонгүй эсвэл танд эрх алга." };
   if (before.status === "closed") {
-    return { ok: false, error: "Хаагдсан хэлцэл — зөвхөн залруулгын тусгай урсгалаар (F-417)." };
+    return { ok: false, error: "Хаагдсан хэлцэл — зөвхөн залруулгын тусгай урсгалаар." };
   }
 
   const patch: TxnUpdate = {};
@@ -338,10 +373,10 @@ export async function setFxRateManual(id: string, fxRate: number, reason: string
   if ("error" in c) return { ok: false, error: c.error };
   const { ctx } = c;
   if (!ctx.roles.some((r) => ["finance", "sales_director", "ops_qc", "ceo"].includes(r))) {
-    return { ok: false, error: "Ханшийг гараар зөвхөн Санхүү/удирдлага өөрчилнө (F-419)." };
+    return { ok: false, error: "Ханшийг гараар зөвхөн Санхүү/удирдлага өөрчилнө." };
   }
   if (!(fxRate > 0)) return { ok: false, error: "Ханш 0-ээс их байна." };
-  if (!reason.trim()) return { ok: false, error: "Гар ханшинд шалтгаан заавал (F-419)." };
+  if (!reason.trim()) return { ok: false, error: "Гар ханшинд шалтгаан заавал." };
 
   const { data: before } = await supabase
     .from("crm_transactions")
@@ -351,7 +386,7 @@ export async function setFxRateManual(id: string, fxRate: number, reason: string
     .maybeSingle();
   if (!before) return { ok: false, error: "Хэлцэл олдсонгүй эсвэл танд эрх алга." };
   if (before.status === "closed") {
-    return { ok: false, error: "Хаагдсан хэлцэл — зөвхөн залруулгын тусгай урсгалаар (F-417)." };
+    return { ok: false, error: "Хаагдсан хэлцэл — зөвхөн залруулгын тусгай урсгалаар." };
   }
 
   const { error } = await supabase
@@ -384,11 +419,11 @@ export async function setTxnStatus(id: string, to: string): Promise<TxnActionRes
     return { ok: false, error: "Төлөв буруу байна." };
   }
   if (to === "closed") return closeTransaction(id);
-  if (to === "cancelled") return { ok: false, error: "Цуцлалт тусдаа үйлдлээр — шалтгааны ангилалтай (F-415)." };
+  if (to === "cancelled") return { ok: false, error: "Цуцлалтыг шалтгааны ангилалтайгаар «Цуцлах» үйлдлээр хийнэ." };
 
   const { data: before } = await supabase
     .from("crm_transactions")
-    .select("id, status, number, opportunity_id")
+    .select("id, status, number, opportunity_id, opportunity:crm_opportunities!crm_transactions_opportunity_id_fkey(owner_id)")
     .eq("id", id)
     .eq("office_id", ctx.officeId)
     .maybeSingle();
@@ -402,14 +437,37 @@ export async function setTxnStatus(id: string, to: string): Promise<TxnActionRes
   if (error) {
     const missing = parseGateMissing(error.message);
     if (missing) {
-      return { ok: false, error: "Гейт хангагдаагүй — дутуу шаардлагууд байна (F-416).", missing };
+      return { ok: false, error: "Шилжих шалгуур хангагдаагүй — дутуу шаардлагууд байна.", missing };
     }
     console.error("setTxnStatus:", error.message);
     return { ok: false, error: friendlyTxnError(error.message) };
   }
 
+  const ownerId = (before as unknown as { opportunity: { owner_id: string } | null }).opportunity?.owner_id;
+  if (ownerId && ownerId !== ctx.profileId) {
+    await notify(
+      ctx.officeId,
+      [ownerId],
+      "Хэлцлийн төлөв өөрчлөгдлөө",
+      `${before.number} — ${TXN_STATUS_LABEL[to as (typeof TXN_STATUSES)[number]].label}.`,
+      id
+    );
+  }
   revalidateTxnPaths(id);
+  revalidatePath(`/agent/crm/pipeline/${before.opportunity_id}`);
+  revalidatePath(`/office/crm/deals/${before.opportunity_id}`);
   return { ok: true };
+}
+
+/** Хаалтын босго (§6.17) — DB-ийн crm_txn_closing_checks (нэг эх үнэн). */
+export async function getClosingChecks(id: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("crm_txn_closing_checks", { p_txn: id });
+  if (error) {
+    console.error("getClosingChecks:", error.message);
+    return [];
+  }
+  return parseClosingChecks(data);
 }
 
 /** Хаалт: Д-09 post-sale багц даалгаврыг ЭХЭЛЖ үүсгээд (урьдач) төлөв солино. */
@@ -423,7 +481,7 @@ export async function closeTransaction(id: string): Promise<TxnActionResult> {
   if ("error" in c) return { ok: false, error: c.error };
   const { ctx } = c;
   if (!ctx.roles.some((r) => ["sales_director", "ceo"].includes(r))) {
-    return { ok: false, error: "Хаалтыг зөвхөн Борлуулалтын захирал баталгаажуулна (F-420)." };
+    return { ok: false, error: "Хаалтыг зөвхөн Борлуулалт хариуцсан захирал баталгаажуулна." };
   }
 
   const { data: txn } = await supabase
@@ -434,12 +492,20 @@ export async function closeTransaction(id: string): Promise<TxnActionResult> {
     .maybeSingle();
   if (!txn) return { ok: false, error: "Хэлцэл олдсонгүй эсвэл танд эрх алга." };
   if (txn.status !== "payment") {
-    return { ok: false, error: "Зөвхөн «Төлбөр» төлөвөөс хаалт руу шилжинэ (F-420)." };
+    return { ok: false, error: "Зөвхөн «Төлбөр» төлөвөөс хаалт руу шилжинэ." };
   }
   const ownerId =
     (txn as unknown as { opportunity: { owner_id: string } | null }).opportunity?.owner_id ?? ctx.profileId;
 
-  // Д-09: post-sale багц даалгавар (урьдач — DB guard шаардана).
+  // Хаалтын босго: борлуулалтын дараах даалгавраас бусад нь хангагдсан
+  // байх ёстой — хангагдаагүй бол даалгавар үүсгэлгүй буцаана.
+  const checks = await getClosingChecks(id);
+  const blocking = checks.filter((c) => !c.ok && c.code !== "post_sale").map((c) => c.label);
+  if (blocking.length) {
+    return { ok: false, error: "Хаалтын босго хангагдаагүй байна.", missing: blocking };
+  }
+
+  // Д-09: борлуулалтын дараах даалгавар (хаалтын урьдач нөхцөл).
   const admin = createAdminClient();
   try {
     const { data: existing } = await admin
@@ -473,9 +539,9 @@ export async function closeTransaction(id: string): Promise<TxnActionResult> {
           tpl?.items && Array.isArray(tpl.items)
             ? (tpl.items as { label?: string }[]).map((i) => i.label ?? "").filter(Boolean)
             : [
-                "Баримтын эх хувийг архивт хүлээлгэн өгөх (G6)",
-                "Харилцагчид баярласан холбоо барих + NPS (F-750/751)",
-                "Санал болголтын (referral) хүсэлт тавих (F-752)",
+                "Баримтын эх хувийг архивт хүлээлгэн өгөх",
+                "Харилцагчтай эргэн холбогдож сэтгэл ханамжийг асуух",
+                "Санал болголтын хүсэлт тавих",
               ];
         for (const label of labels) {
           const { data: task } = await admin
@@ -485,7 +551,7 @@ export async function closeTransaction(id: string): Promise<TxnActionResult> {
               created_by: ownerId,
               responsible_id: ownerId,
               title: `${label} — ${txn.number}`,
-              description: `Хэлцэл ${txn.number} хаагдахтай холбоотой борлуулалтын дараах алхам (Д-09).`,
+              description: `Хэлцэл ${txn.number} хаагдахтай холбоотой борлуулалтын дараах алхам.`,
               priority: "normal",
               deadline: new Date(Date.now() + 3 * 86400000).toISOString(),
             })
@@ -523,22 +589,24 @@ export async function closeTransaction(id: string): Promise<TxnActionResult> {
   if (error) {
     const missing = parseGateMissing(error.message);
     if (missing) {
-      return { ok: false, error: "G5 гейт хангагдаагүй — дутуу шаардлагууд байна (F-408/416).", missing };
+      return { ok: false, error: "Хаалтын босго хангагдаагүй — дутуу шаардлагууд байна.", missing };
     }
     console.error("closeTransaction:", error.message);
     return { ok: false, error: friendlyTxnError(error.message) };
   }
 
-  // F-454-ийн урьдач тэмдэглэгээ: шимтгэлийн тооцооны скан (U7 уншина).
+  // Шимтгэлийн тооцооны скан (урамшууллын нэгж уншина).
   await logRuleRun(ctx.officeId, "F-454", "crm_transactions", id, "pending", { number: txn.number });
   await notify(
+    ctx.officeId,
     [ownerId],
-    "crm_txn_status",
     "Хэлцэл амжилттай хаагдлаа",
-    `${txn.number} — ${TXN_STATUS_LABEL.closed.label}.`,
-    `/office/crm/transactions/${id}`
+    `${txn.number} — ${TXN_STATUS_LABEL.closed.label}. Боломж амжилттай хаагдсан шатанд шилжлээ.`,
+    id
   );
   revalidateTxnPaths(id);
+  revalidatePath(`/agent/crm/pipeline/${txn.opportunity_id}`);
+  revalidatePath(`/office/crm/deals/${txn.opportunity_id}`);
   return { ok: true };
 }
 
@@ -572,10 +640,10 @@ export async function cancelTransaction(
   if ("error" in c) return { ok: false, error: c.error };
   const { ctx } = c;
   if (!(TXN_CANCEL_CATEGORIES as readonly string[]).includes(reasonCategory)) {
-    return { ok: false, error: "Цуцлалтын шалтгааны ангилал буруу байна (F-415)." };
+    return { ok: false, error: "Цуцлалтын шалтгааны ангилал буруу байна." };
   }
   if (reasonCategory === "other" && !note?.trim()) {
-    return { ok: false, error: "«Бусад» шалтгаанд тайлбар заавал (F-104/415)." };
+    return { ok: false, error: "«Бусад» шалтгаанд тайлбар заавал." };
   }
   const reason = `${CANCEL_CATEGORY_LABEL[reasonCategory]}${note?.trim() ? ` — ${note.trim()}` : ""}`;
 
@@ -637,7 +705,7 @@ export async function removeParty(partyId: string, txnId: string): Promise<TxnAc
     console.error("removeParty:", error.message);
     return { ok: false, error: friendlyTxnError(error.message) };
   }
-  if (!count) return { ok: false, error: "Талыг зөвхөн ноорог төлөвт хасна (F-417)." };
+  if (!count) return { ok: false, error: "Талыг зөвхөн ноорог төлөвт хасна." };
   await writeAudit(ctx.officeId, "crm_transactions", txnId, "party_removed", { newValue: { party_id: partyId } });
   revalidateTxnPaths(txnId);
   return { ok: true };
@@ -661,7 +729,7 @@ export async function setAgentRoles(txnId: string, rawRoles: AgentRoleInput[]): 
   if ("error" in c) return { ok: false, error: c.error };
   const { ctx } = c;
 
-  const parsed = z.array(agentRoleSchema).min(1, "Дор хаяж нэг үүрэг бүртгэнэ (F-402)").safeParse(rawRoles);
+  const parsed = z.array(agentRoleSchema).min(1, "Дор хаяж нэг үүрэг бүртгэнэ").safeParse(rawRoles);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Оролт буруу байна." };
   const roles = parsed.data;
 
@@ -678,7 +746,7 @@ export async function setAgentRoles(txnId: string, rawRoles: AgentRoleInput[]): 
       if (Math.abs(sum - 100) > 0.01) {
         return {
           ok: false,
-          error: `«${role}» үүргийн хуваарилалтын нийлбэр 100% байх ёстой (одоо ${sum}%) — F-458.`,
+          error: `«${role}» үүргийн хуваарилалтын нийлбэр 100% байх ёстой (одоо ${sum}%).`,
         };
       }
     }
@@ -710,7 +778,7 @@ export async function setAgentRoles(txnId: string, rawRoles: AgentRoleInput[]): 
         .eq("id", row.id)
         .eq("office_id", ctx.officeId);
       if (error || !count) {
-        return { ok: false, error: "Үүргийн мөрийг зөвхөн ноорог төлөвт хасна — нотолгоо хөндөгдөхгүй (F-451)." };
+        return { ok: false, error: "Үүргийн мөрийг зөвхөн ноорог төлөвт хасна — нотолгоо хөндөгдөхгүй." };
       }
     }
   }
@@ -747,19 +815,7 @@ export async function setAgentRoles(txnId: string, rawRoles: AgentRoleInput[]): 
 
 // ── Гэрээний бүртгэл (F-403) ──────────────────────────────
 
-const contractSchema = z
-  .object({
-    transactionId: z.uuid(),
-    contractType: z.string().trim().min(1, "Гэрээний төрөл оруулна уу").max(120),
-    number: z.string().trim().min(1, "Гэрээний дугаар оруулна уу").max(60),
-    signedOn: z.string().optional().nullable(),
-    validFrom: z.string().optional().nullable(),
-    validTo: z.string().optional().nullable(),
-    docId: z.uuid().optional().nullable(),
-  })
-  .strict();
-
-export type AddContractInput = z.infer<typeof contractSchema>;
+export type AddContractInput = DealContractInput;
 
 export async function addContract(raw: AddContractInput): Promise<{ id?: string; error?: string }> {
   const supabase = await createClient();
@@ -767,15 +823,28 @@ export async function addContract(raw: AddContractInput): Promise<{ id?: string;
   if ("error" in c) return { error: c.error };
   const { ctx } = c;
 
-  const parsed = contractSchema.safeParse(raw);
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Оролт буруу байна." };
-  const input = parsed.data;
+  const v = validateDealContract(raw);
+  if ("error" in v) return { error: v.error };
+  const input = v.data;
+
+  // Гарын үсэгтэй хавсралт нь энэ хэлцлийн баримт байх.
+  if (input.docId) {
+    const { data: link } = await supabase
+      .from("crm_document_links")
+      .select("document_id")
+      .eq("document_id", input.docId)
+      .eq("entity", "transaction")
+      .eq("entity_id", input.transactionId)
+      .maybeSingle();
+    if (!link) return { error: "Сонгосон баримт энэ хэлцлийн хавтсанд хавсаргагдаагүй байна." };
+  }
 
   const { data: row, error } = await supabase
     .from("crm_transaction_contracts")
     .insert({
       office_id: ctx.officeId,
       transaction_id: input.transactionId,
+      template_code: input.templateCode,
       contract_type: input.contractType,
       number: input.number,
       signed_on: input.signedOn?.slice(0, 10) ?? null,
@@ -790,10 +859,40 @@ export async function addContract(raw: AddContractInput): Promise<{ id?: string;
     return { error: friendlyTxnError(error?.message ?? "") };
   }
   await writeAudit(ctx.officeId, "crm_transactions", input.transactionId, "contract_added", {
-    newValue: { number: input.number, type: input.contractType },
+    newValue: { number: input.number, type: input.contractType, template: input.templateCode },
   });
+  // Гэрээний хяналт: эрх бүхий хянагчдад мэдэгдэнэ.
+  if (input.docId) {
+    const cfg = normalizeDealFlow(await getSettingValue("deal_flow"));
+    await notify(
+      ctx.officeId,
+      [],
+      "Гэрээ хянах хүлээгдэж байна",
+      `Хэлцлийн гэрээ ${input.number} бүртгэгдлээ — загвар, гарын үсгийг хянана уу.`,
+      input.transactionId,
+      { includeRoles: cfg.contractReviewerRoles.filter((r) => r !== "agent") as CrmStaffContext["roles"] }
+    );
+  }
   revalidateTxnPaths(input.transactionId);
   return { id: row.id };
+}
+
+/** Гэрээ хянах (deal_flow.contract_reviewer_roles) — хаалтын «Гэрээ» босго. */
+export async function reviewContract(
+  contractId: string,
+  txnId: string,
+  note?: string
+): Promise<TxnActionResult> {
+  const supabase = await createClient();
+  const c = await ctxOrError();
+  if ("error" in c) return { ok: false, error: c.error };
+  const { error } = await supabase.rpc("crm_review_contract", { p_contract: contractId, p_note: note?.trim() || null });
+  if (error) {
+    console.error("reviewContract:", error.message);
+    return { ok: false, error: friendlyTxnError(error.message) };
+  }
+  revalidateTxnPaths(txnId);
+  return { ok: true };
 }
 
 // ── Төлбөрийн хуваарь (F-405) ─────────────────────────────
@@ -892,7 +991,7 @@ export async function addHandoverItem(txnId: string, label: string): Promise<Txn
 const approvalSchema = z
   .object({
     transactionId: z.uuid(),
-    rationale: z.string().trim().min(1, "Үндэслэл заавал (F-410)").max(2000),
+    rationale: z.string().trim().min(1, "Үндэслэл заавал").max(2000),
     feeChange: z.enum(["discount", "waiver", "special"], "Хөлсний өөрчлөлтийн төрөл буруу"),
     approvedAmount: z.number().nonnegative().optional().nullable(),
     docId: z.uuid().optional().nullable(),
@@ -934,24 +1033,14 @@ export async function requestApproval(raw: RequestApprovalInput): Promise<{ id?:
   }
 
   // Мэдэгдэл: Борлуулалтын захирал(ууд).
-  try {
-    const admin = createAdminClient();
-    const { data: sds } = await admin
-      .from("crm_staff")
-      .select("profile_id")
-      .eq("office_id", ctx.officeId)
-      .eq("is_active", true)
-      .contains("roles", ["sales_director"]);
-    await notify(
-      (sds ?? []).map((s) => s.profile_id),
-      "crm_txn_approval",
-      "Хөлсний зөвшөөрлийн хүсэлт",
-      "Стандартаас зөрсөн хөлсний зөвшөөрөл хүлээгдэж байна (F-411).",
-      `/office/crm/transactions/${input.transactionId}`
-    );
-  } catch {
-    // үл тооно
-  }
+  await notify(
+    ctx.officeId,
+    [],
+    "Хөлсний зөвшөөрлийн хүсэлт",
+    "Стандартаас зөрсөн хөлсний зөвшөөрөл хүлээгдэж байна.",
+    input.transactionId,
+    { includeRoles: ["sales_director"] }
+  );
   revalidateTxnPaths(input.transactionId);
   return { id: row.id };
 }
@@ -970,7 +1059,7 @@ export async function approveTxnApproval(
   if ("error" in c) return { ok: false, error: c.error };
   const { ctx } = c;
   if (!ctx.roles.some((r) => ["sales_director", "ceo"].includes(r))) {
-    return { ok: false, error: "Зөвшөөрлийг зөвхөн Борлуулалтын захирал/Ерөнхий захирал батална (F-412)." };
+    return { ok: false, error: "Зөвшөөрлийг зөвхөн Борлуулалт хариуцсан захирал / CEO батална." };
   }
 
   const { error, count } = await supabase
@@ -1009,7 +1098,7 @@ export async function applyCorrection(
   const supabase = await createClient();
   const c = await ctxOrError();
   if ("error" in c) return { ok: false, error: c.error };
-  if (!rationale.trim()) return { ok: false, error: "Залруулгад үндэслэл заавал (F-417)." };
+  if (!rationale.trim()) return { ok: false, error: "Залруулгад үндэслэл заавал." };
   if (!Object.keys(changes).length) return { ok: false, error: "Өөрчлөлт хоосон байна." };
 
   const { error } = await supabase.rpc("crm_apply_txn_correction", {
@@ -1044,12 +1133,20 @@ export async function recomputeCompleteness(txnId: string): Promise<TxnActionRes
 
 export async function exportTransactions(
   filters: TxnFilters
-): Promise<{ csv?: string; error?: string }> {
+): Promise<{ csv?: string; error?: string; needsRequest?: boolean }> {
   const c = await ctxOrError();
   if ("error" in c) return { error: c.error };
   const { ctx } = c;
+  // §6.32: хэлцлийн экспорт зөвхөн тохиргоонд заасан дүрд.
+  const cfg = normalizeDealFlow(await getSettingValue("deal_flow"));
+  if (!canExportDeals(ctx.roles, cfg)) {
+    return { error: "Хэлцлийн жагсаалтыг экспортлох эрх танд алга." };
+  }
 
   const rows = await getTransactions(filters);
+  // §6.32: дүрийн эрхээс гадна мөрийн тоо/зөвшөөрлийн хүсэлтээр хязгаарлана.
+  const auth = await authorizeExport("transactions", rows.length);
+  if (!auth.ok) return { error: auth.error, needsRequest: auth.needsRequest };
   const header = [
     "Дугаар",
     "Төрөл",
@@ -1062,7 +1159,7 @@ export async function exportTransactions(
     "Хаасан",
     "Бүрэн байдал %",
     "Агент",
-    "Объект",
+    "Үл хөдлөх",
   ];
   const esc = (v: unknown) => {
     const s = v == null ? "" : String(v);

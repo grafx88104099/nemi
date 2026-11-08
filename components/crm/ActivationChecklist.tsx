@@ -51,7 +51,7 @@ export function ActivationChecklist({
     <Card>
       <CardBody className="space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <h3 className="text-sm font-bold text-ink">Идэвхжүүлэлтийн босго (F-203)</h3>
+          <h3 className="text-sm font-bold text-ink">Идэвхжүүлэлтийн босго</h3>
           {ready ? (
             <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700">
               <CheckCircle2 className="size-4" /> Бэлэн
@@ -85,7 +85,7 @@ export function ActivationChecklist({
           {pending ? "Идэвхжүүлж байна…" : "Идэвхтэй болгох"}
         </Button>
         <p className="text-xs text-subtle">
-          Идэвхжимэгц урвуу тохируулга автоматаар ажиллаж, тохирох харилцагчийн жагсаалт үүснэ (Д-07, F-254).
+          Идэвхжимэгц урвуу тохируулга автоматаар ажиллаж, тохирох харилцагчийн жагсаалт үүснэ.
         </p>
       </CardBody>
     </Card>

@@ -97,12 +97,15 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="w-full max-w-md rounded-2xl bg-surface shadow-xl outline-none"
+        // Урт маягт дэлгэцээс хэтэрвэл тасрахгүй: цонх дэлгэцийн өндрөөр
+        // хязгаарлагдаж, агуулга дотроо гүйлгэгдэнэ; толгой ба footer үргэлж харагдана.
+        className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col rounded-2xl bg-surface shadow-xl outline-none"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-line p-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-line p-4">
           <h2 id={titleId} className="font-bold text-ink">{title}</h2>
           <button
+            type="button"
             onClick={onClose}
             aria-label="Хаах"
             className="rounded-lg p-1.5 text-muted hover:bg-surface-2 hover:text-ink"
@@ -110,8 +113,8 @@ export function Modal({
             <X className="size-4" />
           </button>
         </div>
-        {children}
-        {footer}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
+        {footer ? <div className="shrink-0">{footer}</div> : null}
       </div>
     </div>
   );

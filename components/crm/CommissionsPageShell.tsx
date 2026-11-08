@@ -11,6 +11,7 @@ import { Card, CardBody } from "@/components/ui/card";
 import { Input, Field } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/ui/modal";
+import { CommissionPreviewCard } from "@/components/crm/quality/CommissionPreviewCard";
 import {
   generateCommissions,
   generateMonthlyPmCommissions,
@@ -110,13 +111,13 @@ export function CommissionsPageShell({
                   (res) => {
                     const r = res as { created?: number; skipped?: number };
                     setInfo(
-                      `Сарын PM тооцоо: ${r.created ?? 0} үүсэв, ${r.skipped ?? 0} алгасав/хүлээгдэж байна (F-466).`
+                      `ҮХХ-ийн сарын тооцоо: ${r.created ?? 0} үүсэв, ${r.skipped ?? 0} алгасав/хүлээгдэж байна.`
                     );
                   }
                 )
               }
             >
-              <RefreshCcw className="size-4" /> PM сарын тооцоо
+              <RefreshCcw className="size-4" /> ҮХХ-ийн сарын тооцоо
               {pendingPmCount > 0 && <Badge tone="amber">{pendingPmCount}</Badge>}
             </Button>
             <Button size="sm" disabled={pending} onClick={() => { setGenTxn(""); setGenOpen(true); }}>
@@ -130,7 +131,7 @@ export function CommissionsPageShell({
                 disabled={pending}
                 onClick={() => { setRbTxn(""); setRbNote(""); setRbOpen(true); }}
               >
-                <Undo2 className="size-4" /> Rollback (F-462) <Badge tone="amber">{rollbackTxns.length}</Badge>
+                <Undo2 className="size-4" /> Цуцлагдсан хэлцлийн буцаалт <Badge tone="amber">{rollbackTxns.length}</Badge>
               </Button>
             )}
           </div>
@@ -141,7 +142,7 @@ export function CommissionsPageShell({
       {info && <p className="rounded-xl bg-emerald-50 px-4 py-2 text-sm text-emerald-700">{info}</p>}
 
       {/* Нэгтгэл — төлөв бүрийн дүн */}
-      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {SUMMARY_KEYS.map((s) => (
           <Card key={s}>
             <CardBody>
@@ -155,6 +156,8 @@ export function CommissionsPageShell({
           </Card>
         ))}
       </div>
+
+      {!isOffice && <CommissionPreviewCard basePath={basePath} />}
 
       {/* Шүүлт */}
       <div className="flex flex-wrap items-end gap-3">
@@ -282,11 +285,11 @@ export function CommissionsPageShell({
       </div>
 
       {/* F-454: хэлцлээс тооцоо үүсгэх */}
-      <Modal open={genOpen} onClose={() => setGenOpen(false)} title="Хэлцлээс шимтгэл тооцоолох (F-454)">
+      <Modal open={genOpen} onClose={() => setGenOpen(false)} title="Хэлцлээс шимтгэл тооцоолох">
         <div className="space-y-4">
           <p className="text-sm text-muted">
             Зөвхөн амжилттай хаагдсан, Санхүү орлого баталгаажуулсан хэлцлээс тооцоо үүснэ.
-            Хэсэгчилсэн орлогод пропорц тооцож, үлдэгдэл орж ирэхэд нэмэлт мөр автомат үүснэ (F-464).
+            Хэсэгчилсэн орлогод пропорц тооцож, үлдэгдэл орж ирэхэд нэмэлт мөр автомат үүснэ.
           </p>
           <Field label="Хэлцэл (тооцоо үүсээгүй, хаагдсан)">
             <Select value={genTxn} onChange={(e) => setGenTxn(e.target.value)}>
@@ -311,7 +314,7 @@ export function CommissionsPageShell({
                     const r = res as { created?: number; held?: boolean; notes?: string[] };
                     setGenOpen(false);
                     setInfo(
-                      `${r.created ?? 0} тооцооны мөр үүсэв${r.held ? " (F-461 нөхцөлөөр түдгэлзүүлсэн)" : ""}.` +
+                      `${r.created ?? 0} тооцооны мөр үүсэв${r.held ? " (нөхцөл хангаагүй тул түдгэлзүүлсэн)" : ""}.` +
                         (r.notes?.length ? ` ${r.notes.join(" ")}` : "")
                     );
                   }
@@ -325,13 +328,13 @@ export function CommissionsPageShell({
       </Modal>
 
       {/* F-462/463: цуцлагдсан хэлцлийн rollback */}
-      <Modal open={rbOpen} onClose={() => setRbOpen(false)} title="Шимтгэлийн rollback (F-462/463)">
+      <Modal open={rbOpen} onClose={() => setRbOpen(false)} title="Цуцлагдсан хэлцлийн урамшууллыг буцаах">
         <div className="space-y-4">
           <p className="text-sm text-muted">
             Цуцлагдсан/залруулагдсан хэлцлийн бүх тооцоог цуцалж, олгосон дүнд сөрөг гүйлгээний
-            (clawback) ноорог үүсгэнэ. Clawback автоматаар хэрэгжихгүй — эрх бүхий удирдлага тусад нь батална.
+            ноорог үүсгэнэ. Буцаалт автоматаар хэрэгжихгүй — эрх бүхий удирдлага тусад нь батална.
           </p>
-          <Field label="Хэлцэл (rollback хүлээж буй)">
+          <Field label="Хэлцэл (буцаалт хүлээж буй)">
             <Select value={rbTxn} onChange={(e) => setRbTxn(e.target.value)}>
               <option value="">— Сонгох —</option>
               {rollbackTxns.map((t) => (
@@ -341,7 +344,7 @@ export function CommissionsPageShell({
               ))}
             </Select>
           </Field>
-          <Field label="Үндэслэл (заавал — F-463/473)">
+          <Field label="Үндэслэл (заавал)">
             <Input value={rbNote} onChange={(e) => setRbNote(e.target.value)} />
           </Field>
           <div className="flex justify-end gap-2">
@@ -358,13 +361,13 @@ export function CommissionsPageShell({
                     const r = res as { cancelled?: number; clawbacks?: number };
                     setRbOpen(false);
                     setInfo(
-                      `Rollback: ${r.cancelled ?? 0} тооцоо цуцлагдаж, ${r.clawbacks ?? 0} clawback ноорог үүсэв (F-463).`
+                      `${r.cancelled ?? 0} тооцоо цуцлагдаж, ${r.clawbacks ?? 0} буцаалтын ноорог үүсэв.`
                     );
                   }
                 )
               }
             >
-              Rollback
+              Буцаах
             </Button>
           </div>
         </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { fmtDateNum } from "@/lib/format";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { BadgeCheck, FilePlus2 } from "lucide-react";
@@ -77,7 +78,7 @@ export function ApprovalPanel({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted">
-          Стандарт хөлснөөс зөрсөн дүн батлагдсан зөвшөөрөлгүйгээр хүлээн авахгүй (F-411).
+          Стандарт хөлснөөс зөрсөн дүн батлагдсан зөвшөөрөлгүйгээр хүлээн авахгүй.
         </p>
         <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
           <FilePlus2 className="size-4" />
@@ -100,18 +101,18 @@ export function ApprovalPanel({
                   <span className="text-sm text-muted">{a.approved_amount.toLocaleString()}₮</span>
                 )}
                 <span className="ml-auto text-xs text-subtle">
-                  {new Date(a.created_at).toLocaleDateString("mn-MN")}
+                  {fmtDateNum(a.created_at)}
                 </span>
               </div>
               <p className="text-sm text-muted">{a.rationale}</p>
               <p className="text-xs text-subtle">
                 Хүсэгч: {a.requester_name ?? "?"}
-                {a.approved_at && ` · Баталсан: ${a.approver_name ?? "?"} (${new Date(a.approved_at).toLocaleDateString("mn-MN")})`}
+                {a.approved_at && ` · Баталсан: ${a.approver_name ?? "?"} (${fmtDateNum(a.approved_at)})`}
               </p>
               {!a.approved_at && canApprove && (
                 <Button size="sm" variant="secondary" onClick={() => approve(a.id)} disabled={pending}>
                   <BadgeCheck className="size-4" />
-                  Батлах (F-412)
+                  Батлах
                 </Button>
               )}
             </li>
@@ -123,7 +124,7 @@ export function ApprovalPanel({
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title="Transaction Approval хүсэлт (F-410)"
+        title="Хэлцлийн зөвшөөрлийн хүсэлт"
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setOpen(false)}>

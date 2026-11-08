@@ -83,7 +83,7 @@ export function MonthlyRecordForm({
 
   return (
     <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {MONTHLY_FIELDS.map((f) => {
           const v = data[f.key];
           if (f.kind === "bool") {
@@ -106,7 +106,7 @@ export function MonthlyRecordForm({
             <Field
               key={f.key}
               label={f.label}
-              hint={f.auto ? "Автомат (Д-14 cron бөглөнө)" : f.key === "rent_paid_date" && rentNotPaid ? "Төлөгдөөгүй — шаардлагагүй" : undefined}
+              hint={f.auto ? "Автоматаар бөглөгдөнө" : f.key === "rent_paid_date" && rentNotPaid ? "Төлөгдөөгүй — шаардлагагүй" : undefined}
             >
               <Input
                 type={f.kind === "number" ? "number" : f.kind === "date" ? "date" : "text"}
@@ -126,8 +126,8 @@ export function MonthlyRecordForm({
         <p className={"text-sm " + (result.hold ? "text-amber-600" : "text-emerald-600")}>
           Хадгалагдлаа — бөглөлт {Math.round(result.completeness)}%.{" "}
           {result.hold
-            ? "Бүртгэл дутуу тул тухайн сарын урамшуулал HOLD нөхцөлтэй (F-559)."
-            : "Бүрэн — урамшууллын hold нөхцөл цуцлагдана (F-559)."}
+            ? "Бүртгэл дутуу тул тухайн сарын урамшуулал HOLD нөхцөлтэй."
+            : "Бүрэн — урамшууллын hold нөхцөл цуцлагдана."}
         </p>
       )}
       {canEdit && (

@@ -12,7 +12,9 @@ import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/ui/modal";
 import { Tabs } from "@/components/ui/tabs";
 import { savePipeline, saveStage } from "@/lib/actions/crm-settings";
-import { GATES, GATE_LABEL, GATE_CHECKER_LABEL, type GateCode } from "@/lib/constants-crm";
+import { saveStageGuidance } from "./actions";
+import { GATES, GATE_LABEL, type GateCode } from "@/lib/constants-crm";
+import { gateRequirementLabel } from "@/lib/crm/gates";
 import type { GateRequirementRow, PipelineWithStages, StageRow } from "@/lib/queries-crm-core";
 
 type StageDraft = {
@@ -26,6 +28,7 @@ type StageDraft = {
   isTerminal: boolean;
   terminalState: "won" | "lost" | "";
   isClosingDirection: boolean;
+  guidance: string;
 };
 
 const EMPTY_STAGE = (pipelineId: string, sortOrder: number): StageDraft => ({
@@ -38,16 +41,20 @@ const EMPTY_STAGE = (pipelineId: string, sortOrder: number): StageDraft => ({
   isTerminal: false,
   terminalState: "",
   isClosingDirection: false,
+  guidance: "",
 });
 
 export function PipelinesShell({
   pipelines,
   gateReqs,
   canEdit,
+  guidance = {},
 }: {
   pipelines: PipelineWithStages[];
   gateReqs: GateRequirementRow[];
   canEdit: boolean;
+  /** Шатны зөвлөмж (stage id → текст). */
+  guidance?: Record<string, string>;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -76,6 +83,14 @@ export function PipelinesShell({
       if (!res.ok) {
         setError(res.error ?? "Алдаа гарлаа.");
         return;
+      }
+      const stageId = stageDraft.id;
+      if (stageId && stageDraft.guidance.trim() !== (guidance[stageId] ?? "")) {
+        const g = await saveStageGuidance(stageId, stageDraft.guidance);
+        if (!g.ok) {
+          setError(g.error ?? "Зөвлөмжийг хадгалж чадсангүй.");
+          return;
+        }
       }
       setStageDraft(null);
       router.refresh();
@@ -158,7 +173,7 @@ export function PipelinesShell({
                     <th className="px-4 py-2.5 font-medium">Код</th>
                     <th className="px-4 py-2.5 font-medium">Нэр</th>
                     <th className="px-4 py-2.5 font-medium">Магадлал</th>
-                    <th className="px-4 py-2.5 font-medium">Гейт</th>
+                    <th className="px-4 py-2.5 font-medium">Шилжих шалгуур</th>
                     <th className="px-4 py-2.5 font-medium">Терминал</th>
                     {canEdit ? <th className="px-4 py-2.5" /> : null}
                   </tr>
@@ -170,6 +185,11 @@ export function PipelinesShell({
                       <td className="px-4 py-2.5 font-mono text-xs text-muted">{s.code}</td>
                       <td className="px-4 py-2.5 font-medium text-ink">
                         {s.name}
+                        {guidance[s.id] ? (
+                          <span className="block max-w-md truncate text-xs font-normal text-muted" title={guidance[s.id]}>
+                            {guidance[s.id]}
+                          </span>
+                        ) : null}
                         {s.is_closing_direction ? (
                           <Badge tone="amber" className="ml-2">
                             Хаалтын чиглэл
@@ -183,7 +203,7 @@ export function PipelinesShell({
                       <td className="px-4 py-2.5">
                         {s.is_terminal ? (
                           <Badge tone={s.terminal_state === "won" ? "green" : "rose"}>
-                            {s.terminal_state === "won" ? "Амжилттай" : "Алдсан"}
+                            {s.terminal_state === "won" ? "Амжилттай" : "Амжилтгүй"}
                           </Badge>
                         ) : (
                           "—"
@@ -209,6 +229,7 @@ export function PipelinesShell({
                                     ? s.terminal_state
                                     : "",
                                 isClosingDirection: s.is_closing_direction,
+                                guidance: guidance[s.id] ?? "",
                               })
                             }
                           >
@@ -225,11 +246,11 @@ export function PipelinesShell({
 
           <Card>
             <CardBody>
-              <p className="font-bold text-ink">Гейтийн шаардлагууд (G0–G6)</p>
+              <p className="font-bold text-ink">Шилжих шалгуурын шаардлагууд</p>
               <p className="text-xs text-subtle">
-                Шатанд орохын өмнө шалгагдана; дутуу шаардлага UI-д жагсаж, DB trigger хориглоно (F-354).
+                Шатанд орохын өмнө шалгагдана; дутуу шаардлага дэлгэцэд жагсаж, өгөгдлийн сан хориглоно.
               </p>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {GATES.map((g) => {
                   const reqs = gateReqs.filter(
                     (r) => r.gate_code === g && r.is_active && (r.pipeline_id === null || r.pipeline_id === active.id)
@@ -244,8 +265,7 @@ export function PipelinesShell({
                           {reqs.map((r) => (
                             <li key={r.id}>
                               •{" "}
-                              {GATE_CHECKER_LABEL[r.checker_kind as keyof typeof GATE_CHECKER_LABEL] ??
-                                r.checker_kind}
+                              {gateRequirementLabel(r.checker_kind, r.params as Record<string, unknown> | null)}
                             </li>
                           ))}
                         </ul>
@@ -310,12 +330,12 @@ export function PipelinesShell({
                 />
               </Field>
             </div>
-            <Field label="Гейт (шатанд орохын өмнө)">
+            <Field label="Шилжих шалгуур (шатанд орохын өмнө)">
               <Select
                 value={stageDraft.gateCode}
                 onChange={(e) => setStageDraft({ ...stageDraft, gateCode: e.target.value as GateCode | "" })}
               >
-                <option value="">Гейтгүй</option>
+                <option value="">Шалгуургүй</option>
                 {GATES.map((g) => (
                   <option key={g} value={g}>
                     {GATE_LABEL[g]}
@@ -333,11 +353,11 @@ export function PipelinesShell({
                   }}
                 >
                   <option value="">Биш</option>
-                  <option value="won">Амжилттай (won)</option>
-                  <option value="lost">Алдсан (lost)</option>
+                  <option value="won">Амжилттай хаагдсан</option>
+                  <option value="lost">Амжилтгүй хаагдсан</option>
                 </Select>
               </Field>
-              <Field label="Хаалтын чиглэл (AML hold хориглоно)">
+              <Field label="Хаалтын чиглэл (МУТСТ түгжээтэй үед хориглоно)">
                 <Select
                   value={stageDraft.isClosingDirection ? "yes" : "no"}
                   onChange={(e) => setStageDraft({ ...stageDraft, isClosingDirection: e.target.value === "yes" })}
@@ -347,6 +367,17 @@ export function PipelinesShell({
                 </Select>
               </Field>
             </div>
+            {stageDraft.id ? (
+              <Field label="Шатны зөвлөмж" hint="Боломжийн карт дээр «Энэ шатанд юу хийх вэ» хэсэгт харагдана">
+                <textarea
+                  value={stageDraft.guidance}
+                  onChange={(e) => setStageDraft({ ...stageDraft, guidance: e.target.value })}
+                  rows={3}
+                  maxLength={1000}
+                  className="w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink focus:border-brand-500 focus:outline-none"
+                />
+              </Field>
+            ) : null}
             {error ? <p className="text-xs text-danger">{error}</p> : null}
           </div>
         ) : null}

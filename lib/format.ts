@@ -40,15 +40,69 @@ export function relativeDate(iso: string, now: Date = new Date()): string {
   return `${Math.floor(day / 365)} жилийн өмнө`;
 }
 
+// ── Огноо, цаг — үргэлж Улаанбаатарын цагаар ─────────────────────────────
+// Server (Vercel — UTC) ба хөтөч ижил мөр гаргах ёстой: эс бөгөөс цаг 8 цагаар
+// зөрж, React hydration алдаа гарна. toLocale*("mn-MN") нь Node/Chrome-ийн ICU-ээс
+// хамаарч өөр өөр үр дүн өгдөг тул ашиглахгүй. Монгол 2017 оноос хойш зуны цаг
+// хэрэглэдэггүй — тогтмол UTC+8.
+const UB_OFFSET_MS = 8 * 3_600_000;
+const WEEKDAYS = ["ням", "даваа", "мягмар", "лхагва", "пүрэв", "баасан", "бямба"];
+
+type DateInput = string | number | Date;
+
+function ubParts(input: DateInput) {
+  const t = input instanceof Date ? input.getTime() : typeof input === "number" ? input : Date.parse(input);
+  const d = new Date(t + UB_OFFSET_MS);
+  return {
+    y: d.getUTCFullYear(),
+    mo: d.getUTCMonth() + 1,
+    d: d.getUTCDate(),
+    h: d.getUTCHours(),
+    mi: d.getUTCMinutes(),
+    wd: d.getUTCDay(),
+  };
+}
+
+const p2 = (n: number) => String(n).padStart(2, "0");
+
 /** Бүтэн огноо: «2026 оны 6-р сарын 6». */
-export function fmtDate(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getFullYear()} оны ${d.getMonth() + 1}-р сарын ${d.getDate()}`;
+export function fmtDate(iso: DateInput): string {
+  const u = ubParts(iso);
+  return `${u.y} оны ${u.mo}-р сарын ${u.d}`;
 }
 
 /** Огноо + цаг: «2026.06.08 14:30». */
-export function fmtDateTime(iso: string): string {
-  const d = new Date(iso);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+export function fmtDateTime(iso: DateInput): string {
+  const u = ubParts(iso);
+  return `${u.y}.${p2(u.mo)}.${p2(u.d)} ${p2(u.h)}:${p2(u.mi)}`;
+}
+
+/** Тоон огноо: «2026.06.08». */
+export function fmtDateNum(iso: DateInput): string {
+  const u = ubParts(iso);
+  return `${u.y}.${p2(u.mo)}.${p2(u.d)}`;
+}
+
+/** Цаг: «14:30». */
+export function fmtTime(iso: DateInput): string {
+  const u = ubParts(iso);
+  return `${p2(u.h)}:${p2(u.mi)}`;
+}
+
+/** Сар.өдөр: «06.08». */
+export function fmtDayMonth(iso: DateInput): string {
+  const u = ubParts(iso);
+  return `${p2(u.mo)}.${p2(u.d)}`;
+}
+
+/** Сар.өдөр цаг: «06.08 14:30». */
+export function fmtShortDateTime(iso: DateInput): string {
+  const u = ubParts(iso);
+  return `${p2(u.mo)}.${p2(u.d)} ${p2(u.h)}:${p2(u.mi)}`;
+}
+
+/** Гарагтай огноо: «11-р сарын 8, ням». */
+export function fmtDayWithWeekday(iso: DateInput): string {
+  const u = ubParts(iso);
+  return `${u.mo}-р сарын ${u.d}, ${WEEKDAYS[u.wd]}`;
 }

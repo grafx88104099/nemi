@@ -6,6 +6,13 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCrmStaffContext, type CrmStaffContext } from "@/lib/queries-crm-core";
+import { notifyCrm } from "@/lib/crm/notify";
+import {
+  validateDealPayment,
+  validateDealFeeInvoice,
+  type DealPaymentInput,
+  type DealFeeInvoiceInput,
+} from "@/lib/validation/crm-deals";
 import type { Json } from "@/types/database";
 
 /**
@@ -24,7 +31,18 @@ const NO_CRM_ERR = "Та CRM-д бүртгэгдээгүй байна.";
 function revalidateInvoicePaths(leaseId?: string) {
   revalidatePath("/office/crm/rentals/invoices");
   revalidatePath("/office/crm/rentals");
+  revalidatePath("/office/crm/finance");
   if (leaseId) revalidatePath(`/office/crm/rentals/leases/${leaseId}`);
+}
+
+function revalidateDealPaths(txnId?: string | null) {
+  revalidatePath("/office/crm/finance");
+  revalidatePath("/office/crm/transactions");
+  revalidatePath("/agent/crm/transactions");
+  if (txnId) {
+    revalidatePath(`/office/crm/transactions/${txnId}`);
+    revalidatePath(`/agent/crm/transactions/${txnId}`);
+  }
 }
 
 async function ctxOrError(): Promise<{ ctx: CrmStaffContext } | { error: string }> {
@@ -36,10 +54,18 @@ async function ctxOrError(): Promise<{ ctx: CrmStaffContext } | { error: string 
 function friendlyInvoiceError(message: string): string {
   for (const prefix of ["CRM_INVOICE:", "CRM_PAYMENT:", "CRM_LEASE:", "CRM_TXN:"]) {
     const idx = message.indexOf(prefix);
-    if (idx !== -1) return message.slice(idx + prefix.length).trim() || SAVE_ERR;
+    if (idx !== -1) {
+      return (
+        message
+          .slice(idx + prefix.length)
+          .replace(/\s*\((?:F|Д)-[^)]*\)/g, "")
+          .replace(/\s*\(§[^)]*\)/g, "")
+          .trim() || SAVE_ERR
+      );
+    }
   }
   if (message.includes("crm_invoices_lease_id_type_period_month_key")) {
-    return "Энэ гэрээний тухайн сарын нэхэмжлэх аль хэдийн үүссэн байна (Д-13 — сар бүр нэг).";
+    return "Энэ гэрээний тухайн сарын нэхэмжлэх аль хэдийн үүссэн байна.";
   }
   if (message.includes("crm_sequences")) {
     return "Дугаарлалтын тохиргоо (crm_sequences) хийгдээгүй байна — сисадминд хандана уу.";
@@ -82,7 +108,7 @@ async function resolveFxRate(officeId: string, currency: string): Promise<{ rate
   const table = (data ?? {}) as Record<string, Record<string, number>>;
   const rate = table?.[today]?.[currency];
   if (typeof rate !== "number" || rate <= 0) {
-    return { error: `Өнөөдрийн (${today}) ${currency} ханш тохируулагдаагүй байна — Санхүү 'fx_rates'-д нэмнэ үү (F-419).` };
+    return { error: `Өнөөдрийн (${today}) ${currency} ханш тохируулагдаагүй байна — Санхүү 'fx_rates'-д нэмнэ үү.` };
   }
   return { rate };
 }
@@ -96,7 +122,7 @@ const extraInvoiceSchema = z
     recipientContactId: z.uuid("Хүлээн авагч сонгоно уу"),
     amount: z.number().positive("Дүн 0-ээс их байна"),
     dueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Эцсийн хугацаа буруу"),
-    approvalDocId: z.uuid("Бичгэн зөвшөөрлийн баримт заавал (F-523)"),
+    approvalDocId: z.uuid("Бичгэн зөвшөөрлийн баримт заавал"),
   })
   .strict();
 
@@ -193,7 +219,7 @@ export async function createBrokerageInvoice(
     .maybeSingle();
   if (!lease) return { error: "Гэрээ олдсонгүй эсвэл танд эрх алга." };
   if (lease.is_managed) {
-    return { error: "Зуучлалын нэг удаагийн хөлс зөвхөн ЭНГИЙН түрээст (F-516б); менежменттэйд сарын хөлс автомат (Д-13)." };
+    return { error: "Зуучлалын нэг удаагийн хөлс зөвхөн ЭНГИЙН түрээст; менежменттэйд сарын хөлс автомат." };
   }
 
   // Давхардлын хамгаалалт: нэг гэрээнд нэг зуучлалын нэхэмжлэх.
@@ -204,7 +230,7 @@ export async function createBrokerageInvoice(
     .eq("type", "brokerage_fee")
     .neq("status", "cancelled")
     .limit(1);
-  if (existing?.length) return { error: "Энэ гэрээний зуучлалын хөлсний нэхэмжлэх аль хэдийн бий (F-572)." };
+  if (existing?.length) return { error: "Энэ гэрээний зуучлалын хөлсний нэхэмжлэх аль хэдийн бий." };
 
   const { data: tiersCfg } = await supabase.rpc("crm_setting_at", {
     p_office: ctx.officeId,
@@ -220,7 +246,7 @@ export async function createBrokerageInvoice(
   if (Math.abs(amount - suggestion.amount) > 0.01) {
     if (!lease.transaction_id) {
       return {
-        error: `Стандарт хөлс ${suggestion.amount.toLocaleString()}₮ (${suggestion.tier.code}) — зөрсөн дүнг зөвшөөрлийн бүртгэлгүйгээр хүлээж авахгүй (F-411); гэрээ хэлцэлтэй холбогдоогүй тул зөвшөөрөл бүртгэх боломжгүй.`,
+        error: `Стандарт хөлс ${suggestion.amount.toLocaleString()}₮ (${suggestion.tier.code}) — зөрсөн дүнг зөвшөөрлийн бүртгэлгүйгээр хүлээж авахгүй; гэрээ хэлцэлтэй холбогдоогүй тул зөвшөөрөл бүртгэх боломжгүй.`,
         suggested: suggestion.amount,
       };
     }
@@ -232,7 +258,7 @@ export async function createBrokerageInvoice(
       .limit(1);
     if (!approval?.length) {
       return {
-        error: `Стандарт хөлс ${suggestion.amount.toLocaleString()}₮ (шатлал ${suggestion.tier.code}) — зөрүүтэй дүнд батлагдсан зөвшөөрлийн бүртгэл (Transaction Approval) заавал (F-411).`,
+        error: `Стандарт хөлс ${suggestion.amount.toLocaleString()}₮ (шатлал ${suggestion.tier.code}) — зөрүүтэй дүнд батлагдсан зөвшөөрлийн бүртгэл (Transaction Approval) заавал.`,
         suggested: suggestion.amount,
       };
     }
@@ -287,7 +313,7 @@ export async function cancelInvoice(id: string, reason: string): Promise<{ ok: b
   const c = await ctxOrError();
   if ("error" in c) return { ok: false, error: c.error };
   const { ctx } = c;
-  if (!reason?.trim()) return { ok: false, error: "Хүчингүй болгоход үндэслэл заавал (F-522)." };
+  if (!reason?.trim()) return { ok: false, error: "Хүчингүй болгоход үндэслэл заавал." };
 
   const { error, count } = await supabase
     .from("crm_invoices")
@@ -361,7 +387,7 @@ const paymentSchema = z
     scheduleLineId: z.uuid().optional().nullable(),
     transactionId: z.uuid().optional().nullable(),
     leaseId: z.uuid().optional().nullable(),
-    kind: z.enum(["income", "control"], "Төлбөрийн төрөл буруу (F-526)"),
+    kind: z.enum(["income", "control"], "Төлбөрийн төрөл буруу"),
     paidOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Огноо буруу"),
     amount: z.number("Дүн оруулна уу").refine((n) => n !== 0, "Дүн 0 байж болохгүй"),
     currency: z.string().trim().max(8).optional(),
@@ -389,11 +415,11 @@ export async function recordPayment(raw: RecordPaymentInput): Promise<{ id?: str
   const input = parsed.data;
 
   if (!input.invoiceId && !input.scheduleLineId && !input.transactionId && !input.leaseId) {
-    return { error: "Төлбөр нэхэмжлэх, хуваарийн мөр, хэлцэл эсвэл гэрээтэй заавал холбогдоно (F-525)." };
+    return { error: "Төлбөр нэхэмжлэх, хуваарийн мөр, хэлцэл эсвэл гэрээтэй заавал холбогдоно." };
   }
   // F-530: сөрөг дүн = залруулга; эх бүртгэлийн холбоос + тэмдэглэл заавал.
   if (input.amount < 0 && (!input.correctionOfId || !input.refundNote?.trim())) {
-    return { error: "Буцаан олголт/залруулгад эх төлбөрийн холбоос + тэмдэглэл заавал (F-530)." };
+    return { error: "Буцаан олголт/залруулгад эх төлбөрийн холбоос + тэмдэглэл заавал." };
   }
 
   const currency = input.currency || "MNT";
@@ -443,18 +469,23 @@ export async function verifyPayment(id: string): Promise<{ ok: boolean; error?: 
   const { ctx } = c;
 
   if (!ctx.roles.includes("finance")) {
-    return { ok: false, error: "Орлогын баталгаажуулалтыг зөвхөн Санхүү хийнэ (F-527)." };
+    return { ok: false, error: "Орлогын баталгаажуулалтыг зөвхөн Санхүү хийнэ." };
   }
 
   const { data: payment } = await supabase
     .from("crm_payments")
-    .select("id, kind, lease_id, invoice_id, finance_verified_at, paid_on, amount_mnt")
+    .select("id, kind, lease_id, invoice_id, transaction_id, doc_id, created_by, finance_verified_at, paid_on, amount_mnt")
     .eq("id", id)
     .eq("office_id", ctx.officeId)
     .maybeSingle();
   if (!payment) return { ok: false, error: "Төлбөр олдсонгүй эсвэл танд эрх алга." };
-  if (payment.kind !== "income") return { ok: false, error: "Зөвхөн орлогын бүртгэлийг баталгаажуулна (F-526)." };
+  if (payment.kind !== "income" && !payment.transaction_id) {
+    return { ok: false, error: "Зөвхөн орлогын эсвэл хэлцлийн төлбөрийг баталгаажуулна." };
+  }
   if (payment.finance_verified_at) return { ok: false, error: "Аль хэдийн баталгаажсан." };
+  if (payment.transaction_id && !payment.doc_id) {
+    return { ok: false, error: "Төлбөрийн баримт хавсаргаагүй тул баталгаажуулахгүй." };
+  }
 
   const { error } = await supabase
     .from("crm_payments")
@@ -483,7 +514,7 @@ export async function verifyPayment(id: string): Promise<{ ok: boolean; error?: 
       .select("id, is_managed")
       .eq("id", leaseId)
       .maybeSingle();
-    if (lease?.is_managed) {
+    if (lease?.is_managed && payment.kind === "income") {
       await logRuleRun(ctx.officeId, "F-466", "crm_payments", id, "pending", {
         lease_id: leaseId,
         month: `${String(payment.paid_on).slice(0, 7)}-01`,
@@ -492,6 +523,180 @@ export async function verifyPayment(id: string): Promise<{ ok: boolean; error?: 
     }
   }
 
+  if (payment.transaction_id && payment.created_by && payment.created_by !== user.id) {
+    await notifyCrm({
+      officeId: ctx.officeId,
+      event: "txn_status_changed",
+      recipients: [payment.created_by],
+      title: "Төлбөр баталгаажлаа",
+      body: `Санхүү ${Number(payment.amount_mnt).toLocaleString("mn-MN")}₮ төлбөрийг баталгаажууллаа.`,
+      link: `/agent/crm/transactions/${payment.transaction_id}`,
+      entity: "crm_payments",
+      entityId: payment.id,
+    });
+  }
   revalidateInvoicePaths(leaseId ?? undefined);
+  revalidateDealPaths(payment.transaction_id);
   return { ok: true };
+}
+
+// ── Хэлцлийн төлбөр (§6.17 «Төлбөр») ─────────────────────
+
+/**
+ * Хэлцлийн хуваарийн мөрөнд төлбөр бүртгэнэ — баримт заавал. Үнийн төлбөр
+ * «хяналтын» төрөлтэй (шимтгэлийн суурьт орохгүй); PMC-ийн орлого зөвхөн
+ * хөлсний нэхэмжлэхийн төлбөр. Санхүүд баталгаажуулах мэдэгдэл очно.
+ */
+export async function recordDealPayment(raw: DealPaymentInput): Promise<{ id?: string; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: AUTH_ERR };
+  const c = await ctxOrError();
+  if ("error" in c) return { error: c.error };
+  const { ctx } = c;
+  const v = validateDealPayment(raw);
+  if ("error" in v) return { error: v.error };
+  const input = v.data;
+
+  const { data: line } = await supabase
+    .from("crm_payment_schedule_lines")
+    .select("id, transaction_id, amount")
+    .eq("id", input.scheduleLineId)
+    .maybeSingle();
+  if (!line || line.transaction_id !== input.transactionId) return { error: "Хуваарийн мөр олдсонгүй." };
+
+  const { data: txn } = await supabase
+    .from("crm_transactions")
+    .select("id, status, currency, number")
+    .eq("id", input.transactionId)
+    .eq("office_id", ctx.officeId)
+    .maybeSingle();
+  if (!txn) return { error: "Хэлцэл олдсонгүй эсвэл танд эрх алга." };
+  if (txn.status === "closed" || txn.status === "cancelled") return { error: "Хаагдсан хэлцэлд төлбөр бүртгэхгүй." };
+
+  const fx = await resolveFxRate(ctx.officeId, txn.currency);
+  if (fx.error) return { error: fx.error };
+
+  const { data: row, error } = await supabase
+    .from("crm_payments")
+    .insert({
+      office_id: ctx.officeId,
+      kind: "control",
+      schedule_line_id: line.id,
+      transaction_id: txn.id,
+      paid_on: input.paidOn,
+      amount: input.amount,
+      currency: txn.currency,
+      fx_rate: fx.rate ?? 1,
+      method: input.method,
+      doc_id: input.docId,
+      created_by: user.id,
+    })
+    .select("id")
+    .single();
+  if (error || !row) {
+    console.error("recordDealPayment:", error?.message);
+    return { error: friendlyInvoiceError(error?.message ?? "") };
+  }
+
+  await notifyCrm({
+    officeId: ctx.officeId,
+    event: "payment_verify_due",
+    recipients: [],
+    includeRoles: ["finance"],
+    title: "Төлбөр баталгаажуулах хүлээгдэж байна",
+    body: `${txn.number}: ${input.amount.toLocaleString("mn-MN")} ${txn.currency} төлбөр баримттай бүртгэгдлээ.`,
+    link: "/office/crm/finance",
+    entity: "crm_payments",
+    entityId: row.id,
+  });
+  revalidateDealPaths(txn.id);
+  return { id: row.id };
+}
+
+/** Хэлцлээс үйлчилгээний хөлсний нэхэмжлэх (§6.17 «Шимтгэл, үйлчилгээний хөлс»). */
+export async function createDealFeeInvoice(raw: DealFeeInvoiceInput): Promise<{ id?: string; error?: string }> {
+  const supabase = await createClient();
+  const c = await ctxOrError();
+  if ("error" in c) return { error: c.error };
+  const { ctx } = c;
+  if (!ctx.roles.some((r) => r === "finance" || r === "property_manager")) {
+    return { error: "Хөлсний нэхэмжлэхийг Санхүү үүсгэнэ." };
+  }
+  const v = validateDealFeeInvoice(raw);
+  if ("error" in v) return { error: v.error };
+  const input = v.data;
+
+  const { data: txn } = await supabase
+    .from("crm_transactions")
+    .select("id, status, type")
+    .eq("id", input.transactionId)
+    .eq("office_id", ctx.officeId)
+    .maybeSingle();
+  if (!txn) return { error: "Хэлцэл олдсонгүй эсвэл танд эрх алга." };
+  if (txn.status === "closed" || txn.status === "cancelled") return { error: "Хаагдсан хэлцэлд нэхэмжлэх үүсгэхгүй." };
+  if (txn.type === "replacement") return { error: "Дахин түрээслүүлэлтэд хөлс авахгүй." };
+
+  const { data: existing } = await supabase
+    .from("crm_invoices")
+    .select("id")
+    .eq("transaction_id", txn.id)
+    .eq("type", "brokerage_fee")
+    .neq("status", "cancelled")
+    .limit(1);
+  if (existing?.length) return { error: "Энэ хэлцлийн хөлсний нэхэмжлэх аль хэдийн бий." };
+
+  const { data: row, error } = await supabase
+    .from("crm_invoices")
+    .insert({
+      office_id: ctx.officeId,
+      type: "brokerage_fee",
+      transaction_id: txn.id,
+      recipient_contact_id: input.recipientContactId,
+      due_on: input.dueOn,
+      amount: input.amount,
+    })
+    .select("id")
+    .single();
+  if (error || !row) {
+    console.error("createDealFeeInvoice:", error?.message);
+    return { error: friendlyInvoiceError(error?.message ?? "") };
+  }
+  revalidateDealPaths(txn.id);
+  revalidateInvoicePaths();
+  return { id: row.id };
+}
+
+/** Хөлсний нэхэмжлэхийн төлбөр (Санхүү) — орлого, баримттай. */
+export async function recordDealFeePayment(raw: {
+  invoiceId: string;
+  paidOn: string;
+  amount: number;
+  method: "bank" | "cash" | "foreign" | "virtual" | "other";
+  docId: string;
+}): Promise<{ id?: string; error?: string }> {
+  const c = await ctxOrError();
+  if ("error" in c) return { error: c.error };
+  if (!raw.docId) return { error: "Төлбөрийн баримтыг хавсаргана уу." };
+  const supabase = await createClient();
+  const { data: inv } = await supabase
+    .from("crm_invoices")
+    .select("id, transaction_id, status")
+    .eq("id", raw.invoiceId)
+    .maybeSingle();
+  if (!inv?.transaction_id) return { error: "Нэхэмжлэх олдсонгүй." };
+  if (inv.status === "planned") return { error: "Эхлээд нэхэмжлэхийг илгээнэ үү." };
+  const res = await recordPayment({
+    invoiceId: inv.id,
+    transactionId: inv.transaction_id,
+    kind: "income",
+    paidOn: raw.paidOn,
+    amount: raw.amount,
+    method: raw.method,
+    docId: raw.docId,
+  });
+  if (!res.error) revalidateDealPaths(inv.transaction_id);
+  return res;
 }

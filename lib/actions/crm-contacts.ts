@@ -18,6 +18,32 @@ import {
 } from "@/lib/validation/crm";
 import { normalizePhone, normalizeEmail } from "@/lib/crm/normalize";
 import { CONSENT_STATUSES, type ConsentStatus } from "@/lib/constants-crm";
+import { findDuplicatesMasked, type MaskedDuplicate } from "@/lib/actions/crm-ownership";
+import { authorizeExport } from "@/lib/actions/crm-exports";
+
+/** Эх сурвалж тайлбар шаардах эсэх (лавлахын requires_note). */
+async function sourceNeedsNote(sourceId: string): Promise<{ ok: boolean; requiresNote: boolean }> {
+  const admin = createAdminClient();
+  const { data } = await admin.from("crm_lookups").select("kind, requires_note").eq("id", sourceId).maybeSingle();
+  if (!data || data.kind !== "lead_source") return { ok: false, requiresNote: false };
+  return { ok: true, requiresNote: data.requires_note };
+}
+
+/**
+ * Утас/и-мэйлээр өөр агентын нээлттэй сэжимтэй харилцагч олдсон эсэх —
+ * ийм үед шинэ давхар бүртгэл үүсгэхгүй, эзэмшлийн маргааны замаар явна (§6.26).
+ */
+function blockingDuplicate(hits: MaskedDuplicate[]): MaskedDuplicate | null {
+  return (
+    hits.find(
+      (h) =>
+        (h.match_kind === "phone" || h.match_kind === "email") &&
+        !!h.open_lead_id &&
+        h.has_owner &&
+        !h.owner_is_me
+    ) ?? null
+  );
+}
 
 /**
  * Харилцагчийн бичилтүүд (U2 — F-100–124). RLS давхар хамгаална;
@@ -89,7 +115,13 @@ export async function findDuplicatesAction(input: {
 
 // ── Үүсгэх / засах ────────────────────────────────────────
 
-export type CreateContactResult = { id?: string; error?: string; duplicates?: DuplicateHit[] };
+export type CreateContactResult = {
+  id?: string;
+  error?: string;
+  duplicates?: DuplicateHit[];
+  /** Оффисын хэмжээний масктай давхардал (өөр агентын бүртгэл ч орно). */
+  maskedDuplicates?: MaskedDuplicate[];
+};
 
 export async function createContact(raw: ContactInput): Promise<CreateContactResult> {
   const supabase = await createClient();
@@ -105,16 +137,37 @@ export async function createContact(raw: ContactInput): Promise<CreateContactRes
   if ("error" in parsed) return { error: parsed.error };
   const input = parsed.data;
 
-  // F-107: бодит цагийн давхардлын шалгалт (сервер талын эцсийн хаалт).
-  const dupHits = await findDuplicates({
-    phone: input.phones[0],
-    email: input.emails[0],
-    name: input.kind === "person" ? `${input.firstName ?? ""}`.trim() : (input.orgName ?? ""),
-  });
-  if (dupHits.length > 0 && !input.duplicateOverride) {
+  const src = await sourceNeedsNote(input.sourceId);
+  if (!src.ok) return { error: "Эх сурвалж буруу байна." };
+  if (src.requiresNote && !input.sourceDetail?.trim()) {
+    return { error: "Энэ эх сурвалжид тайлбар заавал — дэлгэрэнгүйг бичнэ үү." };
+  }
+
+  // Давхардлын шалгалт — RLS хүрээнд + оффисын хэмжээнд масктай (§6.26).
+  const dupName = input.kind === "person" ? `${input.firstName ?? ""}`.trim() : (input.orgName ?? "");
+  const [dupHits, masked] = await Promise.all([
+    findDuplicates({ phone: input.phones[0], email: input.emails[0], name: dupName }),
+    findDuplicatesMasked({
+      phone: input.phones[0] || undefined,
+      email: input.emails[0] || undefined,
+      name: dupName.length >= 3 ? dupName : undefined,
+    }),
+  ]);
+  const maskedHits = masked.hits ?? [];
+  const blocking = blockingDuplicate(maskedHits);
+  if (blocking) {
     return {
-      error: "Ижил төстэй бүртгэл олдлоо — давхардлыг шалгаад «Үл хэрэгсэж үргэлжлүүлэх» гэснийг сонгоно уу.",
+      error:
+        "Энэ утас/и-мэйлтэй харилцагч өөр агентын нээлттэй сэжимд бүртгэлтэй — давхар бүртгэл үүсгэхгүй. Эзэмшлийн маргаан нээж болно.",
       duplicates: dupHits,
+      maskedDuplicates: maskedHits,
+    };
+  }
+  if ((dupHits.length > 0 || maskedHits.length > 0) && !input.duplicateOverride) {
+    return {
+      error: "Ижил төстэй бүртгэл олдлоо — давхардлыг шалгаад байгаа бүртгэлийг сонгох эсвэл «Шинээр үүсгэх»-ийг баталгаажуулна уу.",
+      duplicates: dupHits,
+      maskedDuplicates: maskedHits,
     };
   }
 
@@ -151,6 +204,7 @@ export async function createContact(raw: ContactInput): Promise<CreateContactRes
       consent: input.consent,
       consent_at: input.consent !== "not_asked" ? new Date().toISOString() : null,
       consent_channel: input.consentChannel,
+      privacy_level: input.privacyLevel ?? "standard",
       created_by: user.id,
     })
     .select("id")
@@ -159,6 +213,7 @@ export async function createContact(raw: ContactInput): Promise<CreateContactRes
     console.error("createContact:", error?.message);
     return { error: SAVE_ERR };
   }
+  let channelError: string | null = null;
 
   // Утас/и-мэйл (эхнийх нь үндсэн).
   if (input.phones.length > 0) {
@@ -171,7 +226,10 @@ export async function createContact(raw: ContactInput): Promise<CreateContactRes
         is_primary: i === 0,
       }))
     );
-    if (pErr) console.error("createContact phones:", pErr.message);
+    if (pErr) {
+      console.error("createContact phones:", pErr.message);
+      channelError = "Харилцагч бүртгэгдсэн боловч утас хадгалагдсангүй — картаас дахин нэмнэ үү.";
+    }
   }
   if (input.emails.length > 0) {
     const { error: eErr } = await supabase.from("crm_contact_emails").insert(
@@ -182,19 +240,23 @@ export async function createContact(raw: ContactInput): Promise<CreateContactRes
         is_primary: i === 0,
       }))
     );
-    if (eErr) console.error("createContact emails:", eErr.message);
+    if (eErr) {
+      console.error("createContact emails:", eErr.message);
+      channelError = channelError ?? "Харилцагч бүртгэгдсэн боловч и-мэйл хадгалагдсангүй — картаас дахин нэмнэ үү.";
+    }
   }
 
-  // F-107: анхааруулгыг үл хэрэгссэн бол аудитад.
-  if (dupHits.length > 0 && input.duplicateOverride) {
+  // Анхааруулгыг үл хэрэгссэн бол аудитад.
+  const overridden = [...new Set([...dupHits.map((h) => h.contact_id), ...maskedHits.map((h) => h.contact_id)])];
+  if (overridden.length > 0 && input.duplicateOverride) {
     await writeAudit(ctx.officeId, "crm_contacts", contact.id, "duplicate_override", {
-      reason: `Давхардлын анхааруулгыг үл хэрэгсэв (${dupHits.length} тохирол)`,
-      newValue: dupHits.map((h) => h.contact_id),
+      reason: `Давхардлын анхааруулгыг үл хэрэгсэв (${overridden.length} тохирол)`,
+      newValue: overridden,
     });
   }
 
   revalidateContactPaths();
-  return { id: contact.id };
+  return { id: contact.id, error: channelError ?? undefined };
 }
 
 export async function updateContact(raw: ContactInput): Promise<{ ok: boolean; error?: string }> {
@@ -207,6 +269,11 @@ export async function updateContact(raw: ContactInput): Promise<{ ok: boolean; e
   if ("error" in parsed) return { ok: false, error: parsed.error };
   const input = parsed.data;
   if (!input.id) return { ok: false, error: "Бүртгэлийн дугаар алга." };
+  const src = await sourceNeedsNote(input.sourceId);
+  if (!src.ok) return { ok: false, error: "Эх сурвалж буруу байна." };
+  if (src.requiresNote && !input.sourceDetail?.trim()) {
+    return { ok: false, error: "Энэ эх сурвалжид тайлбар заавал." };
+  }
 
   const displayName =
     input.kind === "person"
@@ -226,6 +293,7 @@ export async function updateContact(raw: ContactInput): Promise<{ ok: boolean; e
         source_id: input.sourceId,
         source_detail: input.sourceDetail,
         branch_id: input.branchId,
+        ...(input.privacyLevel ? { privacy_level: input.privacyLevel } : {}),
       },
       { count: "exact" }
     )
@@ -298,11 +366,24 @@ export async function addPhone(contactId: string, raw: string): Promise<{ ok: bo
   return { ok: true };
 }
 
+/** Холбоо барих сувгийн доод шаардлага (§6.2): сүүлийн утас/и-мэйлийг устгахгүй. */
+async function channelCount(contactId: string): Promise<number> {
+  const supabase = await createClient();
+  const [p, e] = await Promise.all([
+    supabase.from("crm_contact_phones").select("id", { count: "exact", head: true }).eq("contact_id", contactId),
+    supabase.from("crm_contact_emails").select("id", { count: "exact", head: true }).eq("contact_id", contactId),
+  ]);
+  return (p.count ?? 0) + (e.count ?? 0);
+}
+
+const LAST_CHANNEL_ERR = "Харилцагчид дор хаяж нэг холбоо барих суваг (утас эсвэл и-мэйл) үлдэнэ — эхлээд шинийг нэмнэ үү.";
+
 export async function removePhone(phoneId: string, contactId: string): Promise<{ ok: boolean; error?: string }> {
   const supabase = await createClient();
   const c = await ctxOrError();
   if ("error" in c) return { ok: false, error: c.error };
   const { ctx } = c;
+  if ((await channelCount(contactId)) <= 1) return { ok: false, error: LAST_CHANNEL_ERR };
   const { error, count } = await supabase
     .from("crm_contact_phones")
     .delete({ count: "exact" })
@@ -343,6 +424,7 @@ export async function removeEmail(emailId: string, contactId: string): Promise<{
   const c = await ctxOrError();
   if ("error" in c) return { ok: false, error: c.error };
   const { ctx } = c;
+  if ((await channelCount(contactId)) <= 1) return { ok: false, error: LAST_CHANNEL_ERR };
   const { error, count } = await supabase
     .from("crm_contact_emails")
     .delete({ count: "exact" })
@@ -415,16 +497,15 @@ export async function removeTags(
 
 export async function exportContacts(
   filters: ContactFilters
-): Promise<{ csv?: string; error?: string }> {
+): Promise<{ csv?: string; error?: string; needsRequest?: boolean }> {
   const c = await ctxOrError();
   if ("error" in c) return { error: c.error };
   const { ctx } = c;
-  // ACC-матриц: Харилцагч Э — sales_director, ops_qc.
-  if (!ctx.roles.includes("sales_director") && !ctx.roles.includes("ops_qc")) {
-    return { error: "Танд харилцагч экспортлох эрх алга." };
-  }
 
   const rows = await getContacts(filters);
+  // §6.32: экспорт зөвшөөрлөөр (удирдлага тохиргооны дээд мөр хүртэл шууд).
+  const auth = await authorizeExport("contacts", rows.length);
+  if (!auth.ok) return { error: auth.error, needsRequest: auth.needsRequest };
   const esc = (v: string | null | undefined) => `"${(v ?? "").replace(/"/g, '""')}"`;
   const header = "Дугаар,Нэр,Хэлбэр,Төрөл,Утас,И-мэйл,Төлөв,Зөвшөөрөл,Бүртгэсэн огноо";
   const lines = rows.map((r) =>
@@ -443,7 +524,7 @@ export async function exportContacts(
 
   // Экспорт бүр аудит логт (F-123).
   await writeAudit(ctx.officeId, "crm_contacts", ctx.staffId, "export", {
-    reason: `Харилцагчийн экспорт (${rows.length} мөр)`,
+    reason: `Харилцагчийн экспорт (${rows.length} мөр)${auth.requestId ? " — зөвшөөрөлтэй хүсэлтээр" : ""}`,
     newValue: filters as unknown as Record<string, unknown>,
   });
 

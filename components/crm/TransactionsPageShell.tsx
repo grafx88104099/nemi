@@ -3,13 +3,15 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Download, Plus, Search, ShieldAlert } from "lucide-react";
+import { Download, FileStack, Plus, Search, ShieldAlert } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/ui/modal";
+import { ExportRequestForm } from "@/components/crm/DisputePanel";
 import { createTransaction, exportTransactions } from "@/lib/actions/crm-transactions";
 import type { TxnRow, TxnFilters, OppOption } from "@/lib/queries-crm-transactions";
 import type { AgentOption } from "@/lib/queries-crm-leads";
@@ -24,8 +26,9 @@ import {
 } from "@/lib/constants-crm";
 
 /**
- * Хэлцлийн жагсаалт (F-418): төрөл/төлөв/агент/огноогоор шүүх + CSV экспорт
- * (аудиттай server action-аар). Шинэ хэлцэл — нээлттэй боломжоос (F-402 холбоос).
+ * Хэлцлийн жагсаалт: төрөл, төлөв, агент, огноогоор шүүх; CSV экспорт зөвхөн
+ * эрхтэй дүрд (аудиттай). Шинэ хэлцэл — нээлттэй боломжоос. Агент, оффисын
+ * панель хоёулаа (basePath). Утсан дээр карт хэлбэрээр.
  */
 export function TransactionsPageShell({
   rows,
@@ -33,12 +36,16 @@ export function TransactionsPageShell({
   oppOptions,
   filters,
   roles,
+  basePath = "/office/crm",
+  canExport = false,
 }: {
   rows: TxnRow[];
   agents: AgentOption[];
   oppOptions: OppOption[];
   filters: TxnFilters;
   roles: CrmRole[];
+  basePath?: string;
+  canExport?: boolean;
 }) {
   const router = useRouter();
   const [q, setQ] = useState(filters.q ?? "");
@@ -52,6 +59,7 @@ export function TransactionsPageShell({
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState("MNT");
   const [originalId, setOriginalId] = useState("");
+  const [exportReqOpen, setExportReqOpen] = useState(false);
 
   const isManager = roles.some((r) => ["team_lead", "sales_director", "ops_qc", "ceo", "finance"].includes(r));
 
@@ -64,12 +72,16 @@ export function TransactionsPageShell({
     if (next.from) params.set("from", next.from);
     if (next.to) params.set("to", next.to);
     if (next.q) params.set("q", next.q);
-    router.push(`/office/crm/transactions${params.size ? `?${params}` : ""}`);
+    router.push(`${basePath}/transactions${params.size ? `?${params}` : ""}`);
   }
 
   function exportCsv() {
     startTransition(async () => {
       const res = await exportTransactions(filters);
+      if (res.needsRequest) {
+        setExportReqOpen(true);
+        return;
+      }
       if (res.error || !res.csv) {
         setError(res.error ?? "Экспорт амжилтгүй.");
         return;
@@ -87,7 +99,7 @@ export function TransactionsPageShell({
   function create() {
     setError(null);
     if (!oppId) {
-      setError("Боломж сонгоно уу (F-402).");
+      setError("Боломж сонгоно уу.");
       return;
     }
     const amt = Number(amount);
@@ -96,7 +108,7 @@ export function TransactionsPageShell({
       return;
     }
     if (txnType === "replacement" && !originalId) {
-      setError("Replacement хэлцэлд анхны хэлцлийн ID заавал (F-413).");
+      setError("Дахин түрээслүүлэлтэд анхны хэлцлийг заавал заана.");
       return;
     }
     startTransition(async () => {
@@ -112,7 +124,7 @@ export function TransactionsPageShell({
         return;
       }
       setCreateOpen(false);
-      router.push(`/office/crm/transactions/${res.id}`);
+      router.push(`${basePath}/transactions/${res.id}`);
     });
   }
 
@@ -123,10 +135,12 @@ export function TransactionsPageShell({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-ink">Хэлцэл</h1>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={pending}>
-            <Download className="size-4" />
-            Экспорт (F-418)
-          </Button>
+          {canExport ? (
+            <Button variant="outline" size="sm" onClick={exportCsv} disabled={pending}>
+              <Download className="size-4" />
+              Экспорт
+            </Button>
+          ) : null}
           <Button size="sm" onClick={() => setCreateOpen(true)}>
             <Plus className="size-4" />
             Шинэ хэлцэл
@@ -201,9 +215,35 @@ export function TransactionsPageShell({
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {rows.length === 0 ? (
-        <p className="py-12 text-center text-sm text-muted">Хэлцэл олдсонгүй.</p>
+        <EmptyState
+          icon={FileStack}
+          title="Хэлцэл олдсонгүй"
+          description="Боломжийн карт дээр нөхцөл тохирмогц «Хэлцлийн хавтас нээх»-ээр хэлцэл үүснэ."
+        />
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
+        <>
+        <ul className="space-y-2 md:hidden">
+          {rows.map((r) => (
+            <li key={r.id}>
+              <Link href={`${basePath}/transactions/${r.id}`} className="block rounded-2xl border border-line bg-surface p-3">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-brand-700">{r.number}</span>
+                  <Badge tone={TXN_STATUS_LABEL[r.status].tone}>{TXN_STATUS_LABEL[r.status].label}</Badge>
+                  {r.aml_hold ? <ShieldAlert className="size-4 text-rose-600" aria-label="МУТСТ түгжээ" /> : null}
+                </div>
+                <p className="mt-1 text-xs text-muted">
+                  {TXN_TYPE_LABEL[r.type]} · {r.amount.toLocaleString("mn-MN")} {r.currency} · бүрдэл{" "}
+                  {Math.round(r.file_completeness_pct)}%
+                </p>
+                <p className="text-xs text-subtle">
+                  {r.owner_name ?? "—"}
+                  {r.property_number ? ` · ${r.property_number}` : ""}
+                </p>
+              </Link>
+            </li>
+          ))}
+        </ul>
+        <div className="hidden overflow-x-auto rounded-2xl border border-line bg-surface md:block">
           <table className="w-full min-w-[900px] text-sm">
             <thead>
               <tr className="border-b border-line text-left text-xs text-muted">
@@ -214,7 +254,7 @@ export function TransactionsPageShell({
                 <th className="px-4 py-3 font-medium">₮ дүйцэл</th>
                 <th className="px-4 py-3 font-medium">Бүрэн %</th>
                 <th className="px-4 py-3 font-medium">Агент</th>
-                <th className="px-4 py-3 font-medium">Объект</th>
+                <th className="px-4 py-3 font-medium">Үл хөдлөх</th>
                 <th className="px-4 py-3 font-medium">Нээсэн</th>
               </tr>
             </thead>
@@ -223,7 +263,7 @@ export function TransactionsPageShell({
                 <tr key={r.id} className="hover:bg-surface-2">
                   <td className="px-4 py-3">
                     <Link
-                      href={`/office/crm/transactions/${r.id}`}
+                      href={`${basePath}/transactions/${r.id}`}
                       className="font-semibold text-brand-700 hover:underline"
                     >
                       {r.number}
@@ -255,12 +295,21 @@ export function TransactionsPageShell({
             </tbody>
           </table>
         </div>
+        </>
       )}
+
+      <Modal open={exportReqOpen} onClose={() => setExportReqOpen(false)} title="Экспортын зөвшөөрөл хүсэх">
+        <p className="mb-3 text-sm text-muted">
+          Хэлцлийн жагсаалт гаргахад зөвшөөрөл шаардлагатай. Зорилгоо бичиж хүсэлт илгээнэ үү — зөвшөөрсний дараа дахин
+          «Экспорт» дарна.
+        </p>
+        <ExportRequestForm defaultScope="transactions" />
+      </Modal>
 
       <Modal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        title="Шинэ хэлцэл (F-400)"
+        title="Шинэ хэлцэл"
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setCreateOpen(false)}>
@@ -273,12 +322,12 @@ export function TransactionsPageShell({
         }
       >
         <div className="space-y-4">
-          <Field label="Боломж (нээлттэй, идэвхтэй хэлцэлгүй)" hint="Хэлцэл боломж/объект/харилцагчтай заавал холбогдоно (F-402).">
+          <Field label="Боломж (нээлттэй, идэвхтэй хэлцэлгүй)" hint="Хэлцэл боломж, үл хөдлөх, харилцагчтай заавал холбогдоно.">
             <Select value={oppId} onChange={(e) => setOppId(e.target.value)}>
               <option value="">— Сонгох —</option>
               {oppOptions.map((o) => (
                 <option key={o.id} value={o.id}>
-                  {o.pipeline_code} · {o.contact_name}
+                  {o.contact_name}
                   {o.property_name ? ` · ${o.property_name}` : ""}
                 </option>
               ))}
@@ -286,7 +335,7 @@ export function TransactionsPageShell({
           </Field>
           {selectedOpp && !selectedOpp.property_id && (
             <p className="text-sm text-amber-600">
-              Энэ боломжид объект холбогдоогүй — эхлээд боломж дээрээ объектоо сонгоно уу.
+              Энэ боломжид үл хөдлөх холбогдоогүй — эхлээд боломжийн карт дээр үл хөдлөхөө сонгоно уу.
             </p>
           )}
           <Field label="Төрөл">
@@ -299,7 +348,7 @@ export function TransactionsPageShell({
             </Select>
           </Field>
           {txnType === "replacement" && (
-            <Field label="Анхны хэлцлийн ID (F-413)">
+            <Field label="Анхны хэлцлийн дугаар">
               <Input value={originalId} onChange={(e) => setOriginalId(e.target.value)} placeholder="UUID" />
             </Field>
           )}
@@ -307,7 +356,7 @@ export function TransactionsPageShell({
             <Field label="Дүн">
               <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
             </Field>
-            <Field label="Валют" hint="MNT биш бол өнөөдрийн ханш автомат (F-419)">
+            <Field label="Валют" hint="Төгрөгөөс өөр бол өнөөдрийн ханш автоматаар">
               <Select value={currency} onChange={(e) => setCurrency(e.target.value)}>
                 <option value="MNT">MNT</option>
                 <option value="USD">USD</option>

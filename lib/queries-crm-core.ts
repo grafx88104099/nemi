@@ -257,6 +257,11 @@ export type StaffRow = {
   is_active: boolean;
   offboarding: boolean;
   panel_admin: boolean;
+  /** Чөлөө (§6.27) — U4. */
+  on_leave_from: string | null;
+  on_leave_to: string | null;
+  leave_substitute_id: string | null;
+  leave_note: string | null;
   full_name: string | null;
   email: string | null;
 };
@@ -267,7 +272,8 @@ export async function getStaffList(): Promise<StaffRow[]> {
     .from("crm_staff")
     .select(
       "id, profile_id, branch_id, team_id, roles, is_active, offboarding, panel_admin, " +
-        "profile:profiles(full_name, email)"
+        "on_leave_from, on_leave_to, leave_substitute_id, leave_note, " +
+        "profile:profiles!crm_staff_profile_id_fkey(full_name, email)"
     )
     .order("created_at");
   if (error) console.error("getStaffList:", error.message);

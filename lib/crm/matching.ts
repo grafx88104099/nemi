@@ -1,10 +1,15 @@
 /**
- * Тохируулгын хөдөлгүүр (F-250–261, §4.4) — цэвэр функц, DB-гүй (unit тестийн бай).
+ * Үл хөдлөхийн тохируулгын хөдөлгүүр (PRO-001 v2.1 §6.9, §6.10) — цэвэр
+ * функц, DB-гүй (unit тестийн бай).
  *
- * Оноо = 6 шалгуур × жин (спекийн 25/25/20/10/15/5 — DEFAULT; бодит утга
+ * Оноо = 6 шалгуур × жин (§6.9: 25/25/20/10/15/5 — DEFAULT; бодит утга
  * crm_settings key='match_weights'-ээс ирнэ, кодонд тогтмол утга ЭЦСИЙН ҮНЭН БИШ).
- * Deal breaker = таслах шүүлтүүр: оноонд орохгүй, зөрчсөн объект оноо өндөр ч
- * strong болохгүй, автомат санал болголтод орохгүй (F-252).
+ *  • Худалдан авах профайлд зөвхөн худалдах, түрээслэгчид зөвхөн түрээсийн
+ *    үл хөдлөх тохирно (isServiceCompatible) — хольж тохируулахгүй.
+ *  • Төсөв: дээд төсөвт багтсан, эсвэл харилцагч зөвшөөрсөн хэтрэлтийн дээд
+ *    дүнд багтсан бол бүтэн оноо; зөвшөөрөлгүй хэтрэлт 0.
+ *  • Хэлцэл таслах нөхцөл: оноонд орохгүй, зөрчсөн үл хөдлөх оноо өндөр ч
+ *    хүчтэй тохироо болохгүй, автомат санал болголтод орохгүй.
  */
 
 export type MatchWeights = {
@@ -29,7 +34,11 @@ export type MatchThresholds = {
   strong: number; // ≥ → хүчтэй (default 80)
   possible: number; // ≥ → боломжит (default 65)
   adjacent_pct: number; // зэргэлдээ бүсийн хэсэгчилсэн % (default 50)
-  budget_overrun_pct: number; // зөвшөөрөгдөх төсвийн хэтрэлт % (default 10)
+  /**
+   * @deprecated §6.9: хэтрэлтийг зөвхөн харилцагч зөвшөөрсөн үед (профайлын
+   * budget_overrun_approved/max) тооцно — энэ хүлцэл оноонд ашиглагдахгүй.
+   */
+  budget_overrun_pct: number;
   size_tolerance_pct: number; // хэмжээний ойролцоо байдлын хүлцэл % (default 20)
   size_partial_pct: number; // хэмжээ ойролцоо үеийн хэсэгчилсэн % (default 50)
 };
@@ -87,6 +96,9 @@ export type MatchProfileInput = {
   mustHaves: string[];
   niceToHaves: string[];
   dealBreakers: string[];
+  /** §6.9: дээд төсвөөс хэтрэхийг харилцагч зөвшөөрсөн эсэх, зөвшөөрсөн дээд дүн. */
+  budgetOverrunApproved?: boolean | null;
+  budgetOverrunMax?: number | null;
 };
 
 export type MatchPropertyInput = {
@@ -118,7 +130,25 @@ export type MatchScoreResult = {
   dealBreakerHit: boolean;
   dealBreakerReasons: string[];
   strength: MatchStrengthValue;
+  /** Худалдаа/түрээсийн төрөл профайлтай таарсан эсэх (false бол тохироо биш). */
+  compatible: boolean;
 };
+
+// ── Худалдаа / түрээсийн нийцэл (§6.9 Төсөв, Төрөл) ───────
+
+const RENTAL_SERVICE_KINDS = ["standard_rental", "managed_rental"];
+
+export function isRentalService(serviceKind: string): boolean {
+  return RENTAL_SERVICE_KINDS.includes(serviceKind);
+}
+
+/**
+ * Профайлын төрөл × үйлчилгээний төрөл: түрээслэгч ↔ түрээс, худалдан
+ * авагч / хөрөнгө оруулагч / гадаадын худалдан авагч ↔ худалдах.
+ */
+export function isServiceCompatible(profileType: string, serviceKind: string): boolean {
+  return profileType === "tenant" ? isRentalService(serviceKind) : serviceKind === "sale";
+}
 
 // ── Токен харьцуулалт ─────────────────────────────────────
 
@@ -155,11 +185,13 @@ export type ScoreMatchOptions = {
   adjacentZones?: Record<string, string[]>;
 };
 
-/** Түрээсийн профайлд түрээсийн үнэ, бусад нь худалдах үнэ. */
+/**
+ * Профайлд хамаарах үнэ: түрээслэгчид түрээсийн үнэ, бусдад худалдах үнэ.
+ * Нийцэхгүй хослолд (худалдан авагч × түрээс) null — оноо өгөхгүй.
+ */
 export function relevantPrice(profile: MatchProfileInput, property: MatchPropertyInput): number | null {
-  const rentalProfile = profile.profileType === "tenant";
-  const rentalProperty = property.serviceKind === "standard_rental" || property.serviceKind === "managed_rental";
-  if (rentalProfile || rentalProperty) return property.rentPrice ?? null;
+  if (!isServiceCompatible(profile.profileType, property.serviceKind)) return null;
+  if (profile.profileType === "tenant") return property.rentPrice ?? null;
   return property.price ?? null;
 }
 
@@ -176,6 +208,29 @@ export function scoreMatch(
   const t = options.thresholds ?? DEFAULT_MATCH_THRESHOLDS;
   const adjacency = options.adjacentZones ?? {};
   const breakdown: MatchBreakdownItem[] = [];
+
+  if (!isServiceCompatible(profile.profileType, property.serviceKind)) {
+    const detail =
+      profile.profileType === "tenant"
+        ? "Түрээслэгчид худалдах үл хөдлөх тохирохгүй"
+        : "Худалдан авагчид түрээсийн үл хөдлөх тохирохгүй";
+    const items: [keyof MatchWeights, string][] = [
+      ["location", "Байршил"],
+      ["budget", "Төсөв"],
+      ["type_size", "Төрөл, хэмжээ"],
+      ["timeline", "Хугацаа, бэлэн байдал"],
+      ["must_haves", "Заавал шаардлага"],
+      ["nice_to_haves", "Бусад хүсэл"],
+    ];
+    return {
+      score: 0,
+      breakdown: items.map(([key, label]) => ({ key, label, weight: w[key], earned: 0, detail })),
+      dealBreakerHit: false,
+      dealBreakerReasons: [],
+      strength: "weak",
+      compatible: false,
+    };
+  }
 
   const allPropertyTokens = [...property.locationTokens, ...property.featureTokens, property.propertyType];
 
@@ -197,22 +252,26 @@ export function scoreMatch(
   }
   breakdown.push({ key: "location", label: "Байршил", weight: w.location, earned: round2(locEarned), detail: locDetail });
 
-  // 2. Төсөв (25): дээд төсөвт багтсан = бүтэн; зөвшөөрөгдөх хэтрэлтэд = шатлан буурсан; хэтэрсэн = 0.
+  // 2. Төсөв (25): дээд төсөвт багтсан, эсвэл харилцагч зөвшөөрсөн хэтрэлтийн
+  //    дээд дүнд багтсан = бүтэн; зөвшөөрөлгүй хэтрэлт = 0 (§6.9).
   const price = relevantPrice(profile, property);
   let budgetEarned = 0;
   let budgetDetail = "Үнэ бүртгэгдээгүй";
   if (price != null && price > 0 && profile.budgetMax > 0) {
+    const overrunPct = ((price - profile.budgetMax) / profile.budgetMax) * 100;
+    const approvedMax =
+      profile.budgetOverrunApproved && profile.budgetOverrunMax != null ? Number(profile.budgetOverrunMax) : null;
     if (price <= profile.budgetMax) {
       budgetEarned = w.budget;
       budgetDetail = "Төсөвт багтсан";
+    } else if (approvedMax != null && price <= approvedMax) {
+      budgetEarned = w.budget;
+      budgetDetail = `Төсвөөс ${overrunPct.toFixed(1)}% хэтэрсэн — харилцагч зөвшөөрсөн хэмжээнд`;
     } else {
-      const overrunPct = ((price - profile.budgetMax) / profile.budgetMax) * 100;
-      if (t.budget_overrun_pct > 0 && overrunPct <= t.budget_overrun_pct) {
-        budgetEarned = w.budget * (1 - overrunPct / t.budget_overrun_pct);
-        budgetDetail = `Төсвөөс ${overrunPct.toFixed(1)}% хэтэрсэн (хүлцэлд)`;
-      } else {
-        budgetDetail = `Төсвөөс ${overrunPct.toFixed(1)}% хэтэрсэн`;
-      }
+      budgetDetail =
+        approvedMax != null
+          ? `Харилцагчийн зөвшөөрсөн дээд дүнгээс хэтэрсэн (${overrunPct.toFixed(1)}%)`
+          : `Төсвөөс ${overrunPct.toFixed(1)}% хэтэрсэн — харилцагч зөвшөөрөөгүй`;
     }
   }
   breakdown.push({ key: "budget", label: "Төсөв", weight: w.budget, earned: round2(budgetEarned), detail: budgetDetail });
@@ -283,7 +342,7 @@ export function scoreMatch(
   }
   breakdown.push({ key: "nice_to_haves", label: "Бусад хүсэл", weight: w.nice_to_haves, earned: round2(nhEarned), detail: nhDetail });
 
-  // Таслах шүүлтүүр (F-252): зөрчсөн объект оноо өндөр ч strong болохгүй.
+  // Хэлцэл таслах нөхцөл: зөрчсөн үл хөдлөх оноо өндөр ч хүчтэй тохироо болохгүй.
   const dealBreakerReasons = profile.dealBreakers.filter((db) => allPropertyTokens.some((tok) => tokensOverlap(db, tok)));
   const dealBreakerHit = dealBreakerReasons.length > 0;
 
@@ -296,23 +355,33 @@ export function scoreMatch(
         ? "possible"
         : "weak";
 
-  return { score, breakdown, dealBreakerHit, dealBreakerReasons, strength };
+  return { score, breakdown, dealBreakerHit, dealBreakerReasons, strength, compatible: true };
 }
 
-// ── Ангиллаар ялгасан хүргэлт (F-254 4.4.1) ───────────────
+// ── Ангиллаар ялгасан хүргэлт (§6.10.4–6) ─────────────────
 
 export type DeliveryTier = "agent_call" | "personal_message" | "campaign" | "none";
 
 export const DELIVERY_TIER_LABEL: Record<DeliveryTier, string> = {
-  agent_call: "Агент биечлэн холбогдоно",
-  personal_message: "Хувь хүнд чиглэсэн санал",
-  campaign: "Аян/мэдэгдэл",
-  none: "Хүргэлтгүй",
+  agent_call: "Агент биечлэн утсаар, чатаар санал болгоно",
+  personal_message: "Хувь хүнд чиглэсэн зурвас илгээнэ",
+  campaign: "Аян, мэдэгдлийн хэлбэрээр",
+  none: "Агентын тайлбартайгаар л санал болгоно",
 };
 
+/** Жагсаалтын бүлгийн гарчиг (§6.10.4–6). */
+export const DELIVERY_TIER_GROUP: Record<DeliveryTier, string> = {
+  agent_call: "Халуун, хүчтэй тохироо — эхэлж биечлэн",
+  personal_message: "Дулаан — хувийн зурвас",
+  campaign: "Ургуулах — аян, мэдэгдэл",
+  none: "Бусад",
+};
+
+export const DELIVERY_TIER_ORDER: DeliveryTier[] = ["agent_call", "personal_message", "campaign", "none"];
+
 /**
- * A + хүчтэй → агент биечлэн; B → хувийн зурвас; C → аян; бусад → хүргэлтгүй.
- * Deal breaker зөрчилтэйг дуудагч аль хэдийн хассан байх ёстой (F-252).
+ * A + хүчтэй → агент биечлэн; A/B → хувийн зурвас; C → аян; бусад → хүргэлтгүй.
+ * Хэлцэл таслах нөхцөл зөрчсөнийг дуудагч аль хэдийн хассан байх ёстой.
  */
 export function deliveryTier(grade: string | null | undefined, strength: MatchStrengthValue): DeliveryTier {
   if (strength === "weak") return "none";
@@ -328,9 +397,43 @@ export type MatchTags = {
   location?: string[] | string;
   type?: string[] | string;
   price?: string[] | string;
+  size?: string[] | string;
+  condition?: string[] | string;
   goal?: string[] | string;
   special?: string[] | string;
 };
+
+/** §6.10.2: листингийн шошгын бүлгүүд — бүс, үнэ, төрөл, хэмжээ, нөхцөл байдал, гол онцлог. */
+export const PROPERTY_TAG_GROUPS = ["location", "price", "type", "size", "condition", "goal", "special"] as const;
+export type PropertyTagGroup = (typeof PROPERTY_TAG_GROUPS)[number];
+export const PROPERTY_TAG_GROUP_LABEL: Record<PropertyTagGroup, string> = {
+  location: "Бүс",
+  price: "Үнэ",
+  type: "Төрөл",
+  size: "Хэмжээ",
+  condition: "Нөхцөл байдал",
+  goal: "Зорилго",
+  special: "Гол онцлог",
+};
+
+/** match_tags jsonb → бүлэг бүрийн цэвэр жагсаалт (давхардалгүй, хоосон утгагүй). */
+export function normalizePropertyTags(raw: unknown): Record<PropertyTagGroup, string[]> {
+  const o = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
+  const out = {} as Record<PropertyTagGroup, string[]>;
+  for (const g of PROPERTY_TAG_GROUPS) {
+    const v = o[g];
+    const arr = Array.isArray(v) ? v : typeof v === "string" ? [v] : [];
+    out[g] = [
+      ...new Set(
+        arr
+          .filter((x): x is string => typeof x === "string")
+          .map((x) => x.trim())
+          .filter(Boolean)
+      ),
+    ];
+  }
+  return out;
+}
 
 function tagValues(v: string[] | string | undefined): string[] {
   if (!v) return [];
@@ -355,7 +458,55 @@ export function propertyFeatureTokens(features: string[] | null, matchTags: Matc
   const out = [...(features ?? [])];
   out.push(...tagValues(matchTags?.type ?? undefined));
   out.push(...tagValues(matchTags?.price ?? undefined));
+  out.push(...tagValues(matchTags?.size ?? undefined));
+  out.push(...tagValues(matchTags?.condition ?? undefined));
   out.push(...tagValues(matchTags?.goal ?? undefined));
   out.push(...tagValues(matchTags?.special ?? undefined));
   return out.filter((s) => s && s.trim().length > 0);
+}
+
+// ── Хувь хүнд чиглэсэн зурвас (§6.10.5) ───────────────────
+
+export type MatchMessageInput = {
+  contactName: string | null;
+  propertyName: string;
+  serviceKind: string;
+  propertyType?: string | null;
+  price?: number | null;
+  rentPrice?: number | null;
+  rooms?: number | null;
+  areaM2?: number | null;
+  district?: string | null;
+  /** Үл хөдлөхийн нийтийн зарын холбоос (нийтлэгдсэн бол). */
+  url?: string | null;
+  agentName?: string | null;
+};
+
+function fmtMoney(n: number): string {
+  return `${Math.round(n).toLocaleString("en-US").replace(/,/g, " ")}₮`;
+}
+
+/**
+ * Зурвасын загвар — агент засаад Messenger, SMS, цахим шуудангаар өөрөө
+ * илгээнэ (автомат илгээлт биш). Хувийн мэдээлэл зөвхөн харилцагчийн нэр.
+ */
+export function buildMatchMessage(m: MatchMessageInput): string {
+  const greeting = m.contactName ? `Сайн байна уу, ${m.contactName.split(" ")[0]}!` : "Сайн байна уу!";
+  const rental = isRentalService(m.serviceKind);
+  const facts: string[] = [];
+  if (m.district) facts.push(m.district);
+  if (m.rooms) facts.push(`${m.rooms} өрөө`);
+  if (m.areaM2) facts.push(`${m.areaM2} м²`);
+  const price = rental ? m.rentPrice : m.price;
+  if (price != null && price > 0) facts.push(rental ? `сарын ${fmtMoney(price)}` : fmtMoney(price));
+  const lines = [
+    greeting,
+    `Таны хайж буй шаардлагад тохирох ${rental ? "түрээсийн" : "худалдах"} үл хөдлөх гарлаа: ${m.propertyName}${
+      facts.length ? ` (${facts.join(", ")})` : ""
+    }.`,
+  ];
+  if (m.url) lines.push(`Дэлгэрэнгүй: ${m.url}`);
+  lines.push("Үзэх боломжтой цагаа хэлбэл үзлэг товлоё.");
+  if (m.agentName) lines.push(`— ${m.agentName}`);
+  return lines.join("\n");
 }

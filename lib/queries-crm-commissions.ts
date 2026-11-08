@@ -154,10 +154,24 @@ export type CommissionClawbackRow = {
   created_at: string;
 };
 
+export type CommissionDisputeEvidenceRow = {
+  id: string;
+  content: string;
+  created_by: string;
+  creator_name: string | null;
+  created_at: string;
+};
+
 export type CommissionDisputeRow = {
   id: string;
   transaction_id: string;
   content: string;
+  /** Гаргагчийн анхны нотолгоо (чөлөөт текст). */
+  evidence_text: string | null;
+  /** Хоёр талын нэмэлт нотолгоо. */
+  evidence: CommissionDisputeEvidenceRow[];
+  /** Одоогийн хэрэглэгч шийдэх боломжгүй шалтгаан (ашиг сонирхлын зөрчил); null бол боломжтой. */
+  my_conflict: string | null;
   decision: string | null;
   rationale: string | null;
   created_by: string;
@@ -187,6 +201,8 @@ export type CommissionDetail = CommissionRow & {
   history: CommissionHistoryRow[];
   clawbacks: CommissionClawbackRow[];
   disputes: CommissionDisputeRow[];
+  /** §6.31: хүлээн авагч агентын одоогийн CRM-ийн бүртгэлийн чанар (%). */
+  agent_quality_pct: number | null;
 };
 
 export async function getCommission(id: string): Promise<CommissionDetail | null> {
@@ -263,7 +279,7 @@ export async function getCommission(id: string): Promise<CommissionDetail | null
       ? supabase
           .from("crm_commission_disputes")
           .select(
-            "id, transaction_id, content, decision, rationale, created_by, created_at, " +
+            "id, transaction_id, content, evidence, decision, rationale, created_by, created_at, " +
               "creator:profiles!crm_commission_disputes_created_by_fkey(full_name), " +
               "decider:profiles!crm_commission_disputes_decided_by_fkey(full_name)"
           )
@@ -274,10 +290,46 @@ export async function getCommission(id: string): Promise<CommissionDetail | null
 
   type RawHist = Omit<CommissionHistoryRow, "decided_name"> & { decider: { full_name: string | null } | null };
   type RawClaw = Omit<CommissionClawbackRow, "approved_name"> & { approver: { full_name: string | null } | null };
-  type RawDisp = Omit<CommissionDisputeRow, "creator_name" | "decider_name"> & {
+  type RawDisp = Omit<CommissionDisputeRow, "creator_name" | "decider_name" | "evidence" | "evidence_text" | "my_conflict"> & {
+    evidence: Json;
     creator: { full_name: string | null } | null;
     decider: { full_name: string | null } | null;
   };
+  const rawDisputes = (disputeRes.data ?? []) as unknown as RawDisp[];
+  const disputeIds = rawDisputes.map((d) => d.id);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const [evidenceRes, conflicts, qualityRes] = await Promise.all([
+    disputeIds.length
+      ? supabase
+          .from("crm_commission_dispute_evidence")
+          .select("id, dispute_id, content, created_by, created_at, creator:profiles(full_name)")
+          .in("dispute_id", disputeIds)
+          .order("created_at")
+      : Promise.resolve({ data: [], error: null }),
+    Promise.all(
+      rawDisputes
+        .filter((d) => !d.decision && user)
+        .map(async (d) => {
+          const { data: c } = await supabase.rpc("crm_commission_dispute_conflict", { p_dispute: d.id, p_profile: user!.id });
+          return [d.id, (c as string | null) ?? null] as const;
+        })
+    ),
+    raw.recipient_profile_id
+      ? supabase.from("crm_v_agent_data_quality").select("quality_pct").eq("agent_id", raw.recipient_profile_id).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+  if (evidenceRes.error) console.error("getCommission evidence:", evidenceRes.error.message);
+  type RawEv = { id: string; dispute_id: string; content: string; created_by: string; created_at: string; creator: { full_name: string | null } | null };
+  const evidenceByDispute = new Map<string, CommissionDisputeEvidenceRow[]>();
+  for (const e of (evidenceRes.data ?? []) as unknown as RawEv[]) {
+    const list = evidenceByDispute.get(e.dispute_id) ?? [];
+    list.push({ id: e.id, content: e.content, created_by: e.created_by, creator_name: e.creator?.full_name ?? null, created_at: e.created_at });
+    evidenceByDispute.set(e.dispute_id, list);
+  }
+  const conflictMap = new Map(conflicts);
+  const qualityRow = qualityRes.data as { quality_pct: number | null } | null;
 
   return {
     id: raw.id,
@@ -328,11 +380,18 @@ export async function getCommission(id: string): Promise<CommissionDetail | null
       amount: Number(c.amount),
       approved_name: approver?.full_name ?? null,
     })),
-    disputes: ((disputeRes.data ?? []) as unknown as RawDisp[]).map(({ creator, decider, ...d }) => ({
-      ...d,
-      creator_name: creator?.full_name ?? null,
-      decider_name: decider?.full_name ?? null,
-    })),
+    disputes: rawDisputes.map(({ creator, decider, evidence, ...d }) => {
+      const ev = (evidence ?? null) as { text?: unknown } | null;
+      return {
+        ...d,
+        evidence_text: ev && typeof ev.text === "string" ? ev.text : null,
+        evidence: evidenceByDispute.get(d.id) ?? [],
+        my_conflict: conflictMap.get(d.id) ?? null,
+        creator_name: creator?.full_name ?? null,
+        decider_name: decider?.full_name ?? null,
+      };
+    }),
+    agent_quality_pct: qualityRow?.quality_pct == null ? null : Number(qualityRow.quality_pct),
   };
 }
 

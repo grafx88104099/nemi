@@ -1,5 +1,6 @@
 "use client";
 
+import { fmtDateNum } from "@/lib/format";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRightLeft, BadgeCheck, ClipboardList } from "lucide-react";
@@ -7,6 +8,7 @@ import { ArrowRightLeft, BadgeCheck, ClipboardList } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/select";
 import {
   createHandoverAct,
@@ -17,10 +19,11 @@ import {
 import type { CrmRole } from "@/lib/constants-crm";
 
 /**
- * Гарах ажилтны хүлээлцэх акт (P-10, Д-11) — тохиргооны ажилтны хуудсанд
- * залгагдана. Багцын жагсаалт автомат; шилжүүлэлт бүр reassign RPC-ээр
- * (түүх+аудит); дутуу шилжүүлэлттэй актыг батлахгүй, батлагдаагүй бол
- * идэвхгүй болгохыг DB trigger хориглоно.
+ * Гарах ажилтны хүлээлцэх акт (§6.28.11, §6.32, §7) — тохиргооны ажилтны
+ * хуудсанд залгагдана. Гарах урсгал эхлэхэд багцын жагсаалт автомат үүснэ;
+ * шилжүүлэлт бүр эзэмшлийн түүхтэй; дутуу шилжүүлэлттэй актыг батлахгүй,
+ * батлагдаагүй бол ажилтныг идэвхгүй болгохыг систем хориглоно. Багийн
+ * ахлагч шилжүүлж бэлтгэнэ, Борлуулалт хариуцсан захирал батална.
  */
 
 export type HandoverActRow = {
@@ -38,7 +41,7 @@ export type HandoverActRow = {
 const ENTITY_LABEL: Record<HandoverItem["entity"], string> = {
   lead: "Сэжим",
   opportunity: "Боломж",
-  property_role: "Объектын роль",
+  property_role: "Үл хөдлөхийн үүрэг",
   task: "Даалгавар",
 };
 
@@ -62,7 +65,8 @@ export function HandoverActShell({
   const [approveFor, setApproveFor] = useState<HandoverActRow | null>(null);
   const [clientsNotified, setClientsNotified] = useState(false);
 
-  const canManage = roles.includes("sales_director") || roles.includes("sysadmin");
+  const canManage = roles.includes("sales_director") || roles.includes("team_lead");
+  const canApprove = roles.includes("sales_director");
 
   function itemKey(actId: string, it: HandoverItem): string {
     return `${actId}:${it.entity}:${it.entity_id}:${it.role ?? ""}`;
@@ -122,7 +126,7 @@ export function HandoverActShell({
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <ClipboardList className="size-4 text-brand-600" />
-        <span className="text-sm font-semibold text-ink">Гарах ажилтны хүлээлцэх (Д-11)</span>
+        <span className="text-sm font-semibold text-ink">Гарах ажилтны хүлээлцэх</span>
       </div>
 
       {canManage && offboardingStaff.length > 0 && (
@@ -141,7 +145,12 @@ export function HandoverActShell({
       )}
 
       {acts.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted">Хүлээлцэх акт алга.</p>
+        <EmptyState
+          compact
+          icon={ClipboardList}
+          title="Хүлээлцэх акт алга"
+          description="Ажилтанд гарах урсгал эхлүүлэхэд нээлттэй сэжим, боломж, үл хөдлөхийн жагсаалттай акт автоматаар үүснэ."
+        />
       ) : (
         acts.map((act) => {
           const items = Array.isArray(act.items) ? act.items : [];
@@ -152,7 +161,7 @@ export function HandoverActShell({
                 <span className="text-sm font-semibold text-ink">{act.staff_name ?? act.staff_id}</span>
                 {act.approved_at ? (
                   <Badge tone="green">
-                    Батлагдсан — {act.approver_name ?? ""} ({new Date(act.approved_at).toLocaleDateString("mn-MN")})
+                    Батлагдсан — {act.approver_name ?? ""} ({fmtDateNum(act.approved_at)})
                   </Badge>
                 ) : (
                   <Badge tone={remaining ? "amber" : "blue"}>
@@ -161,9 +170,9 @@ export function HandoverActShell({
                 )}
                 {act.clients_notified && <Badge tone="neutral">Харилцагчид мэдэгдсэн</Badge>}
                 <span className="ml-auto text-xs text-subtle">
-                  {new Date(act.created_at).toLocaleDateString("mn-MN")}
+                  {fmtDateNum(act.created_at)}
                 </span>
-                {!act.approved_at && canManage && (
+                {!act.approved_at && canApprove && (
                   <Button size="sm" onClick={() => setApproveFor(act)} disabled={pending || remaining > 0}>
                     <BadgeCheck className="size-4" />
                     Батлах
@@ -242,7 +251,7 @@ export function HandoverActShell({
         <div className="space-y-4">
           <p className="text-sm text-muted">
             Батлахын өмнө систем ажилтны нээлттэй эзэмшлийг дахин шалгана — дутуу бол батлагдахгүй.
-            Батлагдсан акт өөрчлөгдөхгүй (нотолгоо, P-10).
+            Батлагдсан акт өөрчлөгдөхгүй — эзэмшил, урамшууллын маргааны нотолгоо болно.
           </p>
           <label className="flex items-center gap-2 text-sm text-ink">
             <input

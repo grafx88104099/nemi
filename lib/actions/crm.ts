@@ -6,8 +6,6 @@ import { createClient } from "@/lib/supabase/server";
 import {
   ACTIVITY_KINDS,
   type ActivityKind,
-  LEAD_SOURCES,
-  LEAD_STAGES,
   type LeadSource,
   type LeadStage,
   PROJECT_TYPES,
@@ -30,7 +28,11 @@ async function myAgentId(supabase: Awaited<ReturnType<typeof createClient>>) {
   return (data?.id as string) ?? null;
 }
 
-// ── Лид CRUD ──────────────────────────────────────────────
+// ── Лид — ХААЛТТАЙ (PRO-001 v2.1 §6.1: албан бүртгэл = CRM-ийн сэжим) ──
+// Хуучин мөрийг scripts/migrate-legacy-leads.mjs шилжүүлнэ; бичилт хийхгүй.
+
+const LEGACY_CLOSED =
+  "Лид удирдлага албан CRM руу шилжсэн — «CRM → Сэжим» хэсгээс бүртгэнэ үү.";
 
 export type LeadInput = {
   name: string;
@@ -43,95 +45,23 @@ export type LeadInput = {
   projectId?: string | null;
 };
 
-function normalizeLead(input: LeadInput, agentId: string) {
-  const source = LEAD_SOURCES.includes(input.source) ? input.source : "other";
-  const stage = LEAD_STAGES.includes(input.stage) ? input.stage : "new";
-  return {
-    agent_id: agentId,
-    name: input.name.trim(),
-    phone: input.phone?.trim() || null,
-    source,
-    stage,
-    score: input.score ?? null,
-    note: input.note?.trim() || null,
-    listing_id: input.listingId || null,
-    project_id: input.projectId || null,
-  };
-}
-
-/** Өгсөн зар/төсөл нь тухайн агентынх мөн эсэхийг шалгаж, биш бол null болгоно. */
-async function guardRefs(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  agentId: string,
-  row: { listing_id: string | null; project_id: string | null }
-) {
-  if (row.listing_id) {
-    // Өөрийн зар ЭСВЭЛ надтай хуваалцсан зар дээр бүртгэл хийхийг зөвшөөрнө.
-    const { data: own } = await supabase.from("listings").select("id").eq("id", row.listing_id).eq("agent_id", agentId).maybeSingle();
-    if (!own) {
-      const { data: shared } = await supabase
-        .from("listing_shares").select("id").eq("listing_id", row.listing_id).eq("agent_id", agentId).maybeSingle();
-      if (!shared) row.listing_id = null;
-    }
-  }
-  if (row.project_id) {
-    const { data } = await supabase.from("projects").select("id").eq("id", row.project_id).eq("agent_id", agentId).maybeSingle();
-    if (!data) row.project_id = null;
-  }
-}
-
 /** Шинэ лид нэмнэ. */
 export async function createLead(input: LeadInput): Promise<{ id?: string; error?: string }> {
-  if (!input.name?.trim()) return { error: "Нэр оруулна уу." };
-  const supabase = await createClient();
-  const agentId = await myAgentId(supabase);
-  if (!agentId) return { error: "Зөвхөн агент лид нэмнэ." };
-
-  const row = normalizeLead(input, agentId);
-  await guardRefs(supabase, agentId, row);
-  const { data, error } = await supabase.from("leads").insert(row).select("id").single();
-  if (error) return { error: error.message };
-  revalidatePath("/agent/leads");
-  return { id: data.id };
+  void input;
+  return { error: LEGACY_CLOSED };
 }
 
 /** Лид засна (зөвхөн өөрийн). */
 export async function updateLead(id: string, input: LeadInput): Promise<{ ok: boolean; error?: string }> {
-  if (!input.name?.trim()) return { ok: false, error: "Нэр оруулна уу." };
-  const supabase = await createClient();
-  const agentId = await myAgentId(supabase);
-  if (!agentId) return { ok: false, error: "auth" };
-
-  const row = normalizeLead(input, agentId);
-  await guardRefs(supabase, agentId, row);
-  const { data, error } = await supabase
-    .from("leads")
-    .update(row)
-    .eq("id", id)
-    .eq("agent_id", agentId)
-    .select("id");
-  if (error) return { ok: false, error: error.message };
-  if (!data || data.length === 0) return { ok: false, error: "Лид олдсонгүй эсвэл эрх алга." };
-  revalidatePath("/agent/leads");
-  revalidatePath(`/agent/leads/${id}`);
-  return { ok: true };
+  void id;
+  void input;
+  return { ok: false, error: LEGACY_CLOSED };
 }
 
 /** Лид устгана (холбоотой лог cascade-аар устана). */
 export async function deleteLead(id: string): Promise<{ ok: boolean; error?: string }> {
-  const supabase = await createClient();
-  const agentId = await myAgentId(supabase);
-  if (!agentId) return { ok: false, error: "auth" };
-  const { data, error } = await supabase
-    .from("leads")
-    .delete()
-    .eq("id", id)
-    .eq("agent_id", agentId)
-    .select("id");
-  if (error) return { ok: false, error: error.message };
-  if (!data || data.length === 0) return { ok: false, error: "Лид олдсонгүй эсвэл эрх алга." };
-  revalidatePath("/agent/leads");
-  return { ok: true };
+  void id;
+  return { ok: false, error: LEGACY_CLOSED };
 }
 
 // ── Үйл явдлын лог ────────────────────────────────────────
@@ -151,7 +81,8 @@ export async function logActivity(input: ActivityInput): Promise<{ ok: boolean; 
   if (!ACTIVITY_KINDS.includes(input.kind)) return { ok: false, error: "Буруу төрөл." };
   const summary = input.summary?.trim();
   if (!summary) return { ok: false, error: "Товч агуулга оруулна уу." };
-  if (!input.leadId && !input.projectId) return { ok: false, error: "Лид эсвэл төсөл сонгоно уу." };
+  if (input.leadId) return { ok: false, error: LEGACY_CLOSED };
+  if (!input.projectId) return { ok: false, error: "Төсөл сонгоно уу." };
 
   const supabase = await createClient();
   const agentId = await myAgentId(supabase);

@@ -2,22 +2,29 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
 import type { Database, Json } from "@/types/database";
-import type { CrmPropertyStatus, MatchResponse, MatchStrength, ServiceKind } from "@/lib/constants-crm";
+import type { CrmPropertyStatus, LeadGrade, MatchResponse, MatchStrength, ServiceKind } from "@/lib/constants-crm";
 import {
+  DELIVERY_TIER_LABEL,
+  deliveryTier,
+  isServiceCompatible,
   normalizeMatchThresholds,
   normalizeMatchWeights,
   propertyFeatureTokens,
   propertyLocationTokens,
   scoreMatch,
+  type DeliveryTier,
   type MatchProfileInput,
   type MatchPropertyInput,
+  type MatchStrengthValue,
   type MatchTags,
 } from "@/lib/crm/matching";
+import { notifyCrm } from "@/lib/crm/notify";
 
 /**
- * Тохируулгын уншилтууд + дахин тооцооллын цөм (U3, F-250–261).
+ * Тохируулгын уншилтууд + дахин тооцооллын цөм (§6.9, §6.10).
  * recomputeMatchesCore нь admin client-ээр ажиллана (cron + action хоёул
  * хэрэглэнэ) — оффисын хүрээг .eq("office_id")-ээр ЗААВАЛ хатуу зааж өгнө.
+ * Худалдаа/түрээсийн нийцэхгүй хослол огт тооцогдохгүй.
  */
 
 // ── Уншилтын мөрүүд ───────────────────────────────────────
@@ -50,6 +57,8 @@ export type MatchRow = {
   contact_id: string | null;
   contact_name: string | null;
   profile_type: string | null;
+  /** Харилцагчийн нээлттэй сэжимийн ангилал (§6.10.4–6 бүлэглэлт; харах эрхгүй бол null). */
+  contact_grade: LeadGrade | null;
 };
 
 const MATCH_SELECT =
@@ -72,6 +81,7 @@ type RawMatch = Omit<
   | "contact_id"
   | "contact_name"
   | "profile_type"
+  | "contact_grade"
 > & {
   suggester: { full_name: string | null } | null;
   property: {
@@ -103,7 +113,28 @@ function toMatchRow(r: RawMatch): MatchRow {
     contact_id: profile?.contact_id ?? null,
     contact_name: profile?.contact?.display_name ?? null,
     profile_type: profile?.profile_type ?? null,
+    contact_grade: null,
   };
+}
+
+/** Харилцагч бүрийн нээлттэй сэжимийн ангиллыг нэмнэ (RLS-ийн дагуу). */
+async function withContactGrades(rows: MatchRow[]): Promise<MatchRow[]> {
+  const ids = [...new Set(rows.map((r) => r.contact_id).filter((x): x is string => !!x))];
+  if (!ids.length) return rows;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("crm_leads")
+    .select("contact_id, grade, created_at")
+    .in("contact_id", ids)
+    .in("status", ["new", "active"])
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.error("withContactGrades:", error.message);
+    return rows;
+  }
+  const gradeOf = new Map<string, LeadGrade | null>();
+  for (const l of data ?? []) if (!gradeOf.has(l.contact_id)) gradeOf.set(l.contact_id, l.grade);
+  return rows.map((r) => ({ ...r, contact_grade: r.contact_id ? (gradeOf.get(r.contact_id) ?? null) : null }));
 }
 
 /** Нэг түлхүүрийн хамгийн сүүлийн мөрийг үлдээнэ (түүх suggested/responded мөрөөр хадгалагдана). */
@@ -135,7 +166,9 @@ export async function getMatchesForProfile(profileId: string): Promise<MatchRow[
     console.error("getMatchesForProfile:", error.message);
     return [];
   }
-  return latestPerKey(((data ?? []) as unknown as RawMatch[]).map(toMatchRow), (r) => r.property_id);
+  return withContactGrades(
+    latestPerKey(((data ?? []) as unknown as RawMatch[]).map(toMatchRow), (r) => r.property_id)
+  );
 }
 
 /** Объектод тохирох харилцагчид (урвуу F-254) — оноогоор. */
@@ -151,7 +184,9 @@ export async function getMatchesForProperty(propertyId: string): Promise<MatchRo
     console.error("getMatchesForProperty:", error.message);
     return [];
   }
-  return latestPerKey(((data ?? []) as unknown as RawMatch[]).map(toMatchRow), (r) => r.need_profile_id);
+  return withContactGrades(
+    latestPerKey(((data ?? []) as unknown as RawMatch[]).map(toMatchRow), (r) => r.need_profile_id)
+  );
 }
 
 /** Харилцагчийн тохируулгын түүх (F-162/256) — санал болгосон/хариу өгсөн мөрүүд. */
@@ -206,6 +241,8 @@ type ProfileRecord = {
   nice_to_haves: Json;
   deal_breakers: Json;
   status: string;
+  budget_overrun_approved: boolean | null;
+  budget_overrun_max: number | null;
 };
 
 type PropertyRecord = {
@@ -225,7 +262,7 @@ type PropertyRecord = {
 
 const PROFILE_COLS =
   "id, contact_id, profile_type, locations, property_types, budget_min, budget_max, rooms_min, area_min, " +
-  "timeline, must_haves, nice_to_haves, deal_breakers, status";
+  "timeline, must_haves, nice_to_haves, deal_breakers, status, budget_overrun_approved, budget_overrun_max";
 
 const PROPERTY_COLS =
   "id, service_kind, property_type, price, rent_price, area_m2, rooms, status, occupancy, address, features, match_tags";
@@ -247,6 +284,8 @@ function toProfileInput(p: ProfileRecord): MatchProfileInput {
     mustHaves: strArr(p.must_haves),
     niceToHaves: strArr(p.nice_to_haves),
     dealBreakers: strArr(p.deal_breakers),
+    budgetOverrunApproved: p.budget_overrun_approved ?? false,
+    budgetOverrunMax: p.budget_overrun_max == null ? null : Number(p.budget_overrun_max),
   };
 }
 
@@ -282,6 +321,8 @@ export type RecomputeSummary = {
   pairs: number;
   written: number;
   strongMatches: StrongMatchInfo[];
+  /** Хүчтэй + боломжит (таслах нөхцөлгүй) — §6.10.5-6 дохионд. */
+  signalMatches: StrongMatchInfo[];
   weightsSettingId: string | null;
 };
 
@@ -340,7 +381,9 @@ export async function recomputeMatchesCore(
   const profileRecords = ((profiles ?? []) as unknown as ProfileRecord[]).filter((p) => p.status === "active");
   const propertyRecords = (properties ?? []) as unknown as PropertyRecord[];
   const strongMatches: StrongMatchInfo[] = [];
+  const signalMatches: StrongMatchInfo[] = [];
   let written = 0;
+  let pairs = 0;
 
   const contactByProfile = new Map<string, string>();
   const allRows: Database["public"]["Tables"]["crm_matches"]["Insert"][] = [];
@@ -348,6 +391,9 @@ export async function recomputeMatchesCore(
     contactByProfile.set(prof.id, prof.contact_id);
     const profileInput = toProfileInput(prof);
     for (const prop of propertyRecords) {
+      // Худалдан авагч × түрээс, түрээслэгч × худалдах — тохируулахгүй (§6.9).
+      if (!isServiceCompatible(prof.profile_type, prop.service_kind)) continue;
+      pairs += 1;
       const res = scoreMatch(profileInput, toPropertyInput(prop), { weights, thresholds, adjacentZones });
       allRows.push({
         office_id: officeId,
@@ -364,9 +410,10 @@ export async function recomputeMatchesCore(
     }
   }
 
-  if (allRows.length > 0) {
+  {
     // Хуучин, санал болгоогүй тооцооллын мөрүүдийг цэвэрлэнэ (санал болгосон/
-    // хариу өгсөн мөр = түүх, хэвээр — F-256).
+    // хариу өгсөн мөр = түүх, хэвээр). Шинэ мөргүй ч цэвэрлэнэ — нийцэхгүй
+    // болсон хуучин тохироо үлдэхгүй.
     let del = admin
       .from("crm_matches")
       .delete()
@@ -392,24 +439,99 @@ export async function recomputeMatchesCore(
       if (insErr) throw new Error(`recompute insert: ${insErr.message}`);
       written += inserted?.length ?? 0;
       for (const m of inserted ?? []) {
-        if (m.strength === "strong" && !m.deal_breaker_hit) {
-          strongMatches.push({
-            matchId: m.id,
-            profileId: m.need_profile_id,
-            contactId: contactByProfile.get(m.need_profile_id) ?? "",
-            propertyId: m.property_id,
-            score: Number(m.score),
-            strength: m.strength,
-          });
-        }
+        if (m.deal_breaker_hit || (m.strength !== "strong" && m.strength !== "possible")) continue;
+        const info: StrongMatchInfo = {
+          matchId: m.id,
+          profileId: m.need_profile_id,
+          contactId: contactByProfile.get(m.need_profile_id) ?? "",
+          propertyId: m.property_id,
+          score: Number(m.score),
+          strength: m.strength,
+        };
+        signalMatches.push(info);
+        if (m.strength === "strong") strongMatches.push(info);
       }
     }
   }
 
   return {
-    pairs: profileRecords.length * propertyRecords.length,
+    pairs,
     written,
     strongMatches,
+    signalMatches,
     weightsSettingId: weightsRow?.id ?? null,
   };
+}
+
+// ── Шинэ листингийн дохио (§6.10.3–6, §6.28.9) ───────────
+
+/**
+ * Хүчтэй/боломжит тохирооны дохиог эзэмшигч агент бүрд нэгтгэж илгээнэ:
+ * сегмент бүрийн тоо (биечлэн / хувийн зурвас / аян). Шинэ листинг
+ * идэвхжихэд эсвэл cron-ы дахин тооцооллын дараа дуудагдана. Шидэхгүй.
+ */
+export async function notifyMatchSignals(
+  admin: Admin,
+  officeId: string,
+  propertyId: string,
+  signals: StrongMatchInfo[]
+): Promise<number> {
+  if (signals.length === 0) return 0;
+  try {
+    const contactIds = [...new Set(signals.map((s) => s.contactId).filter(Boolean))];
+    const { data: leads } = await admin
+      .from("crm_leads")
+      .select("contact_id, owner_id, grade, created_at")
+      .eq("office_id", officeId)
+      .in("contact_id", contactIds)
+      .in("status", ["new", "active"])
+      .not("owner_id", "is", null)
+      .order("created_at", { ascending: false });
+    const leadByContact = new Map<string, { owner_id: string; grade: string | null }>();
+    for (const l of leads ?? []) {
+      if (l.owner_id && !leadByContact.has(l.contact_id)) leadByContact.set(l.contact_id, { owner_id: l.owner_id, grade: l.grade });
+    }
+
+    const { data: property } = await admin
+      .from("crm_properties")
+      .select("name, number")
+      .eq("id", propertyId)
+      .maybeSingle();
+    const propertyLabel = property ? `${property.name} (${property.number})` : "Шинэ листинг";
+
+    const perOwner = new Map<string, Record<DeliveryTier, number>>();
+    for (const s of signals) {
+      const lead = leadByContact.get(s.contactId);
+      if (!lead) continue;
+      const tier = deliveryTier(lead.grade, s.strength as MatchStrengthValue);
+      if (tier === "none") continue;
+      const cur = perOwner.get(lead.owner_id) ?? { agent_call: 0, personal_message: 0, campaign: 0, none: 0 };
+      cur[tier] += 1;
+      perOwner.set(lead.owner_id, cur);
+    }
+
+    let sent = 0;
+    for (const [ownerId, counts] of perOwner) {
+      const parts = (["agent_call", "personal_message", "campaign"] as const)
+        .filter((t) => counts[t] > 0)
+        .map((t) => `${counts[t]} — ${DELIVERY_TIER_LABEL[t].toLowerCase()}`);
+      const total = counts.agent_call + counts.personal_message + counts.campaign;
+      const res = await notifyCrm({
+        officeId,
+        event: "match_found",
+        recipients: [ownerId],
+        title: counts.agent_call > 0 ? "Халуун харилцагчид хүчтэй тохироо олдлоо" : "Тохирох харилцагч олдлоо",
+        body: `${propertyLabel}: таны ${total} харилцагчид тохирч байна (${parts.join("; ")}).`,
+        link: `/agent/crm/properties/${propertyId}`,
+        entity: "crm_properties",
+        entityId: propertyId,
+        admin,
+      });
+      sent += res.delivered;
+    }
+    return sent;
+  } catch (e) {
+    console.error("notifyMatchSignals:", e instanceof Error ? e.message : e);
+    return 0;
+  }
 }

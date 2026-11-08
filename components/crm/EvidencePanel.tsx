@@ -15,24 +15,24 @@ const KEY_LABEL: Record<string, string> = {
   txn_number: "Хэлцлийн дугаар",
   role_record_id: "Үүргийн бүртгэлийн мөр",
   rate_full_pct: "Журмын бүрэн хувь",
-  split_pct: "Хуваарилалт (F-458)",
-  threshold_above: "Үнийн босго давсан (F-456)",
+  split_pct: "Хуваарилалт",
+  threshold_above: "Үнийн босго давсан",
   verified_income_mnt: "Санхүү баталгаажуулсан орлого (₮)",
-  tax_pct: "Татварын хувь (F-455)",
+  tax_pct: "Татварын хувь",
   verified_payment_ids: "Баталгаажсан төлбөрүүд",
-  co_brokerage: "Хамтын зуучлалын туг (F-468)",
-  variant: "Олон улсын хувилбар (F-467)",
+  co_brokerage: "Хамтын зуучлалын туг",
+  variant: "Олон улсын хувилбар",
   merged_roles: "Нэгтгэсэн үүргүүд",
-  dropped_roles: "Давхарлагдаагүй үүргүүд (F-457)",
-  supplement: "Нэмэлт тооцоо (F-464)",
+  dropped_roles: "Давхарлагдаагүй үүргүүд",
+  supplement: "Нэмэлт тооцоо",
   prev_amount: "Өмнө тооцогдсон дүн",
-  replacement: "Дахин түрээслүүлэлт — 0₮ (F-414)",
-  missing_split: "Хуваарилалт дутуу (F-458)",
+  replacement: "Дахин түрээслүүлэлт — 0₮",
+  missing_split: "Хуваарилалт дутуу",
   monthly_record_id: "Сарын бүртгэлийн мөр",
   month: "Тайлант сар",
   net_income: "Цэвэр орлого (₮)",
-  ratio_pct: "PM харьцаа (F-466)",
-  rate_override: "Стандартаас зөрсөн хувь (F-411)",
+  ratio_pct: "PM харьцаа",
+  rate_override: "Стандартаас зөрсөн хувь",
 };
 
 const VARIANT_LABEL: Record<string, string> = {
@@ -58,7 +58,7 @@ export function EvidencePanel({ evidence }: { evidence: Record<string, unknown> 
   if (!entries.length) {
     return (
       <p className="py-4 text-center text-sm text-muted">
-        Нотолгооны снапшот хоосон — тооцоо гараар/хуучин өгөгдлөөс үүссэн байж болно (F-451).
+        Нотолгооны снапшот хоосон — тооцоо гараар/хуучин өгөгдлөөс үүссэн байж болно.
       </p>
     );
   }
@@ -67,7 +67,7 @@ export function EvidencePanel({ evidence }: { evidence: Record<string, unknown> 
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <FileSearch className="size-4 text-muted" />
-        <span className="text-sm font-semibold text-ink">Нотолгооны бүрдэл (F-451)</span>
+        <span className="text-sm font-semibold text-ink">Нотолгооны бүрдэл</span>
         {missing ? (
           <Badge tone="rose">
             <CircleAlert /> Дутуу

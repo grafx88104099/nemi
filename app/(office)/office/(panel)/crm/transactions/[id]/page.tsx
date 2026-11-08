@@ -1,45 +1,34 @@
 import { notFound, redirect } from "next/navigation";
 
 import { getCrmStaffContext } from "@/lib/queries-crm-core";
-import {
-  getTransaction,
-  getCompleteness,
-  getContactOptions,
-  getAuditTrail,
-} from "@/lib/queries-crm-transactions";
-import { getDocsForEntity } from "@/lib/queries-crm-docs";
-import { getAgentOptions } from "@/lib/queries-crm-leads";
+import { getTransactionPageData } from "@/lib/queries-crm-transactions";
 import { TransactionDetailShell } from "@/components/crm/TransactionDetailShell";
 
 export const metadata = { title: "Хэлцлийн хавтас — CRM" };
 
-/** Хавтас: талууд, үүрэг, гэрээ, хуваарь, handover, бүрэн байдал, approvals (§4.1). */
+/** Хэлцлийн хавтас: хаах босго, оролцогч, үүрэг, гэрээ, төлбөр, хүлээлцэх, баримт. */
 export default async function TransactionDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const ctx = await getCrmStaffContext();
   if (!ctx) redirect("/office");
 
   const { id } = await params;
-  const txn = await getTransaction(id);
-  if (!txn) notFound();
-
-  const [completeness, docs, audit, agents, contactOptions] = await Promise.all([
-    getCompleteness(id),
-    getDocsForEntity("transaction", id),
-    getAuditTrail("crm_transactions", id),
-    getAgentOptions(),
-    getContactOptions(),
-  ]);
+  const data = await getTransactionPageData(id);
+  if (!data) notFound();
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-8">
       <TransactionDetailShell
-        txn={txn}
-        completeness={completeness}
-        docs={docs}
-        audit={audit}
-        agents={agents}
-        contactOptions={contactOptions}
+        txn={data.txn}
+        completeness={data.completeness}
+        docs={data.docs}
+        audit={data.audit}
+        agents={data.agents}
+        contactOptions={data.contactOptions}
         roles={ctx.roles}
+        basePath="/office/crm"
+        closingChecks={data.closingChecks}
+        contractTemplates={data.contractTemplates}
+        dealFlow={data.dealFlow}
       />
     </div>
   );

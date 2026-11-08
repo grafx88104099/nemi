@@ -20,7 +20,7 @@ export function CompletenessBar({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between text-sm">
-        <span className="font-medium text-ink">Хавтасны бүрэн байдал</span>
+        <span className="font-medium text-ink">Баримт бичгийн бүрдэл</span>
         <span className={cn("font-semibold", full ? "text-emerald-600" : "text-amber-600")}>
           {Math.round(pct)}%
         </span>
@@ -51,7 +51,7 @@ export function CompletenessBar({
       )}
       {!full && (
         <p className="text-xs text-muted">
-          100% болтол хаалтын шат болон шимтгэлийн «Хянасан» төлөв хориглогдоно (F-409/416).
+          Баримт бичгийн бүрдэл 100% болохоос өмнө хэлцлийг хаахгүй, урамшууллыг хянахгүй. Дутуу ангиллыг «Баримт» табд байршуулна.
         </p>
       )}
     </div>

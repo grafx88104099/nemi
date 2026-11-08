@@ -8,6 +8,7 @@ import {
   BellRing,
   ListTree,
   Users2,
+  PiggyBank,
   ChevronRight,
 } from "lucide-react";
 
@@ -20,8 +21,8 @@ const SECTIONS = [
   {
     href: "/office/crm/settings/pipelines",
     icon: GitBranch,
-    title: "Урсгал, шат, гейт",
-    desc: "PL-1…PL-6, шатны магадлал, шилжилтийн дүрэм, гейтийн шаардлага",
+    title: "Урсгал, шат, шилжих шалгуур",
+    desc: "Борлуулалтын урсгал, шатны магадлал, шилжилтийн дүрэм, шилжих шалгуурын шаардлага",
   },
   {
     href: "/office/crm/settings/scoring",
@@ -39,19 +40,19 @@ const SECTIONS = [
     href: "/office/crm/settings/zones",
     icon: Map,
     title: "Бүс, салбар, баг",
-    desc: "Бүсийн лавлах (F-207), салбар, багийн бүтэц",
+    desc: "Бүсийн лавлах, салбар, багийн бүтэц",
   },
   {
     href: "/office/crm/settings/rules",
     icon: Workflow,
     title: "Автомат дүрэм, SLA, хуанли",
-    desc: "Д-дүрмүүдийн идэвх/dry-run, SLA босго, ажлын өдрийн хуанли",
+    desc: "Автомат дүрмийн идэвх, туршилтын горим, SLA босго, ажлын өдрийн хуанли",
   },
   {
     href: "/office/crm/settings/notifications",
     icon: BellRing,
     title: "Мэдэгдлийн матриц",
-    desc: "Event бүрийн хүлээн авагч дүр, суваг, заавал ангилал",
+    desc: "Мэдэгдэл бүрийн хүлээн авагч дүр, суваг, заавал ангилал",
   },
   {
     href: "/office/crm/settings/lookups",
@@ -65,6 +66,12 @@ const SECTIONS = [
     title: "Ажилтан, дүр",
     desc: "CRM-ийн ажилтны бүртгэл, дүрийн оноолт, гарах урсгал",
   },
+  {
+    href: "/office/crm/settings/budget",
+    icon: PiggyBank,
+    title: "Төсөв, KPI жишиг",
+    desc: "Сар, салбарын төсөв, KPI-ийн жишиг, чанарын аудит, аяны зардал",
+  },
 ];
 
 export default async function CrmSettingsIndexPage() {
@@ -75,7 +82,7 @@ export default async function CrmSettingsIndexPage() {
       <p className="text-sm text-muted">
         Бүх параметр хувилбартай хадгалагдана — өөрчлөлт зөвхөн урагш үйлчилнэ, хуучин тооцоо өөрчлөгдөхгүй.
       </p>
-      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
         {SECTIONS.map((s) => (
           <Link key={s.href} href={s.href} className="group">
             <Card className="h-full transition group-hover:border-brand-200 group-hover:shadow">

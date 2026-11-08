@@ -25,7 +25,9 @@ export function AgentAccountManager({ agentId, account }: { agentId: string; acc
   function run(fn: () => Promise<unknown>) {
     setErr(null);
     startTransition(async () => {
-      await fn();
+      const res = (await fn()) as { error?: string } | undefined;
+      // CRM-ийн хүлээлцэх дуусаагүй бол шалтгааныг харуулна (§6.28.11).
+      if (res && typeof res === "object" && typeof res.error === "string" && res.error !== "no_account") setErr(res.error);
       router.refresh();
     });
   }

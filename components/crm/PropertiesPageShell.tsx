@@ -34,8 +34,8 @@ import {
 export type OwnerContactOption = { id: string; name: string; number: string };
 
 /**
- * Объектын сан (F-200/219): шүүлт URL-д (статус, төрөл, үйлчилгээ, салбар,
- * үнийн муж, талбай, агент, ашиглалт, хайлт); шинэ объект бүртгэх маягт
+ * Үл хөдлөхийн сан: шүүлт URL-д (төлөв, төрөл, үйлчилгээ, салбар,
+ * үнийн муж, талбай, агент, ашиглалт, хайлт); шинэ үл хөдлөх бүртгэх маягт
  * (бүс автомат, эх сурвалжийн роль автомат — P-03). basePath: office/agent.
  */
 export function PropertiesPageShell({
@@ -86,6 +86,8 @@ export function PropertiesPageShell({
   const [tagPrice, setTagPrice] = useState("");
   const [tagGoal, setTagGoal] = useState("");
   const [tagSpecial, setTagSpecial] = useState("");
+  const [tagSize, setTagSize] = useState("");
+  const [tagCondition, setTagCondition] = useState("");
 
   function setParam(updates: Record<string, string | null>) {
     const next = new URLSearchParams(sp.toString());
@@ -129,6 +131,8 @@ export function PropertiesPageShell({
         location: list(tagLocation),
         type: list(tagType),
         price: list(tagPrice),
+        size: list(tagSize),
+        condition: list(tagCondition),
         goal: list(tagGoal),
         special: list(tagSpecial),
       },
@@ -151,19 +155,19 @@ export function PropertiesPageShell({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-extrabold text-ink">Объектын сан</h1>
+          <h1 className="text-2xl font-extrabold text-ink">Үл хөдлөхийн сан</h1>
           <p className="text-sm text-muted">
             Нийт {rows.length} · Дундын сан — идэвхжүүлэлтийн босго, бүсчлэл, 3 ролийн бүртгэлтэй.
           </p>
         </div>
         {canCreate ? (
           <Button size="sm" onClick={() => setFormOpen(true)}>
-            <Plus className="size-4" /> Шинэ объект
+            <Plus className="size-4" /> Шинэ үл хөдлөх
           </Button>
         ) : null}
       </div>
 
-      {/* Шүүлтүүд (F-219) */}
+      {/* Шүүлтүүд */}
       <div className="flex flex-wrap items-end gap-2">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
@@ -253,7 +257,7 @@ export function PropertiesPageShell({
             <table className="w-full min-w-[980px] text-sm">
               <thead>
                 <tr className="border-b border-line text-left text-xs text-subtle">
-                  <th className="px-4 py-2.5 font-medium">Объект</th>
+                  <th className="px-4 py-2.5 font-medium">Үл хөдлөх</th>
                   <th className="px-4 py-2.5 font-medium">Төрөл / Үйлчилгээ</th>
                   <th className="px-4 py-2.5 font-medium">Үнэ</th>
                   <th className="px-4 py-2.5 font-medium">Талбай / Өрөө</th>
@@ -267,7 +271,7 @@ export function PropertiesPageShell({
                 {rows.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-4 py-10 text-center text-subtle">
-                      Шүүлтэд тохирох объект алга.
+                      Шүүлтэд тохирох үл хөдлөх алга.
                     </td>
                   </tr>
                 ) : null}
@@ -331,11 +335,11 @@ export function PropertiesPageShell({
         </CardBody>
       </Card>
 
-      {/* Шинэ объект (F-200/201) */}
+      {/* Шинэ үл хөдлөх */}
       <Modal
         open={formOpen}
         onClose={() => setFormOpen(false)}
-        title="Шинэ объект бүртгэх"
+        title="Шинэ үл хөдлөх бүртгэх"
         footer={
           <div className="flex w-full items-center justify-end gap-2">
             <Button variant="ghost" onClick={() => setFormOpen(false)} disabled={pending}>
@@ -371,7 +375,7 @@ export function PropertiesPageShell({
               <Input value={unit} onChange={(e) => setUnit(e.target.value)} />
             </Field>
           </div>
-          <p className="text-xs text-subtle">Бүс/салбар хаягаас автоматаар тодорхойлогдоно (F-207).</p>
+          <p className="text-xs text-subtle">Бүс, салбар хаягаас автоматаар тодорхойлогдоно.</p>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Үйлчилгээний төрөл">
               <Select value={serviceKind} onChange={(e) => setServiceKind(e.target.value as ServiceKind)}>
@@ -407,7 +411,7 @@ export function PropertiesPageShell({
               <Input type="number" value={rooms} onChange={(e) => setRooms(e.target.value)} />
             </Field>
           </div>
-          <Field label="Өмчлөгч (заавал)" hint="Өмчлөгч нь харилцагчийн санд бүртгэлтэй байх ёстой (F-217)">
+          <Field label="Өмчлөгч (заавал)" hint="Өмчлөгч нь харилцагчийн санд бүртгэлтэй байх ёстой">
             <Select value={ownerContactId} onChange={(e) => setOwnerContactId(e.target.value)}>
               <option value="">— Сонгох —</option>
               {ownerContacts.map((o) => (
@@ -417,13 +421,13 @@ export function PropertiesPageShell({
               ))}
             </Select>
           </Field>
-          <Field label="Гол онцлог" hint="Таслалаар тусгаарлана">
+          <Field label="Онцлог (лифт, зогсоол, тавилга г.м.)" hint="Таслалаар тусгаарлана">
             <Input value={features} onChange={(e) => setFeatures(e.target.value)} placeholder="Лифттэй, Зогсоолтой, Тавилгатай" />
           </Field>
           <div className="rounded-xl border border-line p-3">
-            <p className="mb-2 text-xs font-semibold text-muted">Тохируулгын шошго — 5 бүлэг (F-209, идэвхжүүлэлтэд байршил+төрөл заавал)</p>
+            <p className="mb-2 text-xs font-semibold text-muted">Тохируулгын шошго (идэвхжүүлэхэд «Бүс», «Төрөл» заавал; таслалаар тусгаарлана)</p>
             <div className="grid grid-cols-2 gap-2">
-              <Field label="Байршил">
+              <Field label="Бүс">
                 <Input value={tagLocation} onChange={(e) => setTagLocation(e.target.value)} placeholder="Хан-Уул, Зайсан" />
               </Field>
               <Field label="Төрөл">
@@ -435,8 +439,14 @@ export function PropertiesPageShell({
               <Field label="Зорилго">
                 <Input value={tagGoal} onChange={(e) => setTagGoal(e.target.value)} placeholder="Амьдрах, Хөрөнгө оруулалт" />
               </Field>
-              <Field label="Онцгой">
+              <Field label="Гол онцлог">
                 <Input value={tagSpecial} onChange={(e) => setTagSpecial(e.target.value)} placeholder="Шинэ, Гол гудамж" />
+              </Field>
+              <Field label="Хэмжээ">
+                <Input value={tagSize} onChange={(e) => setTagSize(e.target.value)} placeholder="70–90 м²" />
+              </Field>
+              <Field label="Нөхцөл байдал">
+                <Input value={tagCondition} onChange={(e) => setTagCondition(e.target.value)} placeholder="Шинэ засвартай" />
               </Field>
             </div>
           </div>

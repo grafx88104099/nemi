@@ -134,7 +134,7 @@ export function ZonesShell({
         <CardBody className="p-0">
           <div className="flex items-center justify-between p-5 pb-3">
             <div>
-              <p className="font-bold text-ink">Бүсийн лавлах (F-207)</p>
+              <p className="font-bold text-ink">Бүсийн лавлах</p>
               <p className="text-xs text-subtle">Дүүрэг/хороо/хотхон → хариуцах салбар</p>
             </div>
             {canEdit && branches.length > 0 ? (

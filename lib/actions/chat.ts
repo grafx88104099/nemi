@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ingestSiteInquiry } from "@/lib/crm/lead-intake";
 
 /** Зар дээрх агенттай харилцаа эхлүүлэх (байгаа бол буцаана). */
 export async function startConversation(listingId: string): Promise<{ id?: string; error?: string }> {
@@ -40,6 +41,8 @@ export async function startConversation(listingId: string): Promise<{ id?: strin
     .select("id")
     .single();
   if (error) return { error: error.message };
+  // §6.1/§6.4: шинэ чат = сайтын сэжим (CRM-д бүртгэнэ, алдаа чатыг унагахгүй).
+  await ingestSiteInquiry({ buyerProfileId: user.id, agentId: listing.agent_id, listingId, channel: "chat" });
   return { id: data.id };
 }
 
@@ -66,6 +69,7 @@ export async function startAgentChat(agentId: string): Promise<{ id?: string; er
     .select("id")
     .single();
   if (error) return { error: error.message };
+  await ingestSiteInquiry({ buyerProfileId: user.id, agentId, listingId: null, channel: "chat" });
   return { id: data.id };
 }
 

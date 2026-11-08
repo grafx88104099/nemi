@@ -17,7 +17,7 @@ import { normalizePhone, normalizeEmail } from "@/lib/crm/normalize";
 
 export type PhoneRow = { id: string; raw: string; normalized: string; is_primary: boolean };
 export type EmailRow = { id: string; email: string; is_primary: boolean };
-export type TagRow = { lookup_id: string; label: string };
+export type TagRow = { lookup_id: string; label: string; tag_group?: string | null };
 
 export type ContactRow = {
   id: string;
@@ -45,12 +45,12 @@ const CONTACT_SELECT =
   "source:crm_lookups!crm_contacts_source_id_fkey(label), " +
   "phones:crm_contact_phones(id, raw, normalized, is_primary), " +
   "emails:crm_contact_emails(id, email, is_primary), " +
-  "tag_rows:crm_contact_tags(lookup_id, lookup:crm_lookups(label)), " +
+  "tag_rows:crm_contact_tags(lookup_id, lookup:crm_lookups(label, tag_group)), " +
   "leads:crm_leads(count)";
 
 type RawContact = Omit<ContactRow, "source_label" | "tags" | "lead_count"> & {
   source: { label: string } | null;
-  tag_rows: { lookup_id: string; lookup: { label: string } | null }[];
+  tag_rows: { lookup_id: string; lookup: { label: string; tag_group?: string | null } | null }[];
   leads: { count: number }[];
 };
 
@@ -59,7 +59,11 @@ function toContactRow(r: RawContact): ContactRow {
   return {
     ...rest,
     source_label: source?.label ?? null,
-    tags: (tag_rows ?? []).map((t) => ({ lookup_id: t.lookup_id, label: t.lookup?.label ?? "?" })),
+    tags: (tag_rows ?? []).map((t) => ({
+      lookup_id: t.lookup_id,
+      label: t.lookup?.label ?? "?",
+      tag_group: t.lookup?.tag_group ?? null,
+    })),
     lead_count: leads?.[0]?.count ?? 0,
   };
 }
@@ -86,7 +90,19 @@ export async function getContacts(filters: ContactFilters = {}): Promise<Contact
   if (filters.contactType) query = query.contains("contact_types", [filters.contactType]);
   if (filters.branchId) query = query.eq("branch_id", filters.branchId);
   if (filters.sourceId) query = query.eq("source_id", filters.sourceId);
+  if (filters.consent) query = query.eq("consent", filters.consent);
   if (!filters.includeMerged) query = query.is("merged_into_id", null);
+  // Шошгоор шүүлт DB түвшинд (§6.8) — эхлээд тухайн шошготой харилцагчид.
+  if (filters.tagId) {
+    const { data: tagged } = await supabase
+      .from("crm_contact_tags")
+      .select("contact_id")
+      .eq("lookup_id", filters.tagId)
+      .limit(1000);
+    const ids = [...new Set((tagged ?? []).map((t) => t.contact_id))];
+    if (ids.length === 0) return [];
+    query = query.in("id", ids);
+  }
   if (filters.q) {
     const q = filters.q.trim();
     const phone = normalizePhone(q);
@@ -111,11 +127,7 @@ export async function getContacts(filters: ContactFilters = {}): Promise<Contact
     console.error("getContacts:", error.message);
     return [];
   }
-  let rows = ((data ?? []) as unknown as RawContact[]).map(toContactRow);
-  // Шошгоор шүүлт (F-118) — эмбед дээр client талд.
-  if (filters.tagId) rows = rows.filter((r) => r.tags.some((t) => t.lookup_id === filters.tagId));
-  if (filters.consent) rows = rows.filter((r) => r.consent === filters.consent);
-  return rows;
+  return ((data ?? []) as unknown as RawContact[]).map(toContactRow);
 }
 
 // ── 360° карт ─────────────────────────────────────────────
@@ -130,6 +142,7 @@ export type ContactLeadRow = {
   next_step: string | null;
   next_step_date: string | null;
   last_contact_at: string | null;
+  first_contact_at?: string | null;
   created_at: string;
 };
 
@@ -154,10 +167,21 @@ export type NeedProfileRow = {
   deal_breakers: Json;
   decision_maker: string | null;
   blocker: string | null;
+  rooms_target?: number | null;
+  area_target?: number | null;
+  decision_maker_id?: string | null;
+  decision_maker_involved?: boolean | null;
+  blocker_id?: string | null;
+  blocker_note?: string | null;
+  budget_overrun_approved?: boolean;
+  budget_overrun_max?: number | null;
+  occupant_kind?: string | null;
+  occupant_note?: string | null;
   status: string;
   paused_until: string | null;
   completeness_pct: number | null;
   created_at: string;
+  updated_at?: string;
 };
 
 export type OwnerProfileRow = {
@@ -196,16 +220,29 @@ export type ContactDetail = {
   source_label: string | null;
   source_detail: string | null;
   merged_into_id: string | null;
+  privacy_level?: string;
   created_by: string;
+  created_by_name?: string | null;
   created_at: string;
+  updated_at?: string;
   phones: PhoneRow[];
   emails: EmailRow[];
   tags: TagRow[];
 };
 
+export type ContactOpportunityRow = {
+  id: string;
+  state: string;
+  stage_name: string | null;
+  pipeline_name: string | null;
+  owner_name: string | null;
+  amount: number | null;
+};
+
 export type Contact360 = {
   contact: ContactDetail;
   leads: ContactLeadRow[];
+  opportunities: ContactOpportunityRow[];
   needProfiles: NeedProfileRow[];
   ownerProfiles: OwnerProfileRow[];
   mergeHistory: { merged_id: string; created_at: string }[];
@@ -214,43 +251,54 @@ export type Contact360 = {
 const CONTACT_DETAIL_SELECT =
   "id, number, kind, last_name, first_name, org_name, display_name, contact_types, lifecycle, " +
   "consent, consent_at, consent_channel, kyc_public_status, is_repeat, branch_id, source_id, " +
-  "source_detail, merged_into_id, created_by, created_at, " +
+  "source_detail, merged_into_id, privacy_level, created_by, created_at, updated_at, " +
   "source:crm_lookups!crm_contacts_source_id_fkey(label), " +
+  "creator:profiles!crm_contacts_created_by_fkey(full_name), " +
   "phones:crm_contact_phones(id, raw, normalized, is_primary), " +
   "emails:crm_contact_emails(id, email, is_primary), " +
-  "tag_rows:crm_contact_tags(lookup_id, lookup:crm_lookups(label))";
+  "tag_rows:crm_contact_tags(lookup_id, lookup:crm_lookups(label, tag_group))";
 
 /** 360° карт (P-01/4.1): профайлууд, сэжим, merge түүх — RLS хүрээнд. */
 export async function getContact360(id: string): Promise<Contact360 | null> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("crm_contacts")
-    .select(CONTACT_DETAIL_SELECT)
-    .eq("id", id)
-    .maybeSingle();
+  let { data, error } = await supabase.from("crm_contacts").select(CONTACT_DETAIL_SELECT).eq("id", id).maybeSingle();
+  // 20261107001500 (privacy_level) тавигдахаас өмнөх орчинд хуучин багануудаар уншина.
+  if (error?.code === "42703") {
+    ({ data, error } = await supabase
+      .from("crm_contacts")
+      .select(CONTACT_DETAIL_SELECT.replace("privacy_level, ", ""))
+      .eq("id", id)
+      .maybeSingle());
+  }
   if (error) {
     console.error("getContact360:", error.message);
     return null;
   }
   if (!data) return null;
 
-  type RawDetail = Omit<ContactDetail, "source_label" | "tags"> & {
+  type RawDetail = Omit<ContactDetail, "source_label" | "tags" | "created_by_name"> & {
     source: { label: string } | null;
-    tag_rows: { lookup_id: string; lookup: { label: string } | null }[];
+    creator: { full_name: string | null } | null;
+    tag_rows: { lookup_id: string; lookup: { label: string; tag_group?: string | null } | null }[];
   };
   const raw = data as unknown as RawDetail;
-  const { source, tag_rows, ...rest } = raw;
+  const { source, creator, tag_rows, ...rest } = raw;
   const contact: ContactDetail = {
     ...rest,
     source_label: source?.label ?? null,
-    tags: (tag_rows ?? []).map((t) => ({ lookup_id: t.lookup_id, label: t.lookup?.label ?? "?" })),
+    created_by_name: creator?.full_name ?? null,
+    tags: (tag_rows ?? []).map((t) => ({
+      lookup_id: t.lookup_id,
+      label: t.lookup?.label ?? "?",
+      tag_group: t.lookup?.tag_group ?? null,
+    })),
   };
 
-  const [leadsRes, needRes, ownerRes, mergeRes] = await Promise.all([
+  const [leadsRes, needRes, ownerRes, mergeRes, oppRes] = await Promise.all([
     supabase
       .from("crm_leads")
       .select(
-        "id, status, grade, score, owner_id, next_step, next_step_date, last_contact_at, created_at, " +
+        "id, status, grade, score, owner_id, next_step, next_step_date, last_contact_at, first_contact_at, created_at, " +
           "owner:profiles!crm_leads_owner_id_fkey(full_name)"
       )
       .eq("contact_id", id)
@@ -270,7 +318,32 @@ export async function getContact360(id: string): Promise<Contact360 | null> {
       .select("merged_id, created_at")
       .eq("primary_id", id)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("crm_opportunities")
+      .select(
+        "id, state, amount, stage:crm_stages!crm_opportunities_stage_id_fkey(name), " +
+          "pipeline:crm_pipelines!crm_opportunities_pipeline_id_fkey(name), " +
+          "owner:profiles!crm_opportunities_owner_id_fkey(full_name)"
+      )
+      .eq("contact_id", id)
+      .order("created_at", { ascending: false }),
   ]);
+  type RawOpp = {
+    id: string;
+    state: string;
+    amount: number | null;
+    stage: { name: string } | null;
+    pipeline: { name: string } | null;
+    owner: { full_name: string | null } | null;
+  };
+  const opportunities: ContactOpportunityRow[] = ((oppRes.data ?? []) as unknown as RawOpp[]).map((o) => ({
+    id: o.id,
+    state: o.state,
+    amount: o.amount,
+    stage_name: o.stage?.name ?? null,
+    pipeline_name: o.pipeline?.name ?? null,
+    owner_name: o.owner?.full_name ?? null,
+  }));
 
   type RawLead = Omit<ContactLeadRow, "owner_name"> & { owner: { full_name: string | null } | null };
   const leads = ((leadsRes.data ?? []) as unknown as RawLead[]).map(({ owner, ...l }) => ({
@@ -281,6 +354,7 @@ export async function getContact360(id: string): Promise<Contact360 | null> {
   return {
     contact,
     leads,
+    opportunities,
     // need/owner profiles хүснэгт 000400-д үүсдэг — миграци хараахан
     // хэрэглэгдээгүй орчинд error буцаана, хоосон массив аюулгүй fallback.
     needProfiles: (needRes.data ?? []) as unknown as NeedProfileRow[],
@@ -436,4 +510,20 @@ export async function getSavedViews(page: string): Promise<SavedViewRow[]> {
     .order("created_at");
   if (error) console.error("getSavedViews:", error.message);
   return (data ?? []) as SavedViewRow[];
+}
+
+// ── Шошгын лавлах (§6.8 — 7 бүлэг) ────────────────────────
+
+export type TagLookupRow = { id: string; code: string; label: string; tag_group: string | null };
+
+export async function getTagLookups(): Promise<TagLookupRow[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("crm_lookups")
+    .select("id, code, label, tag_group")
+    .eq("kind", "tag")
+    .eq("is_active", true)
+    .order("sort_order");
+  if (error) console.error("getTagLookups:", error.message);
+  return (data ?? []) as TagLookupRow[];
 }

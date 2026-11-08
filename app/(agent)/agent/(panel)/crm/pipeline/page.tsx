@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
 
-import { getCrmStaffContext, getLookups } from "@/lib/queries-crm-core";
+import { getCrmStaffContext, getLookups, getSettingValue } from "@/lib/queries-crm-core";
+import { normalizeDealFlow } from "@/lib/crm/deal-flow";
 import { getBoard, getVisiblePipelines } from "@/lib/queries-crm-pipeline";
 import { CrmNav } from "@/components/crm/CrmNav";
 import { PipelineBoardShell } from "@/components/crm/PipelineBoardShell";
+import { toIsoDate } from "@/lib/crm/calendar";
 
 export const metadata = { title: "Миний урсгал — CRM" };
 
@@ -15,7 +17,11 @@ export default async function AgentPipelinePage({ searchParams }: { searchParams
   if (!ctx) redirect("/agent");
 
   const sp = await searchParams;
-  const [pipelines, lostReasons] = await Promise.all([getVisiblePipelines(), getLookups("lost_reason")]);
+  const [pipelines, lostReasons, dealFlowRaw] = await Promise.all([
+    getVisiblePipelines(),
+    getLookups("lost_reason"),
+    getSettingValue("deal_flow"),
+  ]);
   const code = sp.pl && pipelines.some((p) => p.code === sp.pl) ? sp.pl : (pipelines[0]?.code ?? "PL-1");
   const board = await getBoard(code);
 
@@ -32,6 +38,8 @@ export default async function AgentPipelinePage({ searchParams }: { searchParams
         roles={ctx.roles}
         basePath="/agent/crm"
         dealPath="/agent/crm/pipeline"
+        dealFlow={normalizeDealFlow(dealFlowRaw)}
+        today={toIsoDate(new Date())}
       />
     </div>
   );

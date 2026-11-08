@@ -1,5 +1,6 @@
 "use client";
 
+import { fmtDateNum } from "@/lib/format";
 import { Printer } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -81,12 +82,12 @@ export function InvoicePrint({ invoice }: { invoice: InvoicePrintDetail }) {
         <div className="grid grid-cols-3 gap-4 text-sm text-muted">
           <p>Үүсгэсэн: {invoice.issued_on}</p>
           <p>Эцсийн хугацаа: {invoice.due_on}</p>
-          <p>{invoice.sent_at ? `Илгээсэн: ${new Date(invoice.sent_at).toLocaleDateString()}` : "Илгээгдээгүй"}</p>
+          <p>{invoice.sent_at ? `Илгээсэн: ${fmtDateNum(invoice.sent_at)}` : "Илгээгдээгүй"}</p>
         </div>
 
         <p className="mt-8 border-t border-line pt-4 text-xs text-subtle">
-          Энэхүү нэхэмжлэх PMC CRM системээс автомат үүссэн (F-517/518). Залруулга зөвхөн залруулгын
-          нэхэмжлэхээр хийгдэнэ (F-522).
+          Энэхүү нэхэмжлэх PMC CRM системээс автомат үүссэн. Залруулга зөвхөн залруулгын
+          нэхэмжлэхээр хийгдэнэ.
         </p>
       </div>
     </div>

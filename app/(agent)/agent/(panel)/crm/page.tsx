@@ -1,55 +1,41 @@
 import { redirect } from "next/navigation";
 
-import { getCrmStaffContext } from "@/lib/queries-crm-core";
-import { getAgentDayboard } from "@/lib/queries-crm-pipeline";
-import {
-  getAgentToday,
-  getForecastView,
-  getCommissionSummaryView,
-  sumForecast,
-  sumCommissionSummary,
-} from "@/lib/queries-crm-reports";
+import { getTodayData, myCrmContext } from "@/lib/queries-crm-today";
+import { getMyWorklists } from "@/lib/queries-crm-worklists";
 import { CrmNav } from "@/components/crm/CrmNav";
 import { AgentDayboard } from "@/components/crm/AgentDayboard";
+import { EmptyState } from "@/components/ui/empty-state";
 
-export const metadata = { title: "Өдрийн самбар — CRM" };
+export const metadata = { title: "Өнөөдөр — CRM" };
 
 /**
- * R-01 Агентын өдрийн самбар (U9 — DESIGN §8.2): AgentDayboard виджет —
- * өнөөдрийн даалгавар, хоцорсон эргэн холбогдолт, шинэ сэжим, үзлэгийн
- * 24ц санал, өөрийн урсгал/төсөөлөл, өөрийн шимтгэл (F-471 — RLS
- * агентад зөвхөн өөрийн мөрийг нэгтгэнэ).
+ * Агентын «Өнөөдөр» дэлгэц (§8.3 Агентын хяналтын самбар, §6.22, §6.23,
+ * R16): нэвтэрмэгц ирэх нэг дараалал + самбарын 7 хэсэг.
  */
 export default async function AgentCrmPage() {
-  const ctx = await getCrmStaffContext();
+  const ctx = await myCrmContext();
   if (!ctx) redirect("/agent");
 
-  const [board, todayRows, forecastRows, commissionRows] = await Promise.all([
-    getAgentDayboard(),
-    getAgentToday(),
-    getForecastView(),
-    getCommissionSummaryView(),
-  ]);
-  const today = todayRows.find((t) => t.owner_id === ctx.profileId) ?? null;
-  const ownForecast = sumForecast(forecastRows.filter((f) => f.owner_id === ctx.profileId));
-  const commission = sumCommissionSummary(commissionRows);
+  const [data, worklists] = await Promise.all([getTodayData("/agent/crm"), getMyWorklists("/agent/crm")]);
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6">
-      <div className="mb-4 border-b border-line">
+    <div className="mx-auto max-w-7xl px-4 py-4 sm:py-6">
+      <div className="mb-4 hidden border-b border-line md:block">
         <CrmNav roles={ctx.roles} basePath="/agent/crm" />
       </div>
 
-      <h1 className="mb-4 text-xl font-bold text-ink">Өдрийн самбар</h1>
+      <h1 className="mb-3 text-xl font-bold text-ink">Өнөөдөр</h1>
 
-      {!board ? (
-        <p className="text-sm text-muted">Мэдээлэл ачаалагдсангүй.</p>
+      {!data ? (
+        <EmptyState
+          title="Мэдээлэл ачаалагдсангүй"
+          description="Хуудсыг дахин ачаалж үзнэ үү. Асуудал давтагдвал системийн админд хандана уу."
+          action={{ label: "Дахин ачаалах", href: "/agent/crm" }}
+        />
       ) : (
         <AgentDayboard
-          board={board}
-          today={today}
-          forecast={ownForecast}
-          commission={commission}
+          data={data}
+          worklists={worklists ? { counts: worklists.counts, settings: worklists.settings } : null}
           basePath="/agent/crm"
         />
       )}

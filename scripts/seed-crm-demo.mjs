@@ -2,7 +2,7 @@
 // PMC CRM — ДЕМО/UAT өгөгдлийн seed (U9 crm-reports-uat).
 //
 // Урьдач нөхцөл:
-//   1) Миграци 000100…000900 бүгд хэрэглэгдсэн
+//   1) Миграци 20260901* ба 20261107000100…000400 бүгд хэрэглэгдсэн
 //   2) node scripts/seed-crm.mjs (тохиргоо/урсгал/гейт) ажилласан
 //   3) Оффис + office_admin profile + agent@nemi.mn хэрэглэгч бий
 //      (scripts/create-test-users.mjs, scripts/seed.mjs)
@@ -80,11 +80,17 @@ async function main() {
     const admin = adminRes.rows[0]?.id;
     if (!admin) throw new Error("office_admin profile олдсонгүй.");
 
+    // Демо агент ЗӨВХӨН энэ оффисын агент байх ёстой: өөр оффисынх бол crm_office_id()
+    // зөрж RLS түүнд CRM-ийг харуулахгүй (агент «CRM-д бүртгэгдээгүй» болно).
     const agentRes = await q(
-      "select p.id from profiles p join auth.users u on u.id = p.id where u.email = 'agent@nemi.mn' limit 1"
+      `select p.id from profiles p join auth.users u on u.id = p.id
+        where u.email = $2
+          and coalesce(p.office_id, (select a.office_id from agents a where a.profile_id = p.id limit 1)) = $1
+        limit 1`,
+      [officeId, process.env.CRM_DEMO_AGENT_EMAIL || "agent@nemi.mn"]
     );
     const agent = agentRes.rows[0]?.id ?? admin;
-    if (agent === admin) console.log("⚠ agent@nemi.mn олдсонгүй — агентын мөрүүдэд админ profile ашиглана.");
+    if (agent === admin) console.log("⚠ Энэ оффист демо агент (CRM_DEMO_AGENT_EMAIL, анхдагч agent@nemi.mn) олдсонгүй — агентын мөрүүдэд админ profile ашиглана.");
     console.log("Оффис:", officeId, "| админ:", admin, "| агент:", agent);
 
     // ── Лавлах/урсгалын ID-ууд (seed-crm.mjs-ээс) ──
@@ -96,10 +102,18 @@ async function main() {
       if (!r.rows[0]) throw new Error(`Лавлах олдсонгүй: ${kind}/${code} — scripts/seed-crm.mjs эхлээд ажиллуулна.`);
       return r.rows[0].id;
     };
-    const srcWebsite = await lookupId("lead_source", "website");
-    const srcFacebook = await lookupId("lead_source", "facebook");
+    // PRO-001 v2.1 §6.3: цахим хуудас, Facebook нь «Дижитал суваг» + тайлбар.
+    const srcDigital = await lookupId("lead_source", "digital");
+    const srcWebsite = srcDigital;
+    const srcFacebook = srcDigital;
     const srcReferral = await lookupId("lead_source", "referral");
+    const srcDetail = (src, k) =>
+      src === srcReferral ? null : [2, 4, 7, 9].includes(k) ? "Facebook" : "Цахим хуудас";
     const lostPrice = await lookupId("lost_reason", "price");
+    const goalLive = await lookupId("goal", "live");
+    const dmSpouse = await lookupId("decision_maker", "spouse");
+    const blockerNone = await lookupId("blocker", "none");
+    const blockerFinancing = await lookupId("blocker", "financing");
 
     const stageId = async (plCode, stCode) => {
       const r = await q(
@@ -145,7 +159,7 @@ async function main() {
       `insert into crm_staff (office_id, profile_id, branch_id, team_id, roles, panel_admin)
        values ($1, $2, $3, null, '{sales_director,ops_qc,finance,aml_officer,ceo,sysadmin}', true)
        on conflict (office_id, profile_id) do update
-         set roles = excluded.roles, panel_admin = true, is_active = true, branch_id = excluded.branch_id`,
+         set roles = array(select distinct unnest(crm_staff.roles || excluded.roles)), panel_admin = true, is_active = true, branch_id = excluded.branch_id`,
       [officeId, admin, b1]
     );
     if (agent !== admin) {
@@ -153,7 +167,7 @@ async function main() {
         `insert into crm_staff (office_id, profile_id, branch_id, team_id, roles)
          values ($1, $2, $3, $4, '{agent}')
          on conflict (office_id, profile_id) do update
-           set roles = excluded.roles, is_active = true, branch_id = excluded.branch_id, team_id = excluded.team_id`,
+           set roles = array(select distinct unnest(crm_staff.roles || excluded.roles)), is_active = true, branch_id = excluded.branch_id, team_id = excluded.team_id`,
         [officeId, agent, b1, team1]
       );
     }
@@ -176,13 +190,13 @@ async function main() {
     for (const [k, kind, last, first, org, disp, types, src, kyc] of contacts) {
       await q(
         `insert into crm_contacts (id, office_id, number, kind, last_name, first_name, org_name,
-           display_name, contact_types, source_id, lifecycle, consent, consent_at,
+           display_name, contact_types, source_id, source_detail, lifecycle, consent, consent_at,
            kyc_public_status, is_repeat, created_by, created_at)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9::crm_contact_type[], $10, 'active', 'granted', now(),
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9::crm_contact_type[], $10, $14, 'active', 'granted', now(),
            $11, $12, $13, now() - interval '40 days')
          on conflict do nothing`,
         [C[k], officeId, `DEMO-C-${String(k).padStart(3, "0")}`, kind, last, first, org, disp, types, src,
-         kyc, k === 8, admin]
+         kyc, k === 8, admin, srcDetail(src, k)]
       );
     }
     // Утас/имэйл (давхардлын демо: C3, C4 ижил дугаартай — DuplicateHint харагдана)
@@ -207,20 +221,24 @@ async function main() {
 
     // ── Профайлууд ──
     await q(
-      `insert into crm_need_profiles (id, office_id, contact_id, profile_type, locations, property_types,
-         budget_min, budget_target, budget_max, financing, rooms_min, timeline,
-         must_haves, nice_to_haves, deal_breakers, status, completeness_pct, created_by)
+      // §6.7: 301, 302 — бүрэн (3 заавал шаардлага, доод/зорилтот/дээд төсөв, шийдвэр гаргагч, саад);
+      // 303 — дутуу. completeness_pct нь lib/crm/scoring.ts needProfileCompleteness-тэй таарна.
+      `insert into crm_need_profiles (id, office_id, contact_id, profile_type, goal_id, locations, property_types,
+         budget_min, budget_target, budget_max, financing, rooms_min, rooms_target, timeline,
+         must_haves, nice_to_haves, deal_breakers, decision_maker, decision_maker_id, decision_maker_involved,
+         blocker_id, status, completeness_pct, created_by)
        values
-       ($1, $4, $5, 'buyer', $8, '{apartment}', 380000000, 430000000, 460000000, 'mixed', 3, '1_3m',
-        $9, '[]', '[]', 'active', 100, $7),
-       ($2, $4, $6, 'buyer', $8, '{apartment}', 330000000, 370000000, 400000000, 'loan', 2, '1_3m',
-        $10, '[]', '[]', 'active', 100, $7),
-       ($3, $4, $11, 'buyer', $8, '{apartment}', null, null, 350000000, 'not_ready', null, '3_12m',
-        '[]', '[]', '[]', 'active', 60, $7)
+       ($1, $4, $5, 'buyer', $12, $8, '{apartment}', 380000000, 430000000, 460000000, 'mixed', 3, 3, '1_3m',
+        $9, '[]', $15, 'Эхнэр нөхөр хамт', $13, true, $14, 'active', 100, $7),
+       ($2, $4, $6, 'buyer', $12, $8, '{apartment}', 330000000, 370000000, 400000000, 'loan', 2, 3, '1_3m',
+        $10, '[]', $15, 'Эхнэр нөхөр хамт', $13, false, $16, 'active', 100, $7),
+       ($3, $4, $11, 'buyer', null, $8, '{apartment}', null, null, 350000000, 'not_ready', null, null, '3_12m',
+        '[]', '[]', '[]', null, null, null, null, 'active', 54, $7)
        on conflict do nothing`,
       [d(301), d(302), d(303), officeId, C[1], C[2], admin,
        J(["ХУД", "БЗД"]), J(["Лифттэй", "Дулаан зогсоолтой", "Сургуульд ойр"]),
-       J(["Нарны талтай", "2+ өрөө", "Шинэ угсралт"]), C[3]]
+       J(["Нарны талтай", "2+ өрөө", "Шинэ угсралт"]), C[3],
+       goalLive, dmSpouse, blockerNone, J(["1 давхар"]), blockerFinancing]
     );
     await q(
       `insert into crm_owner_profiles (id, office_id, contact_id, property_id, goal, asking_price,
@@ -246,14 +264,15 @@ async function main() {
     ];
     for (const [k, contact, status, grade, score, owner, step, stepDate, lastOff, src, createdOff] of leadRows) {
       await q(
-        `insert into crm_leads (id, office_id, contact_id, branch_id, owner_id, source_id, status,
+        `insert into crm_leads (id, office_id, contact_id, branch_id, owner_id, source_id, source_detail, status,
            grade, score, last_contact_at, next_step, next_step_date,
            first_contact_due_at, created_by, created_at)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+         values ($1, $2, $3, $4, $5, $6, $16, $7, $8, $9, $10, $11, $12, $13, $14, $15)
          on conflict do nothing`,
         [L[k], officeId, contact, b1, owner, src, status, grade, score,
          lastOff != null ? iso(lastOff * DAY) : null, step, stepDate,
-         iso(createdOff * DAY + 4 * 3600000), admin, iso(createdOff * DAY)]
+         iso(createdOff * DAY + 4 * 3600000), admin, iso(createdOff * DAY),
+         src === srcReferral ? null : src === srcFacebook && [2, 4, 7].includes(k) ? "Facebook" : "Цахим хуудас"]
       );
     }
 

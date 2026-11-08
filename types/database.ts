@@ -362,6 +362,8 @@ export type Database = {
           last_activity_at: string | null;
           project_id: string | null;
           created_at: string;
+          migrated_crm_lead_id: string | null;
+          migrated_at: string | null;
         };
         Insert: {
           id?: string;
@@ -378,6 +380,8 @@ export type Database = {
           last_activity_at?: string | null;
           project_id?: string | null;
           created_at?: string;
+          migrated_crm_lead_id?: string | null;
+          migrated_at?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["leads"]["Insert"]>;
         Relationships: [];
@@ -394,6 +398,7 @@ export type Database = {
           duration_min: number | null;
           occurred_at: string;
           created_at: string;
+          migrated_crm_activity_id: string | null;
         };
         Insert: {
           id?: string;
@@ -406,6 +411,7 @@ export type Database = {
           duration_min?: number | null;
           occurred_at?: string;
           created_at?: string;
+          migrated_crm_activity_id?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["lead_activities"]["Insert"]>;
         Relationships: [];
@@ -822,6 +828,14 @@ export type Database = {
           is_active: boolean;
           offboarding: boolean;
           panel_admin: boolean;
+          // U4 (20261107001300): чөлөө, орлон ажиллагч
+          on_leave_from: string | null;
+          on_leave_to: string | null;
+          leave_substitute_id: string | null;
+          leave_note: string | null;
+          // U6 (20261107001700): ажилд орсон, гарсан огноо
+          hired_on: string | null;
+          left_on: string | null;
           created_at: string;
         };
         Insert: {
@@ -834,6 +848,12 @@ export type Database = {
           is_active?: boolean;
           offboarding?: boolean;
           panel_admin?: boolean;
+          on_leave_from?: string | null;
+          on_leave_to?: string | null;
+          leave_substitute_id?: string | null;
+          leave_note?: string | null;
+          hired_on?: string | null;
+          left_on?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["crm_staff"]["Insert"]>;
@@ -849,6 +869,7 @@ export type Database = {
           requires_note: boolean;
           sort_order: number;
           is_active: boolean;
+          tag_group: string | null;
           created_at: string;
         };
         Insert: {
@@ -860,6 +881,7 @@ export type Database = {
           requires_note?: boolean;
           sort_order?: number;
           is_active?: boolean;
+          tag_group?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["crm_lookups"]["Insert"]>;
@@ -993,6 +1015,7 @@ export type Database = {
           terminal_state: Database["public"]["Enums"]["crm_opp_state"] | null;
           is_closing_direction: boolean;
           created_at: string;
+          guidance: string | null;
         };
         Insert: {
           id?: string;
@@ -1007,6 +1030,7 @@ export type Database = {
           terminal_state?: Database["public"]["Enums"]["crm_opp_state"] | null;
           is_closing_direction?: boolean;
           created_at?: string;
+          guidance?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["crm_stages"]["Insert"]>;
         Relationships: [];
@@ -1241,6 +1265,7 @@ export type Database = {
           kyc_public_status: Database["public"]["Enums"]["crm_kyc_status"];
           is_repeat: boolean;
           merged_into_id: string | null;
+          privacy_level: string;
           created_by: string;
           created_at: string;
           updated_at: string;
@@ -1265,6 +1290,7 @@ export type Database = {
           kyc_public_status?: Database["public"]["Enums"]["crm_kyc_status"];
           is_repeat?: boolean;
           merged_into_id?: string | null;
+          privacy_level?: string;
           created_by: string;
           created_at?: string;
           updated_at?: string;
@@ -1410,6 +1436,8 @@ export type Database = {
           branch_id: string | null;
           owner_id: string | null;
           source_id: string | null;
+          source_detail: string | null;
+          received_at: string | null;
           campaign_code: string | null;
           channel_ref: string | null;
           status: Database["public"]["Enums"]["crm_lifecycle"];
@@ -1422,8 +1450,18 @@ export type Database = {
           next_step_task_id: string | null;
           next_step_date: string | null;
           first_contact_due_at: string | null;
+          first_contact_at: string | null;
           unprotected: boolean;
           inactivity_days: number;
+          // U4 (20261107001300): эзэмшлийн хугацаа, хүлээн авах, эргэлт
+          owner_assigned_at: string | null;
+          accept_due_at: string | null;
+          accepted_at: string | null;
+          recycled_at: string | null;
+          recycled_by: string | null;
+          recycle_reason: string | null;
+          // U6 (20261107001600): ангилал шинэчлэгдсэн огноо
+          grade_reviewed_at: string | null;
           created_by: string;
           created_at: string;
           updated_at: string;
@@ -1435,6 +1473,15 @@ export type Database = {
           branch_id?: string | null;
           owner_id?: string | null;
           source_id?: string | null;
+          source_detail?: string | null;
+          received_at?: string | null;
+          owner_assigned_at?: string | null;
+          accept_due_at?: string | null;
+          accepted_at?: string | null;
+          recycled_at?: string | null;
+          recycled_by?: string | null;
+          recycle_reason?: string | null;
+          grade_reviewed_at?: string | null;
           campaign_code?: string | null;
           channel_ref?: string | null;
           status?: Database["public"]["Enums"]["crm_lifecycle"];
@@ -1447,6 +1494,7 @@ export type Database = {
           next_step_task_id?: string | null;
           next_step_date?: string | null;
           first_contact_due_at?: string | null;
+          first_contact_at?: string | null;
           unprotected?: boolean;
           inactivity_days?: number;
           created_by: string;
@@ -1532,6 +1580,16 @@ export type Database = {
           deal_breakers: Json;
           decision_maker: string | null;
           blocker: string | null;
+          rooms_target: number | null;
+          area_target: number | null;
+          decision_maker_id: string | null;
+          decision_maker_involved: boolean | null;
+          blocker_id: string | null;
+          blocker_note: string | null;
+          budget_overrun_approved: boolean;
+          budget_overrun_max: number | null;
+          occupant_kind: string | null;
+          occupant_note: string | null;
           status: Database["public"]["Enums"]["crm_profile_status"];
           paused_until: string | null;
           lost_reason_id: string | null;
@@ -1563,6 +1621,16 @@ export type Database = {
           deal_breakers?: Json;
           decision_maker?: string | null;
           blocker?: string | null;
+          rooms_target?: number | null;
+          area_target?: number | null;
+          decision_maker_id?: string | null;
+          decision_maker_involved?: boolean | null;
+          blocker_id?: string | null;
+          blocker_note?: string | null;
+          budget_overrun_approved?: boolean;
+          budget_overrun_max?: number | null;
+          occupant_kind?: string | null;
+          occupant_note?: string | null;
           status?: Database["public"]["Enums"]["crm_profile_status"];
           paused_until?: string | null;
           lost_reason_id?: string | null;
@@ -1651,6 +1719,7 @@ export type Database = {
           created_by: string;
           created_at: string;
           updated_at: string;
+          activated_at: string | null;
         };
         Insert: {
           id?: string;
@@ -1890,6 +1959,11 @@ export type Database = {
           created_by: string;
           created_at: string;
           updated_at: string;
+          next_step: string | null;
+          next_step_date: string | null;
+          meeting_at: string | null;
+          meeting_place: string | null;
+          expected_fee_mnt: number | null;
         };
         Insert: {
           id?: string;
@@ -1913,6 +1987,11 @@ export type Database = {
           created_by: string;
           created_at?: string;
           updated_at?: string;
+          next_step?: string | null;
+          next_step_date?: string | null;
+          meeting_at?: string | null;
+          meeting_place?: string | null;
+          expected_fee_mnt?: number | null;
         };
         Update: Partial<Database["public"]["Tables"]["crm_opportunities"]["Insert"]>;
         Relationships: [];
@@ -1963,6 +2042,14 @@ export type Database = {
           occurred_at: string;
           backdated: boolean;
           feedback_category: string | null;
+          reached: boolean | null;
+          next_step_code: string | null;
+          next_step_at: string | null;
+          meeting_party: string | null;
+          showing_interest: string | null;
+          feedback_at: string | null;
+          quick_log: boolean;
+          is_meaningful: boolean;
           owner_id: string;
           created_at: string;
         };
@@ -1985,6 +2072,13 @@ export type Database = {
           occurred_at: string;
           backdated?: boolean;
           feedback_category?: string | null;
+          reached?: boolean | null;
+          next_step_code?: string | null;
+          next_step_at?: string | null;
+          meeting_party?: string | null;
+          showing_interest?: string | null;
+          feedback_at?: string | null;
+          quick_log?: boolean;
           owner_id: string;
           created_at?: string;
         };
@@ -2006,6 +2100,33 @@ export type Database = {
           next_step: string | null;
           created_by: string;
           created_at: string;
+          parent_offer_id: string | null;
+          side: string | null;
+          status: string;
+          received_at: string | null;
+          payment_terms: string | null;
+          financing: string | null;
+          handover_on: string | null;
+          inclusions: string | null;
+          exclusions: string | null;
+          next_step_date: string | null;
+          doc_id: string | null;
+          asking_amount: number | null;
+          concession_pct: number | null;
+          approval_status: string;
+          approval_requested_by: string | null;
+          approval_requested_at: string | null;
+          approval_note: string | null;
+          approved_by: string | null;
+          approved_at: string | null;
+          accepted_at: string | null;
+          accepted_by: string | null;
+          acceptance_channel: string | null;
+          acceptance_note: string | null;
+          acceptance_doc_id: string | null;
+          decided_at: string | null;
+          decided_by: string | null;
+          decision_note: string | null;
         };
         Insert: {
           id?: string;
@@ -2021,6 +2142,33 @@ export type Database = {
           next_step?: string | null;
           created_by: string;
           created_at?: string;
+          parent_offer_id?: string | null;
+          side?: string | null;
+          status?: string;
+          received_at?: string | null;
+          payment_terms?: string | null;
+          financing?: string | null;
+          handover_on?: string | null;
+          inclusions?: string | null;
+          exclusions?: string | null;
+          next_step_date?: string | null;
+          doc_id?: string | null;
+          asking_amount?: number | null;
+          concession_pct?: number | null;
+          approval_status?: string;
+          approval_requested_by?: string | null;
+          approval_requested_at?: string | null;
+          approval_note?: string | null;
+          approved_by?: string | null;
+          approved_at?: string | null;
+          accepted_at?: string | null;
+          accepted_by?: string | null;
+          acceptance_channel?: string | null;
+          acceptance_note?: string | null;
+          acceptance_doc_id?: string | null;
+          decided_at?: string | null;
+          decided_by?: string | null;
+          decision_note?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["crm_offers"]["Insert"]>;
         Relationships: [];
@@ -2151,6 +2299,10 @@ export type Database = {
           valid_to: string | null;
           doc_id: string | null;
           created_at: string;
+          template_code: string | null;
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          review_note: string | null;
         };
         Insert: {
           id?: string;
@@ -2163,6 +2315,10 @@ export type Database = {
           valid_to?: string | null;
           doc_id?: string | null;
           created_at?: string;
+          template_code?: string | null;
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+          review_note?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["crm_transaction_contracts"]["Insert"]>;
         Relationships: [];
@@ -2203,6 +2359,7 @@ export type Database = {
           done_on: string | null;
           responsible_id: string | null;
           sort_order: number;
+          due_on: string | null;
         };
         Insert: {
           id?: string;
@@ -2213,6 +2370,7 @@ export type Database = {
           done_on?: string | null;
           responsible_id?: string | null;
           sort_order?: number;
+          due_on?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["crm_handover_items"]["Insert"]>;
         Relationships: [];
@@ -3168,6 +3326,860 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["crm_txn_corrections"]["Insert"]>;
         Relationships: [];
       };
+      // === U3 (PRO-001 v2.1): crm-deal-flow (20261107000900) ===
+      crm_showings: {
+        Row: {
+          id: string;
+          office_id: string;
+          opportunity_id: string | null;
+          contact_id: string;
+          property_id: string;
+          agent_id: string;
+          scheduled_at: string;
+          duration_min: number | null;
+          meeting_point: string | null;
+          participants: string | null;
+          status: string;
+          done_at: string | null;
+          cancel_reason: string | null;
+          match_strength: string | null;
+          match_score: number | null;
+          weak_match_reason: string | null;
+          feedback_category: string | null;
+          feedback_note: string | null;
+          feedback_at: string | null;
+          interest: string | null;
+          next_action: string | null;
+          next_step_date: string | null;
+          activity_id: string | null;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id: string;
+          opportunity_id?: string | null;
+          contact_id: string;
+          property_id: string;
+          agent_id: string;
+          scheduled_at: string;
+          duration_min?: number | null;
+          meeting_point?: string | null;
+          participants?: string | null;
+          status?: string;
+          done_at?: string | null;
+          cancel_reason?: string | null;
+          match_strength?: string | null;
+          match_score?: number | null;
+          weak_match_reason?: string | null;
+          feedback_category?: string | null;
+          feedback_note?: string | null;
+          feedback_at?: string | null;
+          interest?: string | null;
+          next_action?: string | null;
+          next_step_date?: string | null;
+          activity_id?: string | null;
+          created_by: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_showings"]["Insert"]>;
+        Relationships: [];
+      };
+      crm_price_analyses: {
+        Row: {
+          id: string;
+          office_id: string;
+          opportunity_id: string;
+          property_id: string | null;
+          comparables: Json;
+          price_min: number | null;
+          price_max: number | null;
+          recommended_price: number;
+          note: string | null;
+          doc_id: string | null;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id: string;
+          opportunity_id: string;
+          property_id?: string | null;
+          comparables?: Json;
+          price_min?: number | null;
+          price_max?: number | null;
+          recommended_price: number;
+          note?: string | null;
+          doc_id?: string | null;
+          created_by: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_price_analyses"]["Insert"]>;
+        Relationships: [];
+      };
+      // === U2 (PRO-001 v2.1): crm-sla-automation (20261107000700) ===
+      crm_push_subscriptions: {
+        Row: {
+          id: string;
+          profile_id: string;
+          endpoint: string;
+          p256dh: string;
+          auth: string;
+          user_agent: string | null;
+          failed_count: number;
+          disabled_at: string | null;
+          last_success_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          profile_id: string;
+          endpoint: string;
+          p256dh: string;
+          auth: string;
+          user_agent?: string | null;
+          failed_count?: number;
+          disabled_at?: string | null;
+          last_success_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_push_subscriptions"]["Insert"]>;
+        Relationships: [];
+      };
+      // === U5 (PRO-001 v2.1): crm-agent-core (20261107001400) ===
+      crm_activity_properties: {
+        Row: {
+          activity_id: string;
+          property_id: string;
+          office_id: string;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          activity_id: string;
+          property_id: string;
+          office_id: string;
+          created_by: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_activity_properties"]["Insert"]>;
+        Relationships: [];
+      };
+      // === U4 (PRO-001 v2.1): crm-ownership-governance (20261107001200–001350) ===
+      crm_lead_disputes: {
+        Row: {
+          id: string;
+          office_id: string;
+          lead_id: string;
+          contact_id: string;
+          kind: string;
+          claimant_id: string;
+          respondent_id: string | null;
+          status: string;
+          claim: string;
+          claimant_evidence: Json;
+          respondent_note: string | null;
+          respondent_evidence: Json;
+          responded_at: string | null;
+          review_note: string | null;
+          review_recommendation: string | null;
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          escalation_reason: string | null;
+          escalated_by: string | null;
+          escalated_at: string | null;
+          decision: string | null;
+          decision_rationale: string | null;
+          decided_by: string | null;
+          decided_at: string | null;
+          decided_owner_id: string | null;
+          appeal_text: string | null;
+          appealed_by: string | null;
+          appealed_at: string | null;
+          appeal_decision: string | null;
+          appeal_rationale: string | null;
+          appeal_decided_by: string | null;
+          appeal_decided_at: string | null;
+          withdrawn_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id: string;
+          lead_id: string;
+          contact_id: string;
+          kind?: string;
+          claimant_id: string;
+          respondent_id?: string | null;
+          status?: string;
+          claim: string;
+          claimant_evidence?: Json;
+          respondent_note?: string | null;
+          respondent_evidence?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_lead_disputes"]["Insert"]>;
+        Relationships: [];
+      };
+      crm_coi_declarations: {
+        Row: {
+          id: string;
+          office_id: string;
+          profile_id: string;
+          contact_id: string | null;
+          related_profile_id: string | null;
+          relation: string;
+          note: string | null;
+          declared_at: string;
+          revoked_at: string | null;
+          revoke_note: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id: string;
+          profile_id: string;
+          contact_id?: string | null;
+          related_profile_id?: string | null;
+          relation: string;
+          note?: string | null;
+          declared_at?: string;
+          revoked_at?: string | null;
+          revoke_note?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_coi_declarations"]["Insert"]>;
+        Relationships: [];
+      };
+      crm_pool_claims: {
+        Row: {
+          id: string;
+          office_id: string;
+          lead_id: string;
+          requester_id: string;
+          note: string;
+          status: string;
+          decided_by: string | null;
+          decided_at: string | null;
+          decision_note: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id: string;
+          lead_id: string;
+          requester_id: string;
+          note: string;
+          status?: string;
+          decided_by?: string | null;
+          decided_at?: string | null;
+          decision_note?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_pool_claims"]["Insert"]>;
+        Relationships: [];
+      };
+      crm_export_requests: {
+        Row: {
+          id: string;
+          office_id: string;
+          requested_by: string;
+          scope: string;
+          filters: Json;
+          reason: string;
+          row_estimate: number | null;
+          status: string;
+          max_rows: number | null;
+          decided_by: string | null;
+          decided_at: string | null;
+          decision_note: string | null;
+          expires_at: string | null;
+          completed_at: string | null;
+          row_count: number | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id: string;
+          requested_by: string;
+          scope: string;
+          filters?: Json;
+          reason: string;
+          row_estimate?: number | null;
+          status?: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_export_requests"]["Insert"]>;
+        Relationships: [];
+      };
+      crm_data_requests: {
+        Row: {
+          id: string;
+          office_id: string;
+          contact_id: string;
+          kind: string;
+          channel: string | null;
+          note: string | null;
+          status: string;
+          received_at: string;
+          decided_by: string | null;
+          decided_at: string | null;
+          decision_note: string | null;
+          completed_at: string | null;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id: string;
+          contact_id: string;
+          kind: string;
+          channel?: string | null;
+          note?: string | null;
+          status?: string;
+          received_at?: string;
+          created_by: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_data_requests"]["Insert"]>;
+        Relationships: [];
+      };
+      // === U6 (PRO-001 v2.1): crm-quality-kpi (20261107001600–001750) ===
+      crm_quality_audits: {
+        Row: {
+          id: string;
+          office_id: string;
+          period_start: string;
+          period_end: string;
+          scope: string;
+          branch_id: string | null;
+          agent_id: string | null;
+          status: string;
+          sample_per_criterion: number;
+          population: Json;
+          score: number | null;
+          checked_count: number | null;
+          passed_count: number | null;
+          summary: string | null;
+          cancel_reason: string | null;
+          auditor_id: string;
+          created_at: string;
+          completed_at: string | null;
+        };
+        Insert: { office_id: string; period_start: string; period_end: string; sample_per_criterion: number; auditor_id: string };
+        Update: { summary?: string | null };
+        Relationships: [];
+      };
+      crm_quality_audit_items: {
+        Row: {
+          id: string;
+          office_id: string;
+          audit_id: string;
+          criterion: string;
+          entity: string;
+          entity_id: string;
+          agent_id: string | null;
+          label: string | null;
+          auto_result: string;
+          auto_reason: string | null;
+          result: string | null;
+          note: string | null;
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          fix_task_id: string | null;
+          created_at: string;
+        };
+        Insert: { office_id: string; audit_id: string; criterion: string; entity: string; entity_id: string; auto_result: string };
+        Update: { fix_task_id?: string | null };
+        Relationships: [];
+      };
+      crm_budgets: {
+        Row: {
+          id: string;
+          office_id: string;
+          month: string;
+          branch_id: string | null;
+          metric: string;
+          amount: number;
+          note: string | null;
+          created_by: string;
+          updated_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id: string;
+          month: string;
+          branch_id?: string | null;
+          metric?: string;
+          amount: number;
+          note?: string | null;
+          created_by: string;
+          updated_by?: string | null;
+        };
+        Update: { amount?: number; note?: string | null; updated_by?: string | null };
+        Relationships: [];
+      };
+      crm_forecast_snapshots: {
+        Row: {
+          id: string;
+          office_id: string;
+          month: string;
+          kind: string;
+          taken_at: string;
+          open_count: number;
+          total_amount_mnt: number;
+          weighted_amount_mnt: number;
+          expected_fee_mnt: number;
+          weighted_fee_mnt: number;
+          month_weighted_fee_mnt: number;
+          month_weighted_amount_mnt: number;
+          unconverted_count: number;
+          by_stage: Json;
+          by_agent: Json;
+          status: string;
+          approved_by: string | null;
+          approved_at: string | null;
+          approval_note: string | null;
+          created_by: string | null;
+        };
+        Insert: { office_id: string; month: string };
+        Update: { approval_note?: string | null };
+        Relationships: [];
+      };
+      crm_mgmt_reviews: {
+        Row: {
+          id: string;
+          office_id: string;
+          period_kind: string;
+          period_start: string;
+          kpi_snapshot: Json;
+          findings: string;
+          decisions: string | null;
+          reviewed_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id: string;
+          period_kind: string;
+          period_start: string;
+          kpi_snapshot?: Json;
+          findings: string;
+          decisions?: string | null;
+          reviewed_by: string;
+        };
+        Update: { decisions?: string | null };
+        Relationships: [];
+      };
+      crm_commission_dispute_evidence: {
+        Row: {
+          id: string;
+          office_id: string;
+          dispute_id: string;
+          content: string;
+          doc_id: string | null;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id: string;
+          dispute_id: string;
+          content: string;
+          doc_id?: string | null;
+          created_by: string;
+        };
+        Update: { content?: string };
+        Relationships: [];
+      };
+      // === U7 (PRO-001 v2.1): crm-weekly-cycle (20261107001800–002000) ===
+      crm_weekly_plans: {
+        Row: {
+          id: string;
+          office_id: string;
+          agent_id: string;
+          branch_id: string | null;
+          team_id: string | null;
+          week_start: string;
+          status: string;
+          last_week_summary: string | null;
+          support_needed: string | null;
+          commitment: string | null;
+          prefilled_from: string | null;
+          submitted_at: string | null;
+          approved_by: string | null;
+          approved_at: string | null;
+          returned_by: string | null;
+          returned_at: string | null;
+          return_note: string | null;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id: string;
+          agent_id: string;
+          week_start: string;
+          status?: string;
+          last_week_summary?: string | null;
+          support_needed?: string | null;
+          commitment?: string | null;
+          prefilled_from?: string | null;
+          created_by: string;
+        };
+        Update: {
+          status?: string;
+          last_week_summary?: string | null;
+          support_needed?: string | null;
+          commitment?: string | null;
+          return_note?: string | null;
+        };
+        Relationships: [];
+      };
+      crm_weekly_plan_targets: {
+        Row: {
+          plan_id: string;
+          office_id: string;
+          metric_code: string;
+          target: number | null;
+          review_note: string | null;
+          next_action: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          plan_id: string;
+          office_id: string;
+          metric_code: string;
+          target?: number | null;
+          review_note?: string | null;
+          next_action?: string | null;
+        };
+        Update: { target?: number | null; review_note?: string | null; next_action?: string | null };
+        Relationships: [];
+      };
+      crm_weekly_plan_items: {
+        Row: {
+          id: string;
+          office_id: string;
+          plan_id: string;
+          kind: string;
+          position: number;
+          opportunity_id: string | null;
+          obstacle_id: string | null;
+          text: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id: string;
+          plan_id: string;
+          kind: string;
+          position: number;
+          opportunity_id?: string | null;
+          obstacle_id?: string | null;
+          text?: string | null;
+        };
+        Update: { opportunity_id?: string | null; obstacle_id?: string | null; text?: string | null };
+        Relationships: [];
+      };
+      crm_weekly_commitment_log: {
+        Row: {
+          id: number;
+          office_id: string;
+          plan_id: string;
+          source: string;
+          old_text: string | null;
+          new_text: string | null;
+          changed_by: string | null;
+          changed_at: string;
+        };
+        Insert: {
+          office_id: string;
+          plan_id: string;
+          source?: string;
+          old_text?: string | null;
+          new_text?: string | null;
+          changed_by?: string | null;
+        };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      crm_weekly_reviews: {
+        Row: {
+          id: string;
+          office_id: string;
+          plan_id: string;
+          agent_id: string;
+          week_start: string;
+          status: string;
+          achieved_note: string | null;
+          missed_note: string | null;
+          conversion_note: string | null;
+          movement_note: string | null;
+          overdue_reason: string | null;
+          recovery_action: string | null;
+          lost_note: string | null;
+          revenue_note: string | null;
+          lessons: string | null;
+          coaching_need: string | null;
+          coaching_at: string | null;
+          coaching_task_id: string | null;
+          submitted_at: string | null;
+          approved_by: string | null;
+          approved_at: string | null;
+          returned_by: string | null;
+          returned_at: string | null;
+          return_note: string | null;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id: string;
+          plan_id: string;
+          agent_id: string;
+          week_start: string;
+          status?: string;
+          achieved_note?: string | null;
+          missed_note?: string | null;
+          conversion_note?: string | null;
+          movement_note?: string | null;
+          overdue_reason?: string | null;
+          recovery_action?: string | null;
+          lost_note?: string | null;
+          revenue_note?: string | null;
+          lessons?: string | null;
+          created_by: string;
+        };
+        Update: {
+          status?: string;
+          achieved_note?: string | null;
+          missed_note?: string | null;
+          conversion_note?: string | null;
+          movement_note?: string | null;
+          overdue_reason?: string | null;
+          recovery_action?: string | null;
+          lost_note?: string | null;
+          revenue_note?: string | null;
+          lessons?: string | null;
+          coaching_need?: string | null;
+          coaching_at?: string | null;
+          coaching_task_id?: string | null;
+          return_note?: string | null;
+        };
+        Relationships: [];
+      };
+      crm_weekly_actuals: {
+        Row: {
+          id: string;
+          office_id: string;
+          agent_id: string;
+          week_start: string;
+          kind: string;
+          metrics: Json;
+          moves: Json;
+          computed_at: string;
+        };
+        Insert: { office_id: string; agent_id: string; week_start: string; kind: string; metrics?: Json; moves?: Json };
+        Update: { metrics?: Json; moves?: Json };
+        Relationships: [];
+      };
+      crm_weekly_scores: {
+        Row: {
+          id: string;
+          office_id: string;
+          agent_id: string;
+          week_start: string;
+          kind: string;
+          plan_id: string | null;
+          profile: string;
+          weights: Json;
+          targets: Json;
+          components: Json;
+          total: number;
+          computed_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id: string;
+          agent_id: string;
+          week_start: string;
+          kind: string;
+          plan_id?: string | null;
+          profile?: string;
+          weights: Json;
+          targets?: Json;
+          components?: Json;
+          total: number;
+          computed_at?: string;
+        };
+        Update: {
+          plan_id?: string | null;
+          profile?: string;
+          weights?: Json;
+          targets?: Json;
+          components?: Json;
+          total?: number;
+          computed_at?: string;
+        };
+        Relationships: [];
+      };
+      crm_agent_daily_stats: {
+        Row: {
+          office_id: string;
+          agent_id: string;
+          day: string;
+          overdue_followups: number;
+          hot_contacts: number;
+          expected_net_fee: number;
+          completeness_pct: number | null;
+          computed_at: string;
+        };
+        Insert: { office_id: string; agent_id: string; day: string };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      crm_next_step_log: {
+        Row: {
+          id: number;
+          office_id: string;
+          entity: string;
+          entity_id: string;
+          owner_id: string | null;
+          due_on: string;
+          set_at: string;
+          resolved_at: string | null;
+          resolution: string | null;
+        };
+        Insert: { office_id: string; entity: string; entity_id: string; due_on: string };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      crm_sales_meetings: {
+        Row: {
+          id: string;
+          office_id: string;
+          kind: string;
+          week_start: string;
+          branch_id: string | null;
+          team_id: string | null;
+          facilitator_id: string;
+          status: string;
+          started_at: string;
+          ended_at: string | null;
+          sections: Json;
+          notes: string | null;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id: string;
+          kind: string;
+          week_start: string;
+          branch_id?: string | null;
+          team_id?: string | null;
+          facilitator_id: string;
+          status?: string;
+          sections?: Json;
+          notes?: string | null;
+          created_by: string;
+        };
+        Update: { status?: string; ended_at?: string | null; sections?: Json; notes?: string | null };
+        Relationships: [];
+      };
+      crm_meeting_decisions: {
+        Row: {
+          id: string;
+          office_id: string;
+          meeting_id: string;
+          plan_id: string | null;
+          agent_id: string | null;
+          kind: string;
+          text: string;
+          owner_id: string | null;
+          due_on: string | null;
+          status: string;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id: string;
+          meeting_id: string;
+          plan_id?: string | null;
+          agent_id?: string | null;
+          kind: string;
+          text: string;
+          owner_id?: string | null;
+          due_on?: string | null;
+          status?: string;
+          created_by: string;
+        };
+        Update: { status?: string; text?: string; owner_id?: string | null; due_on?: string | null };
+        Relationships: [];
+      };
+      // === U8 (PRO-001 v2.1): crm-mobile-growth (20261107002100–002200) ===
+      crm_today_snoozes: {
+        Row: { id: string; office_id: string; profile_id: string; item_kind: string; item_id: string; until: string; reason: string | null; created_at: string };
+        Insert: { id?: string; office_id: string; profile_id: string; item_kind: string; item_id: string; until: string; reason?: string | null };
+        Update: { until?: string; reason?: string | null };
+        Relationships: [];
+      };
+      crm_track_templates: {
+        Row: { id: string; office_id: string; code: string; name: string; description: string | null; target: string; steps: Json; stop_on: string[]; is_active: boolean; sort_order: number; created_by: string | null; created_at: string };
+        Insert: { id?: string; office_id: string; code: string; name: string; description?: string | null; target?: string; steps: Json; stop_on?: string[]; is_active?: boolean; sort_order?: number; created_by?: string | null };
+        Update: { name?: string; description?: string | null; target?: string; steps?: Json; stop_on?: string[]; is_active?: boolean; sort_order?: number };
+        Relationships: [];
+      };
+      crm_track_enrollments: {
+        Row: { id: string; office_id: string; template_id: string; lead_id: string | null; opportunity_id: string | null; contact_id: string; owner_id: string; status: string; started_at: string; stopped_at: string | null; stop_reason: string | null; created_by: string };
+        Insert: { id?: string; office_id: string; template_id: string; lead_id?: string | null; opportunity_id?: string | null; contact_id: string; owner_id: string; status?: string; created_by: string };
+        Update: { status?: string; stopped_at?: string | null; stop_reason?: string | null };
+        Relationships: [];
+      };
+      crm_track_tasks: {
+        Row: { enrollment_id: string; task_id: string; step_index: number };
+        Insert: { enrollment_id: string; task_id: string; step_index: number };
+        Update: { step_index?: number };
+        Relationships: [];
+      };
+      crm_public_links: {
+        Row: { id: string; office_id: string; kind: string; token_hash: string; contact_id: string | null; lead_id: string | null; property_id: string | null; title: string | null; note: string | null; expires_at: string; revoked_at: string | null; revoked_by: string | null; open_count: number; last_opened_at: string | null; created_by: string; created_at: string };
+        Insert: { id?: string; office_id: string; kind: string; token_hash: string; contact_id?: string | null; lead_id?: string | null; property_id?: string | null; title?: string | null; note?: string | null; expires_at: string; created_by: string };
+        Update: { title?: string | null; note?: string | null; revoked_at?: string | null; open_count?: number; last_opened_at?: string | null };
+        Relationships: [];
+      };
+      crm_public_link_items: {
+        Row: { link_id: string; property_id: string; match_id: string | null; sort_order: number; response: Database["public"]["Enums"]["crm_match_response"] | null; comment: string | null; responded_at: string | null };
+        Insert: { link_id: string; property_id: string; match_id?: string | null; sort_order?: number };
+        Update: { response?: Database["public"]["Enums"]["crm_match_response"] | null; comment?: string | null; responded_at?: string | null };
+        Relationships: [];
+      };
+      crm_open_houses: {
+        Row: { id: string; office_id: string; property_id: string; kind: string; code_hash: string; title: string | null; host_id: string; owner_agent_id: string; starts_at: string | null; ends_at: string | null; revoked_at: string | null; visit_count: number; created_by: string; created_at: string };
+        Insert: { id?: string; office_id: string; property_id: string; kind?: string; code_hash: string; title?: string | null; host_id: string; owner_agent_id: string; starts_at?: string | null; ends_at?: string | null; created_by: string };
+        Update: { title?: string | null; revoked_at?: string | null; visit_count?: number };
+        Relationships: [];
+      };
+      crm_open_house_visits: {
+        Row: { id: string; office_id: string; open_house_id: string; lead_id: string | null; existing_lead: boolean; client_hash: string | null; created_at: string };
+        Insert: { id?: string; office_id: string; open_house_id: string; lead_id?: string | null; existing_lead?: boolean; client_hash?: string | null };
+        Update: { lead_id?: string | null };
+        Relationships: [];
+      };
       // === U9: crm-reports-uat — view-үүдээ Views хэсэгт нэм ===
     };
     Views: {
@@ -3236,6 +4248,7 @@ export type Database = {
           won_amount: number;
           sla_met: number;
           sla_total: number;
+          first_contact_avg_min: number | null;
         };
         Relationships: [];
       };
@@ -3352,6 +4365,61 @@ export type Database = {
         };
         Relationships: [];
       };
+      // === U6 (PRO-001 v2.1): crm-quality-kpi (20261107001600, 001750) ===
+      crm_v_quality_checks: {
+        Row: {
+          office_id: string;
+          criterion: string;
+          entity: string;
+          entity_id: string;
+          agent_id: string | null;
+          branch_id: string | null;
+          occurred_on: string | null;
+          result: string;
+          reason: string | null;
+          label: string | null;
+        };
+        Relationships: [];
+      };
+      crm_v_quality_summary: {
+        Row: {
+          office_id: string;
+          branch_id: string | null;
+          criterion: string;
+          total: number;
+          passed: number;
+        };
+        Relationships: [];
+      };
+      crm_v_agent_data_quality: {
+        Row: {
+          office_id: string;
+          agent_id: string;
+          checked: number;
+          passed: number;
+          quality_pct: number | null;
+          by_criterion: Json;
+        };
+        Relationships: [];
+      };
+      crm_v_cross_branch_deals: {
+        Row: {
+          office_id: string;
+          transaction_id: string;
+          number: string;
+          status: Database["public"]["Enums"]["crm_txn_status"];
+          amount_mnt: number | null;
+          closed_on: string | null;
+          opportunity_id: string | null;
+          owner_id: string | null;
+          opp_branch_id: string | null;
+          property_branch_id: string | null;
+          branch_ids: string[];
+          agent_count: number;
+          open_disputes: number;
+        };
+        Relationships: [];
+      };
     };
     Functions: {
       jwt_role: { Args: Record<string, never>; Returns: Database["public"]["Enums"]["user_role"] };
@@ -3419,6 +4487,90 @@ export type Database = {
         Args: { p_primary: string; p_merged: string; p_choices: Json; p_aml_approval_note?: string | null };
         Returns: undefined;
       };
+      // === U4 (PRO-001 v2.1): crm-ownership-governance (20261107001100–001350) ===
+      crm_find_duplicates: {
+        Args: { p_phone?: string | null; p_email?: string | null; p_name?: string | null; p_exclude?: string | null };
+        Returns: {
+          contact_id: string;
+          match_kind: string;
+          can_view: boolean;
+          display_name: string;
+          masked_phone: string | null;
+          created_at: string;
+          branch_name: string | null;
+          open_lead_id: string | null;
+          open_lead_status: string | null;
+          owner_id: string | null;
+          owner_name: string | null;
+          owner_is_me: boolean;
+        }[];
+      };
+      crm_open_lead_dispute: {
+        Args: { p_contact: string; p_claim: string; p_evidence?: Json; p_kind?: string };
+        Returns: string;
+      };
+      crm_add_dispute_evidence: {
+        Args: { p_dispute: string; p_note?: string | null; p_evidence?: Json };
+        Returns: undefined;
+      };
+      crm_review_lead_dispute: {
+        Args: { p_dispute: string; p_note: string; p_recommendation?: string | null };
+        Returns: undefined;
+      };
+      crm_escalate_lead_dispute: { Args: { p_dispute: string; p_reason: string }; Returns: undefined };
+      crm_decide_lead_dispute: {
+        Args: { p_dispute: string; p_decision: string; p_rationale: string };
+        Returns: undefined;
+      };
+      crm_appeal_lead_dispute: { Args: { p_dispute: string; p_text: string }; Returns: undefined };
+      crm_decide_lead_appeal: {
+        Args: { p_dispute: string; p_outcome: string; p_rationale: string };
+        Returns: undefined;
+      };
+      crm_withdraw_lead_dispute: { Args: { p_dispute: string }; Returns: undefined };
+      crm_lead_dispute_facts: { Args: { p_dispute: string }; Returns: Json };
+      crm_lead_dispute_conflict: { Args: { p_dispute: string; p_profile: string }; Returns: string | null };
+      crm_recycle_lead: {
+        Args: { p_lead: string; p_reason: string; p_note: string; p_release?: boolean };
+        Returns: undefined;
+      };
+      crm_request_pool_claim: { Args: { p_lead: string; p_note: string }; Returns: string };
+      crm_decide_pool_claim: {
+        Args: { p_claim: string; p_approve: boolean; p_note?: string | null };
+        Returns: undefined;
+      };
+      crm_cancel_pool_claim: { Args: { p_claim: string }; Returns: undefined };
+      crm_accept_lead: { Args: { p_lead: string }; Returns: undefined };
+      crm_pool_leads: {
+        Args: Record<string, never>;
+        Returns: {
+          lead_id: string;
+          grade: string | null;
+          recycled_at: string | null;
+          recycle_reason: string | null;
+          source_label: string | null;
+          branch_name: string | null;
+          masked_name: string;
+          contact_types: string[];
+          last_contact_at: string | null;
+          created_at: string;
+          pending_claims: number;
+          my_claim_id: string | null;
+        }[];
+      };
+      crm_offboarding_blockers: { Args: { p_profile: string }; Returns: Json };
+      crm_decide_export_request: {
+        Args: { p_request: string; p_approve: boolean; p_note?: string | null; p_max_rows?: number | null };
+        Returns: undefined;
+      };
+      crm_consume_export_request: { Args: { p_request: string; p_rows: number }; Returns: undefined };
+      crm_anonymize_blockers: { Args: { p_contact: string }; Returns: string[] };
+      crm_decide_data_request: {
+        Args: { p_request: string; p_approve: boolean; p_note: string };
+        Returns: undefined;
+      };
+      crm_complete_data_request: { Args: { p_request: string }; Returns: undefined };
+      crm_anonymize_contact: { Args: { p_request: string }; Returns: undefined };
       // === U3: crm-properties-matching ===
       crm_can_edit_property: { Args: { p: string }; Returns: boolean };
       crm_can_view_match: { Args: { p_profile: string; p_property: string }; Returns: boolean };
@@ -3508,6 +4660,170 @@ export type Database = {
         Args: { p_id: string; p_amount: number; p_note?: string | null };
         Returns: Database["public"]["Enums"]["crm_commission_status"];
       };
+      // === U3 (PRO-001 v2.1): crm-deal-flow ===
+      crm_get_opp_offers: { Args: { p_opp: string }; Returns: Record<string, unknown>[] };
+      crm_can_act_on_offer: { Args: { p_offer: string }; Returns: boolean };
+      crm_decide_offer: {
+        Args: { p_offer: string; p_action: string; p_channel?: string | null; p_note?: string | null; p_doc?: string | null };
+        Returns: string;
+      };
+      crm_request_offer_approval: { Args: { p_offer: string; p_note: string }; Returns: undefined };
+      crm_decide_offer_approval: { Args: { p_offer: string; p_approve: boolean; p_note?: string | null }; Returns: undefined };
+      crm_review_contract: { Args: { p_contract: string; p_note?: string | null }; Returns: undefined };
+      crm_txn_closing_checks: { Args: { p_txn: string }; Returns: Json };
+      // === U6 (PRO-001 v2.1): crm-quality-kpi ===
+      crm_kpi_pipeline_in: { Args: { p_office: string; p_code: string; p_list?: string }; Returns: boolean };
+      crm_quality_audit_start: {
+        Args: {
+          p_period_start: string;
+          p_period_end: string;
+          p_scope?: string;
+          p_branch?: string | null;
+          p_agent?: string | null;
+          p_sample?: number | null;
+        };
+        Returns: string;
+      };
+      crm_quality_audit_review: { Args: { p_item: string; p_result: string; p_note?: string | null }; Returns: undefined };
+      crm_quality_audit_complete: {
+        Args: { p_audit: string; p_summary: string; p_accept_rest?: boolean };
+        Returns: number | null;
+      };
+      crm_quality_audit_cancel: { Args: { p_audit: string; p_reason: string }; Returns: undefined };
+      crm_fx_rate: { Args: { p_office: string; p_currency: string; p_on?: string | null }; Returns: number | null };
+      crm_take_forecast_snapshot: { Args: { p_office: string; p_month: string; p_kind?: string }; Returns: string };
+      crm_approve_forecast_snapshot: { Args: { p_id: string; p_note?: string | null }; Returns: undefined };
+      crm_commission_dispute_conflict: { Args: { p_dispute: string; p_profile: string }; Returns: string | null };
+      crm_commission_txn_party: { Args: { p_txn: string }; Returns: boolean };
+      crm_commission_dispute_can_add: { Args: { p_dispute: string }; Returns: boolean };
+      crm_kpi_followup: {
+        Args: { p_from: string; p_to: string };
+        Returns: {
+          office_id: string;
+          agent_id: string;
+          active_leads: number;
+          leads_with_next_step: number;
+          steps_total: number;
+          steps_overdue: number;
+          showings_total: number;
+          showings_feedback_ok: number;
+          offers_open: number;
+          offers_followed: number;
+          hot_leads: number;
+          hot_leads_on_freq: number;
+          material_total: number;
+          material_same_day: number;
+        }[];
+      };
+      crm_kpi_funnel: {
+        Args: { p_from: string; p_to: string };
+        Returns: {
+          office_id: string;
+          owner_id: string | null;
+          branch_id: string | null;
+          source_id: string | null;
+          campaign_code: string | null;
+          s1: number;
+          s2: number;
+          s3: number;
+          s4: number;
+          s5: number;
+          s6: number;
+          s7: number;
+          s8: number;
+          s9: number;
+          s10: number;
+        }[];
+      };
+      crm_kpi_pipeline_stages: {
+        Args: Record<string, never>;
+        Returns: {
+          office_id: string;
+          pipeline_code: string;
+          pipeline_name: string;
+          stage_code: string;
+          stage_name: string;
+          sort_order: number;
+          probability: number;
+          owner_id: string | null;
+          branch_id: string | null;
+          open_count: number;
+          amount_mnt: number;
+          weighted_mnt: number;
+          fee_mnt: number;
+          weighted_fee_mnt: number;
+          unconverted_count: number;
+          close_week_count: number;
+          close_week_weighted_fee: number;
+          close_month_count: number;
+          close_month_weighted_fee: number;
+          overdue_close_count: number;
+        }[];
+      };
+      crm_kpi_period_metrics: {
+        Args: { p_from: string; p_to: string };
+        Returns: {
+          office_id: string;
+          metric: string;
+          period_month: string;
+          owner_id: string | null;
+          branch_id: string | null;
+          source_id: string | null;
+          campaign_code: string | null;
+          pipeline_code: string | null;
+          dim_code: string | null;
+          dim_label: string | null;
+          cnt: number;
+          value: number;
+        }[];
+      };
+      crm_kpi_response_time: {
+        Args: { p_from: string; p_to: string };
+        Returns: {
+          office_id: string;
+          owner_id: string | null;
+          source_id: string | null;
+          week_start: string;
+          contacted: number;
+          avg_min: number | null;
+          median_min: number | null;
+          within_sla: number;
+          sla_total: number;
+        }[];
+      };
+      // === U7 (PRO-001 v2.1): crm-weekly-cycle ===
+      crm_agent_week_metrics: {
+        Args: { p_week: string; p_office?: string | null; p_agent?: string | null };
+        Returns: { office_id: string; agent_id: string; metric_code: string; actual: number | null }[];
+      };
+      crm_agent_week_moves: {
+        Args: { p_week: string; p_office?: string | null; p_agent?: string | null };
+        Returns: {
+          office_id: string;
+          agent_id: string;
+          opportunity_id: string;
+          from_sort: number | null;
+          to_sort: number | null;
+          to_terminal: string | null;
+          moves: number;
+        }[];
+      };
+      crm_weekly_freeze: { Args: { p_office: string; p_week: string; p_kind: string }; Returns: number };
+      crm_take_agent_daily_stats: { Args: Record<string, never>; Returns: number };
+      crm_weekly_scope_agents: {
+        Args: { p_office?: string | null; p_agent?: string | null };
+        Returns: { office_id: string; agent_id: string; cfg: Json }[];
+      };
+      crm_weekly_can_view: { Args: { p_agent: string }; Returns: boolean };
+      crm_weekly_can_approve: { Args: { p_agent: string }; Returns: boolean };
+      crm_weekly_final_lock_at: { Args: { p_office: string; p_week: string }; Returns: string };
+      // === U8 (PRO-001 v2.1): crm-mobile-growth ===
+      crm_track_enroll: { Args: { p_template: string; p_lead?: string | null; p_opportunity?: string | null }; Returns: string };
+      crm_track_stop: { Args: { p_enrollment: string }; Returns: undefined };
+      crm_leaderboard: {
+        Args: { p_from: string; p_to: string };
+        Returns: { agent_id: string; agent_name: string; team_id: string | null; branch_id: string | null; meaningful_contacts: number; showings_done: number; offers: number; contracts: number; closed_won: number }[];
+      };
     };
     Enums: {
       user_role: "buyer" | "agent" | "office_admin" | "admin";
@@ -3556,7 +4872,23 @@ export type Database = {
       crm_kyc_status: "pending" | "verified" | "edd" | "suspended";
       crm_aml_risk: "low" | "medium" | "high" | "prohibited";
       crm_aml_case_status: "open" | "investigating" | "str_sent" | "closed";
-      crm_gate_code: "g0" | "g1" | "g2" | "g3" | "g4" | "g5" | "g6";
+      crm_gate_code:
+        | "g0"
+        | "g1"
+        | "g2"
+        | "g3"
+        | "g4"
+        | "g5"
+        | "g6"
+        | "g_contact"
+        | "g_match"
+        | "g_showing"
+        | "g_interest"
+        | "g_counter"
+        | "g_meeting"
+        | "g_valuation"
+        | "g_listing_live"
+        | "g_buyer_activity";
       crm_lease_status: "draft" | "active" | "renewed" | "terminated" | "expired";
       crm_invoice_type: "mgmt_fee" | "brokerage_fee" | "extra_service";
       crm_invoice_status: "planned" | "sent" | "partially_paid" | "paid" | "cancelled";

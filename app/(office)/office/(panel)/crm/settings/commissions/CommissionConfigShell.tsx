@@ -1,5 +1,6 @@
 "use client";
 
+import { fmtDateNum, fmtDateTime } from "@/lib/format";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { History, Save } from "lucide-react";
@@ -100,7 +101,7 @@ function PolicyCard({
           </div>
           {current ? (
             <Badge tone="green">
-              Хүчинтэй {new Date(current.valid_from).toLocaleDateString("mn-MN")}-аас
+              Хүчинтэй {fmtDateNum(current.valid_from)}-аас
             </Badge>
           ) : (
             <Badge tone="amber">Тохируулаагүй — эхний тооцоонд default хувилбар автоматаар үүснэ</Badge>
@@ -151,8 +152,8 @@ function PolicyCard({
                 <div key={v.id} className="rounded-lg border border-line bg-surface p-2">
                   <div className="flex items-center justify-between gap-2 text-xs">
                     <span className="text-muted">
-                      {new Date(v.valid_from).toLocaleString("mn-MN")} —{" "}
-                      {v.valid_to ? new Date(v.valid_to).toLocaleString("mn-MN") : "одоо"}
+                      {fmtDateTime(v.valid_from)} —{" "}
+                      {v.valid_to ? fmtDateTime(v.valid_to) : "одоо"}
                     </span>
                   </div>
                   <pre className="mt-1 overflow-x-auto text-[11px] text-ink">

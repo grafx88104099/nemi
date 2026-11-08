@@ -1,5 +1,6 @@
 "use client";
 
+import { fmtDateTime } from "@/lib/format";
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -150,11 +151,11 @@ export function LeaseDetailShell({
             <>
               {(isPm || isManager) && (
                 <Button size="sm" variant="secondary" onClick={() => setRenewOpen(true)}>
-                  <RefreshCcw className="size-4" /> Сунгах (Д-24)
+                  <RefreshCcw className="size-4" /> Сунгах
                 </Button>
               )}
               <Button size="sm" variant="outline" onClick={() => run(() => giveNotice(lease.id))} disabled={pending}>
-                <BellRing className="size-4" /> Гарах мэдэгдэл (Д-19)
+                <BellRing className="size-4" /> Гарах мэдэгдэл
               </Button>
               {isManager && (
                 <Button size="sm" variant="danger" onClick={() => setTermOpen(true)}>
@@ -179,7 +180,7 @@ export function LeaseDetailShell({
       />
 
       {tab === "general" && (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
             <CardBody className="space-y-2 text-sm">
               <h2 className="font-semibold text-ink">Гэрээний мэдээлэл</h2>
@@ -209,7 +210,7 @@ export function LeaseDetailShell({
           </Card>
           <Card>
             <CardBody className="space-y-2 text-sm">
-              <h2 className="font-semibold text-ink">Зардлын хариуцлагын хуваарь (F-505)</h2>
+              <h2 className="font-semibold text-ink">Зардлын хариуцлагын хуваарь</h2>
               {lease.expense_lines.length === 0 ? (
                 <p className="text-muted">Хуваарь бүртгэгдээгүй.</p>
               ) : (
@@ -225,19 +226,19 @@ export function LeaseDetailShell({
           </Card>
           <Card className="lg:col-span-2">
             <CardBody>
-              <h2 className="mb-3 text-sm font-semibold text-ink">Сунгалтын гинж (F-504)</h2>
+              <h2 className="mb-3 text-sm font-semibold text-ink">Сунгалтын гинж</h2>
               <LeaseChain chain={lease.chain} currentId={lease.id} />
             </CardBody>
           </Card>
           {arrears.length > 0 && (
             <Card className="lg:col-span-2">
               <CardBody>
-                <h2 className="mb-2 text-sm font-semibold text-ink">Хоцролтын шатлалын түүх (F-536)</h2>
+                <h2 className="mb-2 text-sm font-semibold text-ink">Хоцролтын шатлалын түүх</h2>
                 <ul className="space-y-1 text-sm">
                   {arrears.map((a) => (
                     <li key={a.id} className="flex items-center gap-2 text-muted">
                       <Badge tone={a.step >= 3 ? "rose" : "amber"}>Шат {a.step}</Badge>
-                      Хариуцагч: {CRM_ROLE_LABEL[a.assigned_role]} · {new Date(a.escalated_at).toLocaleString()}
+                      Хариуцагч: {CRM_ROLE_LABEL[a.assigned_role]} · {fmtDateTime(a.escalated_at)}
                     </li>
                   ))}
                 </ul>
@@ -252,7 +253,7 @@ export function LeaseDetailShell({
           <div className="flex justify-end">
             {(isPm || isFinance) && (
               <Button size="sm" onClick={() => setPayOpen(true)}>
-                Төлбөр бүртгэх (F-525)
+                Төлбөр бүртгэх
               </Button>
             )}
           </div>
@@ -296,7 +297,7 @@ export function LeaseDetailShell({
                 {lease.invoices.length === 0 && (
                   <tr>
                     <td colSpan={7} className="px-4 py-8 text-center text-muted">
-                      Нэхэмжлэх алга — менежменттэй гэрээнд сарын нэхэмжлэх cron-оор автомат үүснэ (Д-13).
+                      Нэхэмжлэх алга — менежменттэй гэрээнд сарын нэхэмжлэх cron-оор автомат үүснэ.
                     </td>
                   </tr>
                 )}
@@ -304,7 +305,7 @@ export function LeaseDetailShell({
             </table>
           </div>
 
-          <h3 className="text-sm font-semibold text-ink">Төлбөрийн бүртгэл (F-525/526)</h3>
+          <h3 className="text-sm font-semibold text-ink">Төлбөрийн бүртгэл</h3>
           <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
             <table className="w-full min-w-[680px] text-sm">
               <thead>
@@ -313,7 +314,7 @@ export function LeaseDetailShell({
                   <th className="px-4 py-3 font-medium">Төрөл</th>
                   <th className="px-4 py-3 font-medium">Дүн</th>
                   <th className="px-4 py-3 font-medium">Хэлбэр</th>
-                  <th className="px-4 py-3 font-medium">Санхүү баталгаажилт (F-527)</th>
+                  <th className="px-4 py-3 font-medium">Санхүү баталгаажилт</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -358,7 +359,7 @@ export function LeaseDetailShell({
         <div className="space-y-4">
           <Card>
             <CardBody className="space-y-2 text-sm">
-              <h2 className="font-semibold text-ink">Барьцаа төлбөр (F-540)</h2>
+              <h2 className="font-semibold text-ink">Барьцаа төлбөр</h2>
               <Row k="Дүн" v={`${lease.deposit_amount.toLocaleString()}₮`} />
               <Row
                 k="Хүлээн авсан"
@@ -374,7 +375,7 @@ export function LeaseDetailShell({
                 v={
                   lease.deposit_returned_on
                     ? `${Number(lease.deposit_returned_amount ?? 0).toLocaleString()}₮ (${lease.deposit_returned_on})`
-                    : "Хийгдээгүй (Д-23 хяналттай)"
+                    : "Хийгдээгүй (хяналттай)"
                 }
               />
               <div className="flex flex-wrap gap-2 pt-2">
@@ -385,19 +386,19 @@ export function LeaseDetailShell({
                 )}
                 {!lease.deposit_returned_on && (isPm || isFinance) && (
                   <Button size="sm" variant="outline" onClick={() => setReturnOpen(true)}>
-                    Буцаан олголт бүртгэх (F-544)
+                    Буцаан олголт бүртгэх
                   </Button>
                 )}
                 {isPm && (
                   <Button size="sm" onClick={() => setDedOpen(true)}>
-                    Суутгал нэмэх (F-541)
+                    Суутгал нэмэх
                   </Button>
                 )}
               </div>
             </CardBody>
           </Card>
 
-          <h3 className="text-sm font-semibold text-ink">Суутгалын задаргаа (F-541/542)</h3>
+          <h3 className="text-sm font-semibold text-ink">Суутгалын задаргаа</h3>
           <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
             <table className="w-full min-w-[680px] text-sm">
               <thead>
@@ -405,7 +406,7 @@ export function LeaseDetailShell({
                   <th className="px-4 py-3 font-medium">Ангилал</th>
                   <th className="px-4 py-3 font-medium">Дүн</th>
                   <th className="px-4 py-3 font-medium">Үндэслэл</th>
-                  <th className="px-4 py-3 font-medium">Баталгаажилт (F-543)</th>
+                  <th className="px-4 py-3 font-medium">Баталгаажилт</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -437,7 +438,7 @@ export function LeaseDetailShell({
                 {lease.deductions.length === 0 && (
                   <tr>
                     <td colSpan={4} className="px-4 py-8 text-center text-muted">
-                      Суутгал бүртгэгдээгүй — суутгал бүр гарах үзлэгийн нотолгоотой байх ёстой (F-542).
+                      Суутгал бүртгэгдээгүй — суутгал бүр гарах үзлэгийн нотолгоотой байх ёстой.
                     </td>
                   </tr>
                 )}
@@ -456,7 +457,7 @@ export function LeaseDetailShell({
       <Modal
         open={activateOpen}
         onClose={() => setActivateOpen(false)}
-        title="Гэрээ идэвхжүүлэх (F-501/507)"
+        title="Гэрээ идэвхжүүлэх"
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setActivateOpen(false)}>
@@ -473,7 +474,7 @@ export function LeaseDetailShell({
       >
         <Field
           label="Гарын үсэгтэй хувийн баримтын ID (crm_documents)"
-          hint="Идэвхжүүлэхэд гарын үсэгтэй хувь хавсрагдсан байх ёстой (F-507). Баримтыг хэлцлийн хавтас/баримтын модулиар байршуулна."
+          hint="Идэвхжүүлэхэд гарын үсэгтэй хувь хавсрагдсан байх ёстой. Баримтыг хэлцлийн хавтас/баримтын модулиар байршуулна."
         >
           <Input value={signedDocId} onChange={(e) => setSignedDocId(e.target.value)} placeholder="UUID" />
         </Field>
@@ -483,7 +484,7 @@ export function LeaseDetailShell({
       <Modal
         open={renewOpen}
         onClose={() => setRenewOpen(false)}
-        title="Гэрээ сунгах (F-571, Д-24)"
+        title="Гэрээ сунгах"
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setRenewOpen(false)}>
@@ -512,8 +513,8 @@ export function LeaseDetailShell({
       >
         <div className="space-y-3">
           <p className="text-sm text-muted">
-            Хуучин гэрээ «Сунгагдсан» болж, шинэ гэрээ гинжин холбоостой «Идэвхтэй»-ээр үүснэ (F-501/504).
-            Эхний богино гэрээ 12 сараас хэтэрсэн ч зуучлалын хөлс автоматаар нөхөн нэмэгдэхгүй (F-572).
+            Хуучин гэрээ «Сунгагдсан» болж, шинэ гэрээ гинжин холбоостой «Идэвхтэй»-ээр үүснэ.
+            Эхний богино гэрээ 12 сараас хэтэрсэн ч зуучлалын хөлс автоматаар нөхөн нэмэгдэхгүй.
           </p>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Шинэ эхлэх огноо" hint={`Хуучны дуусах өдөр: ${lease.end_on}`}>
@@ -535,7 +536,7 @@ export function LeaseDetailShell({
               />
             </Field>
           </div>
-          <Field label="Бичгэн баталгаажилтын баримтын ID (F-571)">
+          <Field label="Бичгэн баталгаажилтын баримтын ID">
             <Input value={rn.signedDocId} onChange={(e) => setRn({ ...rn, signedDocId: e.target.value })} placeholder="UUID" />
           </Field>
           {error && <p className="text-sm text-danger">{error}</p>}
@@ -545,7 +546,7 @@ export function LeaseDetailShell({
       <Modal
         open={termOpen}
         onClose={() => setTermOpen(false)}
-        title="Гэрээ цуцлах (F-573, Д-23)"
+        title="Гэрээ цуцлах"
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setTermOpen(false)}>
@@ -564,7 +565,7 @@ export function LeaseDetailShell({
         <div className="space-y-3">
           <p className="text-sm text-muted">
             Цуцлалтад нотлох баримтын бүрдэл (гэрээ, төлбөрийн түүх, гомдол, объектын нөхцөл) шаардлагатай
-            (F-573). Цуцлалтын дараа гарах үзлэг + барьцааны тооцооны даалгавар автомат үүснэ (Д-23).
+. Цуцлалтын дараа гарах үзлэг + барьцааны тооцооны даалгавар автомат үүснэ.
           </p>
           <Field label="Шалтгаан (заавал)">
             <Input value={termReason} onChange={(e) => setTermReason(e.target.value)} placeholder="Жишээ: түрээслэгчийн хүсэлтээр…" />
@@ -576,7 +577,7 @@ export function LeaseDetailShell({
       <Modal
         open={depositOpen}
         onClose={() => setDepositOpen(false)}
-        title="Барьцаа хүлээн авалт (F-540)"
+        title="Барьцаа хүлээн авалт"
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setDepositOpen(false)}>
@@ -610,7 +611,7 @@ export function LeaseDetailShell({
       <Modal
         open={returnOpen}
         onClose={() => setReturnOpen(false)}
-        title="Барьцаа буцаан олголт (F-544)"
+        title="Барьцаа буцаан олголт"
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setReturnOpen(false)}>
@@ -634,7 +635,7 @@ export function LeaseDetailShell({
           <p className="text-sm text-muted">
             Байвал зохих дүн = барьцаа − батлагдсан суутгал ={" "}
             <b className="text-ink">{Math.max(0, lease.deposit_amount - totalDeducted).toLocaleString()}₮</b>.
-            Батлагдаагүй суутгалтай үед буцаан олголт бүртгэгдэхгүй (F-543).
+            Батлагдаагүй суутгалтай үед буцаан олголт бүртгэгдэхгүй.
           </p>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Буцаан олгосон дүн (₮)">
@@ -651,7 +652,7 @@ export function LeaseDetailShell({
       <Modal
         open={dedOpen}
         onClose={() => setDedOpen(false)}
-        title="Барьцааны суутгал (F-541/542)"
+        title="Барьцааны суутгал"
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setDedOpen(false)}>
@@ -696,7 +697,7 @@ export function LeaseDetailShell({
             <Input value={ded.rationale} onChange={(e) => setDed({ ...ded, rationale: e.target.value })} />
           </Field>
           <Field
-            label="Гарах үзлэгийн нотолгооны мөр (F-542 — заавал)"
+            label="Гарах үзлэгийн нотолгооны мөр (заавал)"
             hint={moveOutItems.length === 0 ? "Гарах үзлэг бүртгэгдээгүй байна — эхлээд Үзлэг таб дээр move-out үзлэг бүртгэнэ." : undefined}
           >
             <Select value={ded.evidenceItemId} onChange={(e) => setDed({ ...ded, evidenceItemId: e.target.value })}>
@@ -716,7 +717,7 @@ export function LeaseDetailShell({
       <Modal
         open={payOpen}
         onClose={() => setPayOpen(false)}
-        title="Төлбөр бүртгэх (F-525/526)"
+        title="Төлбөр бүртгэх"
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setPayOpen(false)}>
@@ -759,13 +760,13 @@ export function LeaseDetailShell({
             </Select>
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Төрөл (F-526)" hint="Зөвхөн орлогын бүртгэл шимтгэлийн суурь болно">
+            <Field label="Төрөл" hint="Зөвхөн орлогын бүртгэл шимтгэлийн суурь болно">
               <Select value={pay.kind} onChange={(e) => setPay({ ...pay, kind: e.target.value as "income" | "control" })}>
                 <option value="income">Орлогын (PMC-д орсон)</option>
                 <option value="control">Хяналтын (өмчлөгчид шууд)</option>
               </Select>
             </Field>
-            <Field label="Хэлбэр" hint="Бэлэн/гадаад/виртуал ≥20 сая ₮ → автомат дохио (Д-25)">
+            <Field label="Хэлбэр" hint="Бэлэн/гадаад/виртуал ≥20 сая ₮ → автомат дохио">
               <Select value={pay.method} onChange={(e) => setPay({ ...pay, method: e.target.value })}>
                 <option value="bank">Банк</option>
                 <option value="cash">Бэлэн мөнгө</option>

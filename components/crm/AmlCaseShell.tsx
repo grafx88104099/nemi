@@ -1,5 +1,6 @@
 "use client";
 
+import { fmtDateTime } from "@/lib/format";
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -54,7 +55,7 @@ function DueBadge({ due, kind }: { due: string | null; kind: "5d" | "24h" }) {
     <Badge tone={overdue ? "rose" : soon ? "amber" : "neutral"}>
       {kind === "5d" ? <AlarmClock className="size-3" /> : <Timer className="size-3" />}
       {kind === "5d" ? "СМА 5 өдөр: " : "СГТ 24ц: "}
-      {kind === "5d" ? due.slice(0, 10) : new Date(due).toLocaleString("mn-MN")}
+      {kind === "5d" ? due.slice(0, 10) : fmtDateTime(due)}
       {overdue && " — ХЭТЭРСЭН"}
     </Badge>
   );
@@ -103,7 +104,7 @@ export function AmlCaseShell({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="flex items-center gap-2 text-2xl font-bold text-ink">
           <Lock className="size-6 text-rose-600" />
-          МУТСТ нийцэл (R-13)
+          МУТСТ нийцэл
         </h1>
         <p className="text-sm text-muted">Хязгаарлагдмал бүс — хандалт бүр аудитад бүртгэгдэнэ.</p>
       </div>
@@ -198,11 +199,11 @@ export function AmlCaseShell({
               <li key={a.id} className="space-y-1 px-4 py-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge tone={a.alert_kind === "threshold" ? "amber" : "blue"}>
-                    {a.alert_kind === "threshold" ? "Босго (Д-25)" : "Гараар"}
+                    {a.alert_kind === "threshold" ? "Босго" : "Гараар"}
                   </Badge>
                   {a.urgent && <Badge tone="rose">Яаралтай</Badge>}
                   <span className="ml-auto text-xs text-subtle">
-                    {new Date(a.detected_at).toLocaleString("mn-MN")}
+                    {fmtDateTime(a.detected_at)}
                   </span>
                 </div>
                 <p className="text-sm text-ink">{a.observed ?? a.category ?? "—"}</p>
@@ -230,7 +231,7 @@ export function AmlCaseShell({
                     {h.transaction_number ?? h.transaction_id}
                   </p>
                   <p className="text-xs text-muted">
-                    {new Date(h.placed_at).toLocaleString("mn-MN")} · {h.rationale}
+                    {fmtDateTime(h.placed_at)} · {h.rationale}
                   </p>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => setReleaseFor(h.id)} disabled={pending}>
@@ -341,7 +342,7 @@ export function AmlCaseDetailShell({
       "Дохионууд:",
       ...detail.alerts.map(
         (a) =>
-          `  • [${a.alert_kind}] ${new Date(a.detected_at).toLocaleString("mn-MN")} — ${a.observed ?? a.category ?? ""} (${a.amount_mnt != null ? Math.round(a.amount_mnt).toLocaleString() + "₮" : "—"}, ${a.payment_method ?? "—"})`
+          `  • [${a.alert_kind}] ${fmtDateTime(a.detected_at)} — ${a.observed ?? a.category ?? ""} (${a.amount_mnt != null ? Math.round(a.amount_mnt).toLocaleString() + "₮" : "—"}, ${a.payment_method ?? "—"})`
       ),
     ];
     const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
@@ -389,7 +390,7 @@ export function AmlCaseDetailShell({
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" onClick={exportForm}>
             <Download className="size-4" />
-            Маягт экспорт (F-611)
+            Маягт экспорт
           </Button>
           {isOfficer && detail.status === "open" && (
             <Button
@@ -403,7 +404,7 @@ export function AmlCaseDetailShell({
           {isOfficer && detail.status === "investigating" && (
             <>
               <Button size="sm" variant="secondary" onClick={() => setStrOpen(true)} disabled={pending}>
-                СГТ шийдвэр (Д-26)
+                СГТ шийдвэр
               </Button>
               {detail.decision === "str" && (
                 <Button
@@ -430,7 +431,7 @@ export function AmlCaseDetailShell({
       </div>
       {error && <p className="text-sm text-danger">{error}</p>}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Харилцагчийн МУТСТ бүртгэл */}
         <Card>
           <CardBody className="space-y-3">
@@ -483,7 +484,7 @@ export function AmlCaseDetailShell({
         <Card>
           <CardBody className="space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="font-semibold text-ink">Гейтийн шалгалт (журмын 6.18)</h2>
+              <h2 className="font-semibold text-ink">Шилжих шалгуурын шалгалт</h2>
               <Select className="w-40" value={gate} onChange={(e) => setGate(e.target.value as GateCode)}>
                 {GATES.map((g) => (
                   <option key={g} value={g}>
@@ -493,7 +494,7 @@ export function AmlCaseDetailShell({
               </Select>
             </div>
             {detail.gate_checks?.[gate] != null && (
-              <p className="text-xs text-emerald-600">Энэ гейтэд снапшот бүртгэгдсэн байна — шинээр хадгалбал шинэчлэгдэнэ.</p>
+              <p className="text-xs text-emerald-600">Энэ шалгуурт снапшот бүртгэгдсэн байна — шинээр хадгалбал шинэчлэгдэнэ.</p>
             )}
             {isOfficer ? (
               <>
@@ -543,11 +544,11 @@ export function AmlCaseDetailShell({
                 <li key={a.id} className="space-y-1 py-2.5">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge tone={a.alert_kind === "threshold" ? "amber" : "blue"}>
-                      {a.alert_kind === "threshold" ? "Босго (Д-25)" : "Гараар"}
+                      {a.alert_kind === "threshold" ? "Босго" : "Гараар"}
                     </Badge>
                     {a.urgent && <Badge tone="rose">Яаралтай</Badge>}
                     <span className="ml-auto text-xs text-subtle">
-                      {new Date(a.detected_at).toLocaleString("mn-MN")}
+                      {fmtDateTime(a.detected_at)}
                     </span>
                   </div>
                   <p className="text-sm text-ink">{a.observed ?? a.category ?? "—"}</p>
@@ -584,9 +585,9 @@ export function AmlCaseDetailShell({
                   <div className="min-w-0 flex-1">
                     <p className="text-sm text-ink">{h.rationale}</p>
                     <p className="text-xs text-muted">
-                      Тавьсан: {new Date(h.placed_at).toLocaleString("mn-MN")}
+                      Тавьсан: {fmtDateTime(h.placed_at)}
                       {h.released_at &&
-                        ` · Сулласан: ${new Date(h.released_at).toLocaleString("mn-MN")} (${h.release_rationale ?? ""})`}
+                        ` · Сулласан: ${fmtDateTime(h.released_at)} (${h.release_rationale ?? ""})`}
                     </p>
                   </div>
                   <Badge tone={h.released_at ? "green" : "rose"}>{h.released_at ? "Суллагдсан" : "Идэвхтэй"}</Badge>
@@ -612,7 +613,7 @@ export function AmlCaseDetailShell({
       <Modal
         open={strOpen}
         onClose={() => setStrOpen(false)}
-        title="СГТ үүсгэх шийдвэр (Д-26)"
+        title="СГТ үүсгэх шийдвэр"
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setStrOpen(false)}>

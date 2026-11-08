@@ -6,9 +6,9 @@ import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 
 /**
- * Гейт хаагдсаны алдааны диалог (F-354): DB guard-ын буцаасан дутуу
- * шаардлагуудын жагсаалтыг үзүүлнэ — канбан drag болон карт доторх
- * шилжилт хоёул үүгээр нэг мессеж авна (F-352 «ижил босго»).
+ * Шилжих шалгуур хангагдаагүй үеийн диалог: DB guard-ын буцаасан дутуу
+ * шаардлагуудыг жагсааж, юу хийхийг заана. Канбан болон карт доторх
+ * шилжилт хоёул ижил мессеж авна.
  */
 export function GateErrorDialog({
   open,
@@ -25,7 +25,7 @@ export function GateErrorDialog({
     <Modal
       open={open}
       onClose={onClose}
-      title="Гейт хангагдаагүй"
+      title="Шилжих шалгуур хангагдаагүй"
       footer={
         <Button variant="outline" onClick={onClose}>
           Ойлголоо
@@ -33,9 +33,12 @@ export function GateErrorDialog({
       }
     >
       <p className="mb-3 text-sm text-muted">
-        {stageName ? `«${stageName}» шат руу шилжихийн өмнө` : "Энэ шилжилтийн өмнө"} дараах шаардлагууд
-        бүрдсэн байх ёстой (F-354):
+        {stageName ? `«${stageName}» шат руу шилжихийн өмнө` : "Энэ шилжилтийн өмнө"} дараах шаардлагуудыг
+        бүрдүүлнэ үү:
       </p>
+      {missing.length === 0 ? (
+        <p className="text-sm text-ink">Шаардлагын дэлгэрэнгүй ирсэнгүй. Хуудсыг шинэчлээд дахин оролдоно уу.</p>
+      ) : null}
       <ul className="space-y-2">
         {missing.map((m) => (
           <li key={m} className="flex items-center gap-2 text-sm text-ink">
@@ -44,6 +47,11 @@ export function GateErrorDialog({
           </li>
         ))}
       </ul>
+      {missing.length > 0 ? (
+        <p className="mt-3 text-xs text-subtle">
+          Дутуу зүйлийг бүртгэсний дараа шатыг дахин солино уу. Шаардлагыг картын «Шилжих шалгуур» хэсгээс харж болно.
+        </p>
+      ) : null}
     </Modal>
   );
 }

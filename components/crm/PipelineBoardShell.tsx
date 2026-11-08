@@ -3,25 +3,30 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { KanbanSquare, Lock, Search, ShieldAlert, Timer } from "lucide-react";
+import { ArrowRight, CalendarX, Hourglass, KanbanSquare, Lock, MoveRight, Plus, Search, ShieldAlert, Timer } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input, Field } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
+import { toast } from "@/components/ui/toast";
 import { GateErrorDialog } from "@/components/crm/GateErrorDialog";
-import { moveStage, closeLost } from "@/lib/actions/crm-opportunities";
-import { fmtMNT, fmtDate, daysSince } from "@/lib/format";
+import { OpportunityCreateModal } from "@/components/crm/OpportunityCreateModal";
+import { moveStage, closeLost, getMoveOptions } from "@/lib/actions/crm-opportunities";
+import { fmtMNT, fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { OPP_STATE_LABEL, type CrmRole } from "@/lib/constants-crm";
-import type { PipelineBoard, BoardOpp, BoardStage } from "@/lib/queries-crm-pipeline";
+import { stageHealth, type DealFlowConfig } from "@/lib/crm/deal-flow";
+import { OPP_STATE_LABEL, PL_LABEL, type CrmRole, type PlCode } from "@/lib/constants-crm";
+import type { PipelineBoard, BoardOpp, BoardStage, TransitionOption } from "@/lib/queries-crm-pipeline";
 
 /**
- * Канбан самбар (F-352): багана = crm_stages, drag-drop → moveStage action →
- * DB stage guard («ижил босго»). Гейт хаагдвал GateErrorDialog дутуу
- * жагсаалттай; буцаалт/шалтгаант шилжилтэд шалтгааны модал; Алдсан руу —
- * шалтгаан ангиллаар заавал (F-356). Жинлэсэн төсөөлөл багана бүрд (F-353).
+ * Канбан самбар (§6.13, §6.14): багана = шат, чирж зөөх эсвэл картын «Шат
+ * солих» (утсанд) → moveStage → DB stage guard (ижил шалгуур). Шилжих
+ * шалгуур хаагдвал дутуу жагсаалт; буцаалт/шалтгаант шилжилтэд шалтгаан;
+ * амжилтгүй хаахад шалтгаан ангиллаар. Карт бүрд хоёр тусдаа дохио:
+ * дараагийн үйлдэл хэтэрсэн, шатанд удсан. «Боломж үүсгэх» модал.
  */
 
 type PendingMove = {
@@ -39,6 +44,8 @@ export function PipelineBoardShell({
   roles,
   basePath,
   dealPath,
+  dealFlow,
+  today,
 }: {
   pipelines: { id: string; code: string; name: string }[];
   board: PipelineBoard | null;
@@ -47,6 +54,9 @@ export function PipelineBoardShell({
   roles: CrmRole[];
   basePath: string;
   dealPath: string;
+  dealFlow: DealFlowConfig;
+  /** Серверийн өнөөдөр (YYYY-MM-DD) — hydration зөрүүгээс сэргийлнэ. */
+  today: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -59,10 +69,20 @@ export function PipelineBoardShell({
   const [lostReasonId, setLostReasonId] = useState("");
   const [lostNote, setLostNote] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [sheetOpp, setSheetOpp] = useState<BoardOpp | null>(null);
+  const [sheetOptions, setSheetOptions] = useState<TransitionOption[] | null>(null);
+
+  const canCreate = currentCode !== "PL-6";
 
   const oppById = useMemo(() => {
     const map = new Map<string, BoardOpp>();
     for (const col of board?.columns ?? []) for (const o of col.opps) map.set(o.id, o);
+    return map;
+  }, [board]);
+  const stageById = useMemo(() => {
+    const map = new Map<string, BoardStage>();
+    for (const col of board?.columns ?? []) map.set(col.stage.id, col.stage);
     return map;
   }, [board]);
 
@@ -73,9 +93,7 @@ export function PipelineBoardShell({
   function executeMove(opp: BoardOpp, target: BoardStage, moveReason?: string, lost?: { reasonId: string; note?: string }) {
     setError(null);
     startTransition(async () => {
-      const res = lost
-        ? await closeLost(opp.id, lost.reasonId, lost.note)
-        : await moveStage(opp.id, target.id, moveReason);
+      const res = lost ? await closeLost(opp.id, lost.reasonId, lost.note) : await moveStage(opp.id, target.id, moveReason);
       if (!res.ok) {
         if (res.missing?.length) {
           setGateError({ missing: res.missing, stageName: target.name });
@@ -84,8 +102,10 @@ export function PipelineBoardShell({
         }
         return;
       }
+      toast.success(`«${opp.contact_name}» → ${target.name}`);
       setReasonMove(null);
       setLostMove(null);
+      setSheetOpp(null);
       setReason("");
       setLostReasonId("");
       setLostNote("");
@@ -99,11 +119,13 @@ export function PipelineBoardShell({
     if (opp.stage_id === target.id) return;
     setError(null);
 
-    const tr = board.transitions.find(
-      (t) => t.from_stage_id === opp.stage_id && t.to_stage_id === target.id
-    );
+    const tr = board.transitions.find((t) => t.from_stage_id === opp.stage_id && t.to_stage_id === target.id);
     if (!tr) {
-      setError("Энэ шилжилт зөвшөөрөгдөөгүй — шат алгасах хориотой (F-355).");
+      setError(
+        target.terminal_state === "won"
+          ? "Амжилттай хаагдсан шат руу хэлцэл хаагдахад автоматаар шилжинэ."
+          : "Энэ шилжилт зөвшөөрөгдөөгүй — шат алгасах хориотой."
+      );
       return;
     }
     if (!tr.allowed_roles.some((r) => roles.includes(r))) {
@@ -121,7 +143,22 @@ export function PipelineBoardShell({
     executeMove(opp, target);
   }
 
+  function openSheet(o: BoardOpp) {
+    setSheetOpp(o);
+    setSheetOptions(null);
+    startTransition(async () => {
+      const res = await getMoveOptions(o.id);
+      if (res.error) {
+        setError(res.error);
+        setSheetOpp(null);
+        return;
+      }
+      setSheetOptions((res.transitions ?? []).filter((t) => t.allowed_roles.some((r) => roles.includes(r))));
+    });
+  }
+
   const selectedLostReason = lostReasons.find((r) => r.id === lostReasonId);
+  const totalOpen = board?.columns.reduce((s, c) => s + c.opps.filter((o) => o.state === "open").length, 0) ?? 0;
 
   return (
     <div className="space-y-4">
@@ -137,51 +174,57 @@ export function PipelineBoardShell({
               onClick={() => switchPipeline(p.code)}
               className={cn(
                 "shrink-0 rounded-full border px-3 py-1.5 text-sm font-medium transition",
-                p.code === currentCode
-                  ? "border-brand-500 bg-brand-50 text-brand-700"
-                  : "border-line bg-surface text-muted hover:text-ink"
+                p.code === currentCode ? "border-brand-500 bg-brand-50 text-brand-700" : "border-line bg-surface text-muted hover:text-ink"
               )}
             >
-              {p.code} · {p.name}
+              {PL_LABEL[p.code as PlCode] ?? p.name}
             </button>
           ))}
         </div>
-        <div className="relative ml-auto w-56">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
-          <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Хайх…"
-            className="h-9 pl-9"
-            aria-label="Боломж хайх"
-          />
+        <div className="ml-auto flex w-full items-center gap-2 sm:w-auto">
+          <div className="relative flex-1 sm:w-56">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
+            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Хайх…" className="h-9 pl-9" aria-label="Боломж хайх" />
+          </div>
+          {canCreate ? (
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus className="size-4" /> Боломж
+            </Button>
+          ) : null}
         </div>
       </div>
 
-      {error ? (
-        <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">{error}</p>
-      ) : null}
+      {error ? <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">{error}</p> : null}
 
       {!board ? (
         <div className="rounded-2xl border border-dashed border-line p-10 text-center text-sm text-muted">
           <Lock className="mx-auto mb-2 size-5 text-subtle" />
-          Урсгал олдсонгүй эсвэл танд харах эрх алга (PL-6 — хязгаарлагдмал).
+          Урсгал олдсонгүй эсвэл танд харах эрх алга.
         </div>
+      ) : totalOpen === 0 && board.columns.every((c) => c.opps.length === 0) ? (
+        <EmptyState
+          icon={KanbanSquare}
+          title="Энэ урсгалд боломж алга"
+          description="Сэжимтэй утга бүхий холболт хийсний дараа боломж үүсгэж, шат шатаар ахиулна."
+          action={canCreate ? { label: "Боломж үүсгэх", onClick: () => setCreateOpen(true) } : undefined}
+        />
       ) : (
-        <div className="flex gap-3 overflow-x-auto pb-4" aria-busy={pending}>
+        <div className="flex snap-x gap-3 overflow-x-auto pb-4" aria-busy={pending}>
           {board.columns.map((col) => {
-            const visible = q.trim()
+            const needle = q.trim().toLowerCase();
+            const visible = needle
               ? col.opps.filter(
                   (o) =>
-                    o.contact_name.toLowerCase().includes(q.trim().toLowerCase()) ||
-                    (o.property_name ?? "").toLowerCase().includes(q.trim().toLowerCase()) ||
-                    (o.owner_name ?? "").toLowerCase().includes(q.trim().toLowerCase())
+                    o.contact_name.toLowerCase().includes(needle) ||
+                    (o.property_name ?? "").toLowerCase().includes(needle) ||
+                    (o.property_number ?? "").toLowerCase().includes(needle) ||
+                    (o.owner_name ?? "").toLowerCase().includes(needle)
                 )
               : col.opps;
             return (
               <div
                 key={col.stage.id}
-                className="flex w-72 shrink-0 flex-col rounded-2xl border border-line bg-surface-2"
+                className="flex w-[85vw] max-w-72 shrink-0 snap-start flex-col rounded-2xl border border-line bg-surface-2 sm:w-72"
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => {
                   e.preventDefault();
@@ -203,11 +246,17 @@ export function PipelineBoardShell({
                 </div>
                 <div className="flex-1 space-y-2 p-2">
                   {visible.map((o) => {
-                    const days = daysSince(o.stage_entered_at);
-                    const overdue =
-                      o.state === "open" &&
-                      o.expected_close_on !== null &&
-                      o.expected_close_on < new Date().toISOString().slice(0, 10);
+                    const h = stageHealth(
+                      {
+                        stageCode: col.stage.code,
+                        stageEnteredAt: o.stage_entered_at,
+                        nextStepDate: o.next_step_date,
+                        open: o.state === "open",
+                      },
+                      today,
+                      dealFlow
+                    );
+                    const overdueClose = o.state === "open" && o.expected_close_on !== null && o.expected_close_on < today;
                     return (
                       <div
                         key={o.id}
@@ -217,58 +266,89 @@ export function PipelineBoardShell({
                           setDragId(o.id);
                         }}
                         className={cn(
-                          "rounded-xl border border-line bg-surface p-3 shadow-sm",
+                          "rounded-xl border bg-surface p-3 shadow-sm",
+                          h.nextStepOverdueDays > 0 || h.nextStepMissing ? "border-rose-200" : "border-line",
                           o.state === "open" ? "cursor-grab active:cursor-grabbing" : "opacity-70"
                         )}
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <Link
-                            href={`${dealPath}/${o.id}`}
-                            className="text-sm font-semibold text-ink hover:text-brand-700"
-                          >
+                          <Link href={`${dealPath}/${o.id}`} className="text-sm font-semibold text-ink hover:text-brand-700">
                             {o.contact_name}
                           </Link>
                           {o.aml_hold ? (
-                            <span title="МУТСТ түгжээтэй (Д-12)">
+                            <span title="МУТСТ түгжээтэй">
                               <ShieldAlert className="size-4 shrink-0 text-rose-600" />
                             </span>
                           ) : null}
                         </div>
                         {o.property_name ? (
                           <p className="mt-0.5 truncate text-xs text-muted">
-                            {o.property_name}{" "}
-                            <span className="font-mono text-subtle">{o.property_number}</span>
+                            {o.property_name} <span className="font-mono text-subtle">{o.property_number}</span>
                           </p>
                         ) : null}
                         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                           {o.amount != null ? <span className="font-medium text-ink">{fmtMNT(o.amount)}</span> : null}
                           <span className="inline-flex items-center gap-1">
-                            <Timer className="size-3" /> {days} хоног
+                            <Timer className="size-3" /> {h.daysInStage} хоног
                           </span>
                           {o.expected_close_on ? (
-                            <span className={overdue ? "font-medium text-rose-600" : ""}>
-                              Хаалт: {fmtDate(o.expected_close_on)}
-                            </span>
+                            <span className={overdueClose ? "font-medium text-rose-600" : ""}>Хаалт: {fmtDate(o.expected_close_on)}</span>
                           ) : null}
                         </div>
-                        <div className="mt-1.5 flex items-center justify-between text-xs text-subtle">
-                          <span>{o.owner_name ?? "—"}</span>
+                        {o.state === "open" ? (
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {h.nextStepOverdueDays > 0 ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
+                                <CalendarX className="size-3" /> Алхам {h.nextStepOverdueDays} хоног хэтэрсэн
+                              </span>
+                            ) : h.nextStepMissing ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
+                                <CalendarX className="size-3" /> Дараагийн үйлдэлгүй
+                              </span>
+                            ) : o.next_step ? (
+                              <span className="truncate text-[11px] text-muted" title={o.next_step}>
+                                → {o.next_step}
+                              </span>
+                            ) : null}
+                            {h.stale ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                                <Hourglass className="size-3" /> Шатанд удсан
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        <div className="mt-1.5 flex items-center justify-between gap-2 text-xs text-subtle">
+                          <span className="truncate">{o.owner_name ?? "—"}</span>
                           {o.state !== "open" ? (
                             <Badge tone={OPP_STATE_LABEL[o.state].tone}>{OPP_STATE_LABEL[o.state].label}</Badge>
-                          ) : null}
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => openSheet(o)}
+                              className="inline-flex min-h-8 items-center gap-1 rounded-lg px-2 text-xs font-medium text-brand-700 hover:bg-brand-50"
+                            >
+                              <MoveRight className="size-3.5" /> Шат солих
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
                   })}
-                  {visible.length === 0 ? (
-                    <p className="px-2 py-4 text-center text-xs text-subtle">Хоосон</p>
-                  ) : null}
+                  {visible.length === 0 ? <p className="px-2 py-4 text-center text-xs text-subtle">Хоосон</p> : null}
                 </div>
               </div>
             );
           })}
         </div>
       )}
+
+      <OpportunityCreateModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        pipelines={pipelines}
+        defaultPipelineCode={currentCode}
+        dealPath={dealPath}
+      />
 
       <GateErrorDialog
         open={gateError !== null}
@@ -277,13 +357,78 @@ export function PipelineBoardShell({
         onClose={() => setGateError(null)}
       />
 
-      {/* Буцаалт/шалтгаант шилжилтийн модал (F-355) */}
+      {/* Шат солих (утсанд чирэхийн оронд) */}
+      <Modal
+        open={sheetOpp !== null}
+        onClose={() => setSheetOpp(null)}
+        title={sheetOpp ? `Шат солих — ${sheetOpp.contact_name}` : "Шат солих"}
+        footer={
+          <Button variant="outline" onClick={() => setSheetOpp(null)}>
+            Хаах
+          </Button>
+        }
+      >
+        {sheetOptions === null ? (
+          <p className="text-sm text-muted">Шилжих шалгуурыг шалгаж байна…</p>
+        ) : sheetOptions.length === 0 ? (
+          <p className="text-sm text-muted">Танд энэ шатнаас хийх шилжилт алга.</p>
+        ) : (
+          <ul className="space-y-2">
+            {sheetOptions.map((t) => {
+              const target = stageById.get(t.to_stage_id);
+              return (
+                <li key={t.to_stage_id} className="rounded-xl border border-line p-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-ink">
+                      {t.kind === "backward" ? "← " : ""}
+                      {t.to_stage_name}
+                    </span>
+                    {t.gate_missing.length ? (
+                      <Badge tone="amber">{t.gate_missing.length} шаардлага дутуу</Badge>
+                    ) : t.gate_code ? (
+                      <Badge tone="green">Шалгуур хангагдсан</Badge>
+                    ) : null}
+                    <Button
+                      size="sm"
+                      className="ml-auto"
+                      variant={t.terminal_state === "lost" ? "danger" : t.kind === "forward" ? "primary" : "outline"}
+                      disabled={pending || !target || !sheetOpp}
+                      onClick={() => {
+                        if (!sheetOpp || !target) return;
+                        if (t.gate_missing.length) {
+                          setGateError({ missing: t.gate_missing, stageName: t.to_stage_name });
+                          return;
+                        }
+                        initiateMove(sheetOpp.id, target);
+                      }}
+                    >
+                      <ArrowRight className="size-4" /> Шилжүүлэх
+                    </Button>
+                  </div>
+                  {t.gate_missing.length ? (
+                    <ul className="mt-1.5 list-disc pl-5 text-xs text-amber-800">
+                      {t.gate_missing.map((m) => (
+                        <li key={m}>{m}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {sheetOpp ? (
+          <Link href={`${dealPath}/${sheetOpp.id}`} className="mt-3 inline-block text-sm font-medium text-brand-700 hover:underline">
+            Карт нээж дутууг бүрдүүлэх →
+          </Link>
+        ) : null}
+      </Modal>
+
+      {/* Буцаалт/шалтгаант шилжилт */}
       <Modal
         open={reasonMove !== null}
         onClose={() => setReasonMove(null)}
-        title={
-          reasonMove?.kind === "backward" ? "Буцаах шилжилт — шалтгаан заавал" : "Шилжилтийн шалтгаан"
-        }
+        title={reasonMove?.kind === "backward" ? "Буцаах шилжилт — шалтгаан заавал" : "Шилжилтийн шалтгаан"}
         footer={
           <>
             <Button variant="outline" onClick={() => setReasonMove(null)}>
@@ -300,7 +445,7 @@ export function PipelineBoardShell({
       >
         <p className="mb-3 text-sm text-muted">
           {reasonMove
-            ? `«${reasonMove.opp.contact_name}» боломжийг «${reasonMove.target.name}» шат руу шилжүүлнэ. Шалтгаан аудит логт бүртгэгдэнэ (F-355).`
+            ? `«${reasonMove.opp.contact_name}» боломжийг «${reasonMove.target.name}» шат руу шилжүүлнэ. Шалтгаан аудитад бүртгэгдэнэ.`
             : null}
         </p>
         <Field label="Шалтгаан" htmlFor="move-reason">
@@ -313,11 +458,11 @@ export function PipelineBoardShell({
         </Field>
       </Modal>
 
-      {/* Closed Lost модал (F-356) */}
+      {/* Амжилтгүй хаах */}
       <Modal
         open={lostMove !== null}
         onClose={() => setLostMove(null)}
-        title="Алдсанаар хаах — шалтгаан заавал (F-356)"
+        title="Амжилтгүй хаах — шалтгаан заавал"
         footer={
           <>
             <Button variant="outline" onClick={() => setLostMove(null)}>
@@ -325,11 +470,7 @@ export function PipelineBoardShell({
             </Button>
             <Button
               variant="danger"
-              disabled={
-                pending ||
-                !lostReasonId ||
-                Boolean(selectedLostReason?.requires_note && !lostNote.trim())
-              }
+              disabled={pending || !lostReasonId || Boolean(selectedLostReason?.requires_note && !lostNote.trim())}
               onClick={() =>
                 lostMove &&
                 executeMove(lostMove.opp, lostMove.target, undefined, {
@@ -338,13 +479,13 @@ export function PipelineBoardShell({
                 })
               }
             >
-              Алдсанаар хаах
+              Амжилтгүй хаах
             </Button>
           </>
         }
       >
         <div className="space-y-3">
-          <Field label="Алдсан шалтгаан" htmlFor="lost-reason">
+          <Field label="Шалтгааны ангилал" htmlFor="lost-reason">
             <Select id="lost-reason" value={lostReasonId} onChange={(e) => setLostReasonId(e.target.value)}>
               <option value="">— Сонгоно уу —</option>
               {lostReasons.map((r) => (
@@ -354,10 +495,7 @@ export function PipelineBoardShell({
               ))}
             </Select>
           </Field>
-          <Field
-            label={selectedLostReason?.requires_note ? "Тайлбар (заавал)" : "Тайлбар"}
-            htmlFor="lost-note"
-          >
+          <Field label={selectedLostReason?.requires_note ? "Тайлбар (заавал)" : "Тайлбар"} htmlFor="lost-note">
             <Input id="lost-note" value={lostNote} onChange={(e) => setLostNote(e.target.value)} />
           </Field>
         </div>

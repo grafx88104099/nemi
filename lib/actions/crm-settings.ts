@@ -6,10 +6,12 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { CRM_ROLES, GATES, GATE_CHECKER_KINDS, type CrmRole } from "@/lib/constants-crm";
 import type { Json } from "@/types/database";
+import { canWriteLookup, canWriteSetting } from "@/lib/validation/crm-ownership";
 
 /**
  * CRM тохиргооны server action-ууд (D4 — тохиргоо = өгөгдөл, хувилбартай).
- * Бичих эрх: sysadmin + ops_qc (ToR ACC-17 «хоёр хүний зарчим» — RLS давхар шалгана).
+ * Бичих эрх: sysadmin + ops_qc; Борлуулалт хариуцсан захирал зөвшөөрсөн түлхүүрүүдийг,
+ * Маркетинг эх сурвалжийн лавлахыг (U4, RLS давхар шалгана).
  */
 
 const SAVE_ERR = "Тохиргоо хадгалахад алдаа гарлаа. Дахин оролдоно уу.";
@@ -18,7 +20,8 @@ const RIGHTS_ERR = "Танд тохиргоо өөрчлөх эрх алга.";
 type Ctx = { userId: string; officeId: string; roles: CrmRole[] };
 
 async function settingsContext(
-  supabase: Awaited<ReturnType<typeof createClient>>
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  scope: { settingKey?: string; lookupKind?: string } = {}
 ): Promise<Ctx | { error: string }> {
   const {
     data: { user },
@@ -32,7 +35,15 @@ async function settingsContext(
     .maybeSingle();
   if (!staff) return { error: "Та CRM-д бүртгэгдээгүй байна." };
   const roles = (staff.roles ?? []) as CrmRole[];
-  if (!roles.includes("sysadmin") && !roles.includes("ops_qc")) return { error: RIGHTS_ERR };
+  // §5, §6.26: Борлуулалт хариуцсан захирал босго/оноо/SLA-г, Маркетинг эх
+  // сурвалжийн лавлахыг засна (RLS crm_setting_writable/crm_lookup_writable давхар).
+  const allowed =
+    scope.settingKey !== undefined
+      ? canWriteSetting(roles, scope.settingKey)
+      : scope.lookupKind !== undefined
+        ? canWriteLookup(roles, scope.lookupKind)
+        : roles.includes("sysadmin") || roles.includes("ops_qc");
+  if (!allowed) return { error: RIGHTS_ERR };
   return { userId: user.id, officeId: staff.office_id, roles };
 }
 
@@ -78,11 +89,10 @@ export async function saveSetting(raw: {
   note?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   const supabase = await createClient();
-  const ctx = await settingsContext(supabase);
-  if ("error" in ctx) return { ok: false, error: ctx.error };
-
   const parsed = settingSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: firstIssue(parsed.error, "Оролт буруу байна.") };
+  const ctx = await settingsContext(supabase, { settingKey: parsed.data.key });
+  if ("error" in ctx) return { ok: false, error: ctx.error };
 
   let value: Json;
   try {
@@ -482,11 +492,16 @@ export async function saveLookup(raw: {
   isActive: boolean;
 }): Promise<{ ok: boolean; error?: string }> {
   const supabase = await createClient();
-  const ctx = await settingsContext(supabase);
-  if ("error" in ctx) return { ok: false, error: ctx.error };
   const parsed = lookupSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: firstIssue(parsed.error, "Оролт буруу байна.") };
   const input = parsed.data;
+  const ctx = await settingsContext(supabase, { lookupKind: input.kind });
+  if ("error" in ctx) return { ok: false, error: ctx.error };
+  // Засварт байгаа мөрийн төрлийг ч шалгана (төрөл солих замаар эрх тойрохгүй).
+  if (input.id) {
+    const { data: existing } = await supabase.from("crm_lookups").select("kind").eq("id", input.id).maybeSingle();
+    if (existing && !canWriteLookup(ctx.roles, existing.kind)) return { ok: false, error: RIGHTS_ERR };
+  }
 
   const row = {
     kind: input.kind,

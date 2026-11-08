@@ -12,8 +12,8 @@ export default async function NotificationSettingsPage() {
     <div className="p-8">
       <h1 className="text-2xl font-extrabold text-ink">Мэдэгдлийн матриц</h1>
       <p className="text-sm text-muted">
-        Event бүрийн хүлээн авагч дүр, суваг (app/push/email/sms — email/sms заглушка), заавал ангилал (F-651/652).
-        МУТСТ-ийн үйл явдалд агент/харилцагчид мэдэгдэл ХЭЗЭЭ Ч илгээгдэхгүй (ACC-25).
+        Event бүрийн хүлээн авагч дүр, суваг (app/push/email/sms — email/sms заглушка), заавал ангилал.
+        МУТСТ-ийн үйл явдалд агент/харилцагчид мэдэгдэл ХЭЗЭЭ Ч илгээгдэхгүй.
       </p>
       <NotificationsShell matrix={matrix} canEdit={ctx.canEdit} />
     </div>

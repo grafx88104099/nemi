@@ -1,44 +1,56 @@
+import { fmtDateTime, fmtTime } from "@/lib/format";
 import { NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cronAuthError } from "@/lib/crm/cron-auth";
-import { getRuleMap, ruleGate, conditionParam, logRuleRun, hasRuleRun, listCrmOffices, type AdminClient, type AutomationRule } from "@/lib/crm/rules";
+import {
+  getRuleMap,
+  ruleGate,
+  conditionParam,
+  logRuleRun,
+  hasRuleRun,
+  listCrmOffices,
+  leadSlaSteps,
+  queueDrainDeadline,
+  type AdminClient,
+  type AutomationRule,
+} from "@/lib/crm/rules";
 import { notifyCrm, deliverDeferredNotifications } from "@/lib/crm/notify";
 import { assignLead, type AssignMode, type AssignRule } from "@/lib/crm/scoring";
-import { isWorkday, slaDeadline, DEFAULT_WORK_HOURS } from "@/lib/crm/calendar";
+import {
+  calendarExceptionsFromRows,
+  isWithinWorkHours,
+  slaClockStart,
+  toIsoDate,
+  workHoursFromPolicy,
+  type CalendarExceptions,
+  type SlaPolicy,
+} from "@/lib/crm/calendar";
 import type { Json } from "@/types/database";
 import type { CrmRole } from "@/lib/constants-crm";
 
 /**
- * CRM SLA cron (D8, §4.4) — 10 мин тутам (vercel.json; Vercel Pro шаардана,
- * Hobby бол гадаад scheduler-ээс CRON_SECRET-тэй дуудна):
- *  • Д-01 (үргэлжлэл): ажлын бус цагт дараалалд орсон сэжимийг дараагийн
- *    ажлын цагт хуваарилна (crm_assignment_state.queue drain);
- *  • Д-02: эхний холболтын SLA (15 мин, ажлын цагаар) хэтрэлт → агент+ахлагчид;
- *  • Д-03: 24 цагт дахин оролдлогын даалгавар;
- *  • Д-04: 48 цагт багийн ахлагч/захиралд эскалаци;
- *  • Д-20: засварын sla_respond_by/sla_resolve_by хэтрэлт → мэдэгдэл +
- *    Үйл ажиллагаа-ЧМТ-д шилжүүлэлтийн даалгавар;
- *  • Д-25 (үргэлжлэл): СМА-д мэдээлэх ажлын 5 өдрийн хугацаа дөхөлт/хэтрэлт;
- *  • Д-26: СГТ 24 цагийн тоолуур дөхөлт/хэтрэлтийн эскалаци (зөвхөн
- *    aml_officer/ceo — ACC-25: агент/харилцагчид дохио ХЭЗЭЭ Ч очихгүй);
- *  • чимээгүй цагт хойшлогдсон мэдэгдлийн хүргэлт (ажлын цагт).
+ * CRM SLA cron (§6.4, §6.27, §6.28.1-2) — Supabase pg_cron 5 минут тутам
+ * дуудна (migration 20261107000600, Vault 'crm_cron_secret'); vercel.json-ийн
+ * өдрийн 1 дуудлага нөөц. Оффис бүрийн ажлын цаг = crm_settings.sla_policy +
+ * crm_calendar_days (УБ цагаар):
+ *  • Д-01 үргэлжлэл: ажлын бус цагт дараалалд орсон сэжимийг ажлын цаг
+ *    эхлэхэд хуваарилж, эхний холболтын даалгавар үүсгэнэ;
+ *  • Д-02: эхний холболтын хугацаа хэтэрвэл эзэмшигч (+матрицаар ахлагч);
+ *  • Д-03: холбогдож чадаагүй/хэтэрсэн бол сэжим ирснээс 24ц дотор хоёр дахь
+ *    оролдлогын даалгавар;
+ *  • Д-04: сэжим ирснээс 48ц-т утга бүхий холболтгүй бол ахлагчид харагдуулна;
+ *  • Д-20 засварын SLA; Д-25/26 МУТСТ тоолуур (зөвхөн aml_officer/ceo);
+ *  • чимээгүй цагт хойшлогдсон мэдэгдлийн хүргэлт.
+ * Утга бүхий холболт = crm_leads.first_contact_at (үйл ажиллагааны trigger).
  */
 
 export const maxDuration = 120;
 
 const HOUR_MS = 3600 * 1000;
+const MIN_MS = 60 * 1000;
 
-function ubLocalHour(now: Date): number {
-  return (now.getUTCHours() + 8) % 24; // Улаанбаатар UTC+8 (репогийн конвенц)
-}
-
-function inWorkHours(now: Date): boolean {
-  const h = ubLocalHour(now);
-  return isWorkday(now) && h >= DEFAULT_WORK_HOURS.startHour && h < DEFAULT_WORK_HOURS.endHour;
-}
-
-type StaffRow = { profile_id: string; roles: string[]; team_id: string | null };
+type StaffRow = { profile_id: string; roles: string[]; team_id: string | null; offboarding: boolean };
 type StaffIndex = Map<string, StaffRow[]>;
 
 async function loadStaffIndex(admin: AdminClient): Promise<StaffIndex> {
@@ -49,7 +61,12 @@ async function loadStaffIndex(admin: AdminClient): Promise<StaffIndex> {
     .eq("is_active", true);
   for (const s of data ?? []) {
     const arr = idx.get(s.office_id) ?? [];
-    arr.push({ profile_id: s.profile_id, roles: (s.roles as string[]) ?? [], team_id: s.team_id });
+    arr.push({
+      profile_id: s.profile_id,
+      roles: (s.roles as string[]) ?? [],
+      team_id: s.team_id,
+      offboarding: Boolean(s.offboarding),
+    });
     idx.set(s.office_id, arr);
   }
   return idx;
@@ -61,17 +78,32 @@ function roleProfiles(idx: StaffIndex, officeId: string, roles: CrmRole[]): stri
     .map((s) => s.profile_id);
 }
 
-async function officeSettingRaw<T>(admin: AdminClient, officeId: string, key: string): Promise<T | null> {
-  const { data } = await admin
-    .from("crm_settings")
-    .select("value")
-    .eq("office_id", officeId)
-    .eq("key", key)
-    .is("valid_to", null)
-    .order("valid_from", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  return (data?.value ?? null) as T | null;
+function teamLeadsOf(idx: StaffIndex, officeId: string, profileId: string | null): string[] {
+  const staff = idx.get(officeId) ?? [];
+  const team = staff.find((s) => s.profile_id === profileId)?.team_id;
+  if (!team) return [];
+  return staff.filter((s) => s.team_id === team && s.roles.includes("team_lead")).map((s) => s.profile_id);
+}
+
+/** Тухайн оффисын тохиргооны одоогийн утга (кэштэй). */
+function makeSettingReader(admin: AdminClient) {
+  const cache = new Map<string, unknown>();
+  return async function officeSetting<T>(officeId: string, key: string): Promise<T | null> {
+    const ck = `${officeId}:${key}`;
+    if (cache.has(ck)) return cache.get(ck) as T | null;
+    const { data } = await admin
+      .from("crm_settings")
+      .select("value")
+      .eq("office_id", officeId)
+      .eq("key", key)
+      .is("valid_to", null)
+      .order("valid_from", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const v = (data?.value ?? null) as T | null;
+    cache.set(ck, v);
+    return v;
+  };
 }
 
 async function createTask(
@@ -82,7 +114,7 @@ async function createTask(
     title: string;
     description: string;
     priority?: "low" | "normal" | "high" | "urgent";
-    deadlineMs?: number;
+    deadline: Date;
     entity: string;
     entityId: string;
     ruleCode: string;
@@ -97,7 +129,7 @@ async function createTask(
       title: input.title,
       description: input.description,
       priority: input.priority ?? "high",
-      deadline: new Date(Date.now() + (input.deadlineMs ?? 24 * HOUR_MS)).toISOString(),
+      deadline: input.deadline.toISOString(),
     })
     .select("id")
     .single();
@@ -114,6 +146,14 @@ async function createTask(
   return task.id;
 }
 
+/** Оффис бүрийн SLA орчин: ажлын цаг, хуанлийн онцгой өдөр, эх сурвалжийн бодлого. */
+type OfficeSla = {
+  policy: SlaPolicy | null;
+  exceptions: CalendarExceptions;
+  fallbackMinutes: number;
+  working: boolean;
+};
+
 export async function GET(request: Request) {
   const denied = cronAuthError(request);
   if (denied) return NextResponse.json({ ok: false, error: denied.error }, { status: denied.status });
@@ -121,11 +161,11 @@ export async function GET(request: Request) {
   const admin = createAdminClient();
   const now = new Date();
   const nowIso = now.toISOString();
-  const working = inWorkHours(now);
 
   const ruleMap = await getRuleMap(admin);
   const staffIdx = await loadStaffIndex(admin);
   const offices = await listCrmOffices(admin);
+  const officeSetting = makeSettingReader(admin);
 
   const gate = (officeId: string, code: string): { run: boolean; dryRun: boolean; rule: AutomationRule | null } => {
     const rule = ruleMap.get(`${officeId}:${code}`) ?? null;
@@ -133,10 +173,48 @@ export async function GET(request: Request) {
     return { run: g.run, dryRun: g.dryRun, rule };
   };
 
+  // ── Оффис бүрийн ажлын цаг (УБ) ──
+  const todayIso = toIsoDate(now);
+  const fromIso = toIsoDate(new Date(now.getTime() - 7 * 24 * HOUR_MS));
+  const toIso = toIsoDate(new Date(now.getTime() + 45 * 24 * HOUR_MS));
+  const { data: calRows } = await admin
+    .from("crm_calendar_days")
+    .select("office_id, day, is_workday")
+    .gte("day", fromIso)
+    .lte("day", toIso);
+  const slaEnv = new Map<string, OfficeSla>();
+  const officeIds = [...new Set([...offices, ...(calRows ?? []).map((r) => r.office_id)])];
+  for (const officeId of officeIds) {
+    const policy = await officeSetting<SlaPolicy>(officeId, "sla_policy");
+    const exceptions = calendarExceptionsFromRows((calRows ?? []).filter((r) => r.office_id === officeId));
+    const fallbackMinutes = (await officeSetting<number>(officeId, "sla_first_contact_min")) ?? 15;
+    slaEnv.set(officeId, {
+      policy,
+      exceptions,
+      fallbackMinutes,
+      working: isWithinWorkHours(now, workHoursFromPolicy(policy), exceptions),
+    });
+  }
+  const envOf = (officeId: string): OfficeSla =>
+    slaEnv.get(officeId) ?? {
+      policy: null,
+      exceptions: {},
+      fallbackMinutes: 15,
+      working: isWithinWorkHours(now),
+    };
+  const workingOffices = officeIds.filter((o) => envOf(o).working);
+
+  // Эх сурвалжийн id → код (эх сурвалжаар ялгаатай SLA).
+  const { data: sourceRows } = await admin.from("crm_lookups").select("id, code").eq("kind", "lead_source");
+  const sourceCodes = new Map((sourceRows ?? []).map((r) => [r.id, r.code]));
+
   const summary = {
-    working,
+    today: todayIso,
+    workingOffices: workingOffices.length,
     deferredDelivered: 0,
     queueAssigned: 0,
+    queueWaiting: 0,
+    unassignedAlerts: 0,
     d02Breaches: 0,
     d03Tasks: 0,
     d04Escalations: 0,
@@ -147,232 +225,315 @@ export async function GET(request: Request) {
     errors: [] as string[],
   };
 
-  // ── 0. Чимээгүй цагт хойшлогдсон мэдэгдэл — ажлын цагт хүргэнэ (F-653) ──
-  if (working) {
-    try {
-      summary.deferredDelivered = await deliverDeferredNotifications(admin, now);
-    } catch (e) {
-      summary.errors.push(`deferred: ${e instanceof Error ? e.message : String(e)}`);
-    }
+  // ── 0. Чимээгүй цагт хойшлогдсон мэдэгдэл — ажлын цагтай оффист хүргэнэ ──
+  try {
+    summary.deferredDelivered = await deliverDeferredNotifications(admin, now, workingOffices);
+  } catch (e) {
+    summary.errors.push(`deferred: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   // ── 1. Д-01 үргэлжлэл: ажлын бус цагийн дарааллын хуваарилалт ──
-  if (working) {
-    try {
-      const { data: states } = await admin
-        .from("crm_assignment_state")
-        .select("office_id, scope, last_assigned_profile_id, queue");
-      for (const state of states ?? []) {
-        const queue = Array.isArray(state.queue) ? ([...state.queue] as string[]) : [];
-        if (!queue.length) continue;
-        const g = gate(state.office_id, "D-01");
-        if (!g.run) continue;
+  try {
+    const { data: states } = await admin
+      .from("crm_assignment_state")
+      .select("office_id, scope, last_assigned_profile_id, queue");
+    for (const state of states ?? []) {
+      const queue = Array.isArray(state.queue) ? ([...state.queue] as string[]) : [];
+      if (!queue.length) continue;
+      const env = envOf(state.office_id);
+      if (!env.working) {
+        summary.queueWaiting += queue.length;
+        continue;
+      }
+      const g = gate(state.office_id, "D-01");
+      if (!g.run) continue;
 
-        const setting =
-          (await officeSettingRaw<{ mode?: AssignMode; load_cap?: number; rules?: AssignRule[] }>(
-            admin,
-            state.office_id,
-            "lead_assignment"
-          )) ?? {};
-        const candidates = (staffIdx.get(state.office_id) ?? [])
-          .filter((s) => s.roles.includes("agent"))
-          .map((s) => s.profile_id);
-        if (!candidates.length) continue;
+      const setting =
+        (await officeSetting<{ mode?: AssignMode; load_cap?: number; rules?: AssignRule[] }>(
+          state.office_id,
+          "lead_assignment"
+        )) ?? {};
+      // Ажлаа хүлээлгэж буй (offboarding) ажилтанд хуваарилахгүй (§6.27).
+      const candidates = (staffIdx.get(state.office_id) ?? [])
+        .filter((s) => s.roles.includes("agent") && !s.offboarding)
+        .map((s) => s.profile_id);
 
-        // Ачаалал + жижүүр.
-        const loads: Record<string, number> = {};
-        const { data: openLeads } = await admin
+      const loads: Record<string, number> = {};
+      const { data: openLeads } = await admin
+        .from("crm_leads")
+        .select("owner_id")
+        .eq("office_id", state.office_id)
+        .in("status", ["new", "active"])
+        .not("owner_id", "is", null);
+      for (const l of openLeads ?? []) if (l.owner_id) loads[l.owner_id] = (loads[l.owner_id] ?? 0) + 1;
+      const { data: duty } = await admin
+        .from("crm_duty_shifts")
+        .select("profile_id")
+        .eq("office_id", state.office_id)
+        .lte("starts_at", nowIso)
+        .gte("ends_at", nowIso);
+      const dutyNow = (duty ?? []).map((d) => d.profile_id);
+
+      let cursor = state.last_assigned_profile_id as string | null;
+      const remaining: string[] = [];
+
+      for (const leadId of queue) {
+        const { data: lead } = await admin
           .from("crm_leads")
-          .select("owner_id")
-          .eq("office_id", state.office_id)
-          .in("status", ["new", "active"])
-          .not("owner_id", "is", null);
-        for (const l of openLeads ?? []) if (l.owner_id) loads[l.owner_id] = (loads[l.owner_id] ?? 0) + 1;
-        const { data: duty } = await admin
-          .from("crm_duty_shifts")
-          .select("profile_id")
-          .eq("office_id", state.office_id)
-          .lte("starts_at", nowIso)
-          .gte("ends_at", nowIso);
-        const dutyNow = (duty ?? []).map((d) => d.profile_id);
+          .select("id, owner_id, status, branch_id, grade, received_at, created_at, source_id")
+          .eq("id", leadId)
+          .maybeSingle();
+        if (!lead || lead.owner_id || !["new", "active"].includes(lead.status)) continue; // хоцрогдсон мөр — хасна
+        const sourceCode = lead.source_id ? (sourceCodes.get(lead.source_id) ?? null) : null;
 
-        let cursor = state.last_assigned_profile_id as string | null;
-        const remaining: string[] = [];
-        const slaMin = (await officeSettingRaw<number>(admin, state.office_id, "sla_first_contact_min")) ?? 15;
-
-        for (const leadId of queue) {
-          const { data: lead } = await admin
-            .from("crm_leads")
-            .select("id, owner_id, status")
-            .eq("id", leadId)
-            .maybeSingle();
-          if (!lead || lead.owner_id || !["new", "active"].includes(lead.status)) continue; // хоцрогдсон мөр — дарааллаас хасна
-
-          const decision = assignLead({
-            mode: setting.mode ?? "round_robin",
-            candidates,
-            dutyNow,
-            cursor,
-            loads,
-            loadCap: setting.load_cap,
-            rules: setting.rules ?? [],
-            lead: {},
-            isWorkHours: true,
-            afterHours: "assign",
-          });
-          if (!decision.ownerId) {
-            remaining.push(leadId);
-            continue;
-          }
-          const due = slaDeadline(now, slaMin);
-          const { error: upErr } = await admin
-            .from("crm_leads")
-            .update({ owner_id: decision.ownerId, first_contact_due_at: due.toISOString() })
-            .eq("id", leadId);
-          if (upErr) {
-            summary.errors.push(`D-01 drain ${leadId}: ${upErr.message}`);
-            remaining.push(leadId);
-            continue;
-          }
-          cursor = decision.ownerId;
-          loads[decision.ownerId] = (loads[decision.ownerId] ?? 0) + 1;
-
-          await createTask(admin, {
-            officeId: state.office_id,
-            responsibleId: decision.ownerId,
-            title: "Шинэ сэжимтэй эхний холболт хийх (Д-01)",
-            description: `Ажлын бус цагт ирсэн сэжим — эхний холболтын SLA ${slaMin} мин одооноос тоологдоно.`,
-            deadlineMs: due.getTime() - now.getTime(),
-            entity: "lead",
-            entityId: leadId,
-            ruleCode: "D-01",
-          });
-          await notifyCrm({
-            officeId: state.office_id,
-            event: "lead_assigned",
-            recipients: [decision.ownerId],
-            title: "Шинэ сэжим оноогдлоо",
-            body: "Ажлын бус цагийн дарааллаас танд сэжим хуваарилагдлаа — SLA тоолол эхэллээ.",
-            link: `/agent/crm/leads/${leadId}`,
-            entity: "crm_leads",
-            entityId: leadId,
-            admin,
-            now,
-          });
-          await logRuleRun(admin, {
-            officeId: state.office_id,
-            ruleCode: "D-01",
-            entity: "crm_leads",
-            entityId: leadId,
-            status: "ok",
-            result: { owner_id: decision.ownerId, queued_drain: true },
-          });
-          summary.queueAssigned += 1;
+        const decision = candidates.length
+          ? assignLead({
+              mode: setting.mode ?? "round_robin",
+              candidates,
+              dutyNow,
+              cursor,
+              loads,
+              loadCap: setting.load_cap,
+              rules: setting.rules ?? [],
+              lead: { sourceCode, branchId: lead.branch_id, grade: lead.grade },
+              isWorkHours: true,
+              afterHours: "assign",
+            })
+          : ({ ownerId: null, queued: false } as const);
+        if (!decision.ownerId) {
+          remaining.push(leadId);
+          continue;
         }
 
-        await admin
-          .from("crm_assignment_state")
-          .update({
-            last_assigned_profile_id: cursor,
-            queue: remaining as unknown as Json,
-            updated_at: nowIso,
-          })
-          .eq("office_id", state.office_id)
-          .eq("scope", state.scope);
+        // Хугацаа: мэдээлэл ирсэн мөчөөс эх сурвалжийн бодлогоор; хэрэв систем
+        // хоцорч хуваарилсан бол (ачааллын дээд хязгаар г.м.) одооноос тоолно.
+        const due = queueDrainDeadline(new Date(lead.received_at ?? lead.created_at), now, sourceCode, {
+          policy: env.policy,
+          fallbackMinutes: env.fallbackMinutes,
+          exceptions: env.exceptions,
+        });
+
+        const { error: upErr } = await admin
+          .from("crm_leads")
+          .update({ owner_id: decision.ownerId, first_contact_due_at: due.toISOString() })
+          .eq("id", leadId)
+          .is("owner_id", null);
+        if (upErr) {
+          summary.errors.push(`D-01 drain ${leadId}: ${upErr.message}`);
+          remaining.push(leadId);
+          continue;
+        }
+        cursor = decision.ownerId;
+        loads[decision.ownerId] = (loads[decision.ownerId] ?? 0) + 1;
+
+        const taskId = await createTask(admin, {
+          officeId: state.office_id,
+          responsibleId: decision.ownerId,
+          title: "Шинэ сэжимтэй эхний холболт хийх",
+          description: "Ажлын бус цагт ирсэн сэжим танд хуваарилагдлаа. Холбогдож, үр дүн болон дараагийн үйлдлээ бүртгэнэ үү.",
+          deadline: due,
+          entity: "lead",
+          entityId: leadId,
+          ruleCode: "D-01",
+        });
+        if (taskId) {
+          await admin.from("crm_leads").update({ next_step_task_id: taskId }).eq("id", leadId);
+        }
+        await notifyCrm({
+          officeId: state.office_id,
+          event: "lead_assigned",
+          recipients: [decision.ownerId],
+          title: "Шинэ сэжим оноогдлоо",
+          body: `Ажлын бус цагт ирсэн сэжим. Эхний холболтын хугацаа: ${fmtTime(due)}.`,
+          link: `/agent/crm/leads/${leadId}`,
+          entity: "crm_leads",
+          entityId: leadId,
+          admin,
+          now,
+        });
+        await logRuleRun(admin, {
+          officeId: state.office_id,
+          ruleCode: "D-01",
+          entity: "crm_leads",
+          entityId: leadId,
+          status: "ok",
+          result: { owner_id: decision.ownerId, queued_drain: true, due: due.toISOString(), task_id: taskId },
+        });
+        summary.queueAssigned += 1;
       }
-    } catch (e) {
-      summary.errors.push(`D-01: ${e instanceof Error ? e.message : String(e)}`);
+
+      await admin
+        .from("crm_assignment_state")
+        .update({
+          last_assigned_profile_id: cursor,
+          queue: remaining as unknown as Json,
+          updated_at: nowIso,
+        })
+        .eq("office_id", state.office_id)
+        .eq("scope", state.scope);
+
+      // Хуваарилагдаж чадаагүй (агентгүй / бүгд дүүрсэн) сэжим SLA-аас гадуур
+      // үлдэхгүй — хугацаа өнгөрвөл Борлуулалт хариуцсан захиралд нэг удаа.
+      for (const leadId of remaining) {
+        const { data: lead } = await admin
+          .from("crm_leads")
+          .select("id, received_at, created_at")
+          .eq("id", leadId)
+          .maybeSingle();
+        if (!lead) continue;
+        const startedAt = slaClockStart(
+          new Date(lead.received_at ?? lead.created_at),
+          workHoursFromPolicy(env.policy),
+          env.exceptions
+        );
+        if (now.getTime() - startedAt.getTime() < env.fallbackMinutes * MIN_MS) continue;
+        if (await hasRuleRun(admin, { officeId: state.office_id, ruleCode: "D-01-unassigned", entity: "crm_leads", entityId: leadId })) {
+          continue;
+        }
+        await notifyCrm({
+          officeId: state.office_id,
+          event: "lead_sla_breach",
+          recipients: [],
+          includeRoles: ["sales_director"],
+          title: "Эзэмшигчгүй сэжим хүлээгдэж байна",
+          body: "Хуваарилах боломжтой агент олдсонгүй (ачаалал дүүрсэн эсвэл агентгүй). Гараар хуваарилна уу.",
+          link: `/office/crm/leads/${leadId}`,
+          entity: "crm_leads",
+          entityId: leadId,
+          admin,
+          now,
+        });
+        await logRuleRun(admin, { officeId: state.office_id, ruleCode: "D-01-unassigned", entity: "crm_leads", entityId: leadId, status: "ok" });
+        summary.unassignedAlerts += 1;
+      }
     }
+  } catch (e) {
+    summary.errors.push(`D-01: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  // ── 2. Д-02/03/04: эхний холболтын SLA гинж ──
+  // ── 2. Д-02/03/04: эхний утга бүхий холболтын гинж ──
   try {
     type SlaLead = {
       id: string;
       office_id: string;
       owner_id: string | null;
       first_contact_due_at: string | null;
-      last_contact_at: string | null;
+      first_contact_at: string | null;
+      received_at: string | null;
+      created_at: string;
+      /** Дахин хуваарилсан / сангаас авсан мөч — SLA гинж шинэ эзэмшигчээр дахин ажиллана. */
+      owner_assigned_at: string | null;
       status: string;
     };
     const { data: leadsRaw } = await admin
       .from("crm_leads")
-      .select("id, office_id, owner_id, first_contact_due_at, last_contact_at, status")
+      .select("id, office_id, owner_id, first_contact_due_at, first_contact_at, received_at, created_at, status, owner_assigned_at")
       .in("status", ["new", "active"])
-      .is("last_contact_at", null)
+      .is("first_contact_at", null)
       .not("owner_id", "is", null)
-      .not("first_contact_due_at", "is", null)
-      .lt("first_contact_due_at", nowIso);
+      .limit(2000);
     const leads = (leadsRaw ?? []) as unknown as SlaLead[];
 
-    for (const lead of leads) {
-      const overdueMs = now.getTime() - new Date(lead.first_contact_due_at!).getTime();
-      const staff = staffIdx.get(lead.office_id) ?? [];
-      const ownerRow = staff.find((s) => s.profile_id === lead.owner_id);
-      const teamLeads = staff
-        .filter((s) => s.roles.includes("team_lead") && ownerRow?.team_id && s.team_id === ownerRow.team_id)
-        .map((s) => s.profile_id);
+    // «Холбогдож чадаагүй» оролдлогын тоо.
+    const failed = new Map<string, number>();
+    for (let i = 0; i < leads.length; i += 200) {
+      const ids = leads.slice(i, i + 200).map((l) => l.id);
+      const { data: acts } = await admin
+        .from("crm_activities")
+        .select("lead_id")
+        .in("lead_id", ids)
+        .eq("reached", false);
+      for (const a of acts ?? []) if (a.lead_id) failed.set(a.lead_id, (failed.get(a.lead_id) ?? 0) + 1);
+    }
 
-      // Д-02: хэтрэлтийн дохио (нэг л удаа).
+    for (const lead of leads) {
+      if (!lead.owner_id) continue;
+      const g03 = gate(lead.office_id, "D-03");
+      const g04 = gate(lead.office_id, "D-04");
+      const retryHours = conditionParam<number>(g03.rule?.condition, "hours", 24);
+      const escalateHours = conditionParam<number>(g04.rule?.condition, "hours", 48);
+      const steps = leadSlaSteps(
+        {
+          startedAt: new Date(lead.received_at ?? lead.created_at),
+          dueAt: lead.first_contact_due_at ? new Date(lead.first_contact_due_at) : null,
+          firstContactAt: null,
+          failedAttempts: failed.get(lead.id) ?? 0,
+        },
+        now,
+        { retryHours, escalateHours }
+      );
+
+      // Д-02: хугацаа хэтэрсэн (нэг удаа) — эзэмшигч, матрицаар ахлагч.
       const g02 = gate(lead.office_id, "D-02");
       if (
+        steps.breach &&
         g02.run &&
-        !(await hasRuleRun(admin, { officeId: lead.office_id, ruleCode: "D-02", entity: "crm_leads", entityId: lead.id }))
+        !(await hasRuleRun(admin, { officeId: lead.office_id, ruleCode: "D-02", entity: "crm_leads", entityId: lead.id, sinceIso: lead.owner_assigned_at ?? undefined }))
       ) {
+        const overdueMin = Math.round((now.getTime() - new Date(lead.first_contact_due_at!).getTime()) / MIN_MS);
         await notifyCrm({
           officeId: lead.office_id,
           event: "lead_sla_breach",
-          recipients: [lead.owner_id, ...teamLeads],
-          title: "Эхний холболтын SLA хэтэрлээ",
-          body: "Шинэ сэжимд эхний холболт хийгдээгүй — SLA хугацаа өнгөрсөн (Д-02).",
+          recipients: [lead.owner_id],
+          title: "Эхний холболтын хугацаа хэтэрлээ",
+          body: `Шинэ сэжимтэй холбогдоогүй байна — хугацаа ${overdueMin} минут хэтэрсэн.`,
           link: `/agent/crm/leads/${lead.id}`,
           entity: "crm_leads",
           entityId: lead.id,
           admin,
           now,
         });
-        await logRuleRun(admin, { officeId: lead.office_id, ruleCode: "D-02", entity: "crm_leads", entityId: lead.id, status: "ok", result: { overdue_min: Math.round(overdueMs / 60000) } });
+        await logRuleRun(admin, { officeId: lead.office_id, ruleCode: "D-02", entity: "crm_leads", entityId: lead.id, status: "ok", result: { overdue_min: overdueMin } });
         summary.d02Breaches += 1;
       }
 
-      // Д-03: 24 цагт дахин оролдлогын даалгавар.
-      const g03 = gate(lead.office_id, "D-03");
-      const h03 = conditionParam<number>(g03.rule?.condition, "hours", 24);
+      // Д-03: хоёр дахь оролдлого — сэжим ирснээс retryHours дотор.
       if (
+        steps.retry &&
         g03.run &&
-        overdueMs >= h03 * HOUR_MS &&
-        lead.owner_id &&
-        !(await hasRuleRun(admin, { officeId: lead.office_id, ruleCode: "D-03", entity: "crm_leads", entityId: lead.id }))
+        !(await hasRuleRun(admin, { officeId: lead.office_id, ruleCode: "D-03", entity: "crm_leads", entityId: lead.id, sinceIso: lead.owner_assigned_at ?? undefined }))
       ) {
-        await createTask(admin, {
+        const taskId = await createTask(admin, {
           officeId: lead.office_id,
           responsibleId: lead.owner_id,
-          title: "Сэжимтэй дахин холбогдох оролдлого (Д-03)",
-          description: `Эхний холболт ${h03} цагт хийгдээгүй — өөр суваг/цагаар дахин оролдоно.`,
+          title: "Сэжимтэй дахин холбогдох (хоёр дахь оролдлого)",
+          description: `Эхний холболт амжилтгүй эсвэл хугацаа хэтэрсэн. Сэжим ирснээс ${retryHours} цагийн дотор өөр суваг, цагаар дахин оролдож, дараагийн үйлдлээ товлоно уу.`,
+          deadline: steps.retryDeadline,
           entity: "lead",
           entityId: lead.id,
           ruleCode: "D-03",
         });
-        await logRuleRun(admin, { officeId: lead.office_id, ruleCode: "D-03", entity: "crm_leads", entityId: lead.id, status: "ok" });
+        await notifyCrm({
+          officeId: lead.office_id,
+          event: "lead_retry_due",
+          recipients: [lead.owner_id],
+          title: "Дахин холбогдох оролдлого хийнэ үү",
+          body: `Сэжимтэй утга бүхий холболт болоогүй байна. ${retryHours} цагийн дотор хоёр дахь оролдлогоо хийнэ үү.`,
+          link: `/agent/crm/leads/${lead.id}`,
+          entity: "crm_leads",
+          entityId: lead.id,
+          admin,
+          now,
+        });
+        await logRuleRun(admin, { officeId: lead.office_id, ruleCode: "D-03", entity: "crm_leads", entityId: lead.id, status: "ok", result: { task_id: taskId, deadline: steps.retryDeadline.toISOString() } });
         summary.d03Tasks += 1;
       }
 
-      // Д-04: 48 цагт багийн ахлагч/захиралд эскалаци (шилжүүлэлтийн санал).
-      const g04 = gate(lead.office_id, "D-04");
-      const h04 = conditionParam<number>(g04.rule?.condition, "hours", 48);
+      // Д-04: 48ц-т утга бүхий холболтгүй — сануулга + ахлагчид харагдуулах.
       if (
+        steps.noContact &&
         g04.run &&
-        overdueMs >= h04 * HOUR_MS &&
-        !(await hasRuleRun(admin, { officeId: lead.office_id, ruleCode: "D-04", entity: "crm_leads", entityId: lead.id }))
+        !(await hasRuleRun(admin, { officeId: lead.office_id, ruleCode: "D-04", entity: "crm_leads", entityId: lead.id, sinceIso: lead.owner_assigned_at ?? undefined }))
       ) {
-        const escalateTo = teamLeads.length ? teamLeads : roleProfiles(staffIdx, lead.office_id, ["sales_director"]);
-        const responsible = escalateTo[0];
-        if (responsible) {
+        const leads4 = teamLeadsOf(staffIdx, lead.office_id, lead.owner_id);
+        const reviewer = leads4[0] ?? roleProfiles(staffIdx, lead.office_id, ["sales_director"])[0];
+        if (reviewer) {
           await createTask(admin, {
             officeId: lead.office_id,
-            responsibleId: responsible,
-            title: "Холбогдоогүй сэжимийг шилжүүлэх шийдвэр (Д-04)",
-            description: `Эхний холболт ${h04} цагт хийгдээгүй — дахин хуваарилах/эргэлтэд оруулах шийдвэр гаргана (P-10 үндэслэлтэй).`,
+            responsibleId: reviewer,
+            title: "Холбогдоогүй сэжимийг хянах",
+            description: `Сэжим ирснээс ${escalateHours} цагт утга бүхий холболт болоогүй. Агенттай ярилцаж, шаардлагатай бол нотолгоонд үндэслэн дахин хуваарилах эсэхийг шийднэ үү.`,
+            deadline: new Date(now.getTime() + 24 * HOUR_MS),
             entity: "lead",
             entityId: lead.id,
             ruleCode: "D-04",
@@ -380,18 +541,18 @@ export async function GET(request: Request) {
         }
         await notifyCrm({
           officeId: lead.office_id,
-          event: "lead_sla_breach",
-          recipients: escalateTo,
-          includeRoles: ["sales_director"],
-          title: "Сэжимийн эскалаци (48ц)",
-          body: "Эхний холболт удаашралтай — шилжүүлэлтийн шийдвэр шаардлагатай (Д-04).",
-          link: `/office/crm/leads/${lead.id}`,
+          event: "lead_no_contact_48h",
+          recipients: [lead.owner_id],
+          includeRoles: leads4.length ? [] : ["sales_director"],
+          title: `${escalateHours} цагт холбогдоогүй сэжим`,
+          body: "Утга бүхий холболт болоогүй сэжим Багийн ахлагчид харагдаж байна.",
+          link: `/agent/crm/leads/${lead.id}`,
           entity: "crm_leads",
           entityId: lead.id,
           admin,
           now,
         });
-        await logRuleRun(admin, { officeId: lead.office_id, ruleCode: "D-04", entity: "crm_leads", entityId: lead.id, status: "ok" });
+        await logRuleRun(admin, { officeId: lead.office_id, ruleCode: "D-04", entity: "crm_leads", entityId: lead.id, status: "ok", result: { reviewer: reviewer ?? null } });
         summary.d04Escalations += 1;
       }
     }
@@ -428,9 +589,10 @@ export async function GET(request: Request) {
           await createTask(admin, {
             officeId: r.office_id,
             responsibleId: responsible,
-            title: `Засварын SLA хэтэрлээ — ${phase.label} (Д-20)`,
-            description: `«${r.description.slice(0, 120)}» хүсэлтийн ${phase.label} SLA (${phase.due.slice(0, 16)}) хэтэрсэн — Үйл ажиллагаа-ЧМТ зохицуулна.`,
+            title: `Засварын хүсэлтийн ${phase.label} хугацаа хэтэрлээ`,
+            description: `«${r.description.slice(0, 120)}» хүсэлтийн ${phase.label} хугацаа өнгөрсөн — Үйл ажиллагаа-ЧМТ зохицуулна.`,
             priority: r.urgency === "urgent" ? "urgent" : "high",
+            deadline: new Date(now.getTime() + 24 * HOUR_MS),
             entity: "maintenance_request",
             entityId: r.id,
             ruleCode: phase.code,
@@ -441,7 +603,7 @@ export async function GET(request: Request) {
           event: "maintenance_sla",
           recipients: [r.assigned_to],
           includeRoles: ["property_manager", "ops_qc"],
-          title: `Засварын SLA хэтэрлээ (${phase.label})`,
+          title: `Засварын хүсэлтийн ${phase.label} хугацаа хэтэрлээ`,
           body: r.description,
           link: "/office/crm/rentals/maintenance",
           entity: "crm_maintenance_requests",
@@ -458,9 +620,8 @@ export async function GET(request: Request) {
     summary.errors.push(`D-20: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  // ── 4. Д-25/Д-26: МУТСТ тоолуурууд (зөвхөн aml_officer/ceo — ACC-25) ──
+  // ── 4. Д-25/Д-26: МУТСТ тоолуурууд (зөвхөн aml_officer/ceo) ──
   try {
-    const today = nowIso.slice(0, 10);
     const { data: cases } = await admin
       .from("crm_aml_cases")
       .select("id, office_id, status, decision, str_due_at, threshold_due_on")
@@ -469,16 +630,16 @@ export async function GET(request: Request) {
       const officers = roleProfiles(staffIdx, c.office_id, ["aml_officer"]);
       if (!officers.length) continue;
 
-      // Д-25: СМА-д мэдээлэх ажлын 5 өдрийн хугацаа (маргааш эсвэл өнгөрсөн).
+      // Д-25: СМА-д мэдээлэх хугацаа (маргааш эсвэл өнгөрсөн).
       const g25 = gate(c.office_id, "D-25");
-      if (g25.run && c.threshold_due_on && c.threshold_due_on <= addDaysIsoLocal(today, 1)) {
-        const past = c.threshold_due_on < today;
+      if (g25.run && c.threshold_due_on && c.threshold_due_on <= addDaysIso(todayIso, 1)) {
+        const past = c.threshold_due_on < todayIso;
         await notifyCrm({
           officeId: c.office_id,
           event: "aml_threshold_due",
           recipients: past ? [...officers, ...roleProfiles(staffIdx, c.office_id, ["ceo"])] : officers,
           title: past ? "СМА-д мэдээлэх хугацаа ХЭТЭРЛЭЭ" : "СМА-д мэдээлэх хугацаа дөхөж байна",
-          body: `Босго давсан гүйлгээний мэдээллийн хугацаа: ${c.threshold_due_on} (Д-25).`,
+          body: `Босго давсан гүйлгээний мэдээллийн хугацаа: ${c.threshold_due_on}.`,
           link: `/office/crm/aml/${c.id}`,
           entity: "crm_aml_cases",
           entityId: c.id,
@@ -500,8 +661,8 @@ export async function GET(request: Request) {
             recipients: past ? [...officers, ...roleProfiles(staffIdx, c.office_id, ["ceo"])] : officers,
             title: past ? "СГТ илгээх 24ц хугацаа ХЭТЭРЛЭЭ" : "СГТ илгээх хугацаа дөхөж байна",
             body: past
-              ? "СГТ илгээгдээгүй — 24 цагийн хугацаа өнгөрсөн, яаралтай арга хэмжээ (Д-26)."
-              : `СГТ-ийн хугацаа: ${new Date(c.str_due_at).toLocaleString("mn-MN")} (Д-26).`,
+              ? "СГТ илгээгдээгүй — 24 цагийн хугацаа өнгөрсөн, яаралтай арга хэмжээ авна уу."
+              : `СГТ-ийн хугацаа: ${fmtDateTime(c.str_due_at)}.`,
             link: `/office/crm/aml/${c.id}`,
             entity: "crm_aml_cases",
             entityId: c.id,
@@ -516,7 +677,7 @@ export async function GET(request: Request) {
     summary.errors.push(`D-25/26: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  // Алдаа → сисадминд (F-602).
+  // Алдаа → сисадминд.
   if (summary.errors.length) {
     for (const officeId of offices) {
       await notifyCrm({
@@ -524,8 +685,8 @@ export async function GET(request: Request) {
         event: "rule_error",
         recipients: [],
         includeRoles: ["sysadmin"],
-        title: "SLA cron алдаатай дууслаа",
-        body: `crm-sla: ${summary.errors.length} алдаа — rule_runs логоос харна уу (F-602).`,
+        title: "SLA-ийн автомат шалгалт алдаатай дууслаа",
+        body: `${summary.errors.length} алдаа гарсан — автомат дүрмийн гүйцэтгэлийн логоос харна уу.`,
         link: "/office/crm/settings/rules",
         admin,
         now,
@@ -536,6 +697,6 @@ export async function GET(request: Request) {
   return NextResponse.json({ ok: summary.errors.length === 0, ...summary });
 }
 
-function addDaysIsoLocal(iso: string, days: number): string {
+function addDaysIso(iso: string, days: number): string {
   return new Date(new Date(`${iso}T00:00:00Z`).getTime() + days * 86400000).toISOString().slice(0, 10);
 }

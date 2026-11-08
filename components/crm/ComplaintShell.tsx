@@ -1,5 +1,6 @@
 "use client";
 
+import { fmtDateNum } from "@/lib/format";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Plus } from "lucide-react";
@@ -152,7 +153,7 @@ export function ComplaintShell({
                 <span className="text-sm font-medium text-ink">{c.contact_name ?? c.contact_id}</span>
                 {c.txn_number && <span className="text-xs text-subtle">{c.txn_number}</span>}
                 <span className="ml-auto text-xs text-subtle">
-                  {new Date(c.created_at).toLocaleDateString("mn-MN")}
+                  {fmtDateNum(c.created_at)}
                 </span>
               </div>
               <p className="text-sm text-muted">{c.description}</p>
@@ -160,7 +161,7 @@ export function ComplaintShell({
                 <p className="flex items-center gap-1 text-xs text-subtle">
                   <CheckCircle2 className="size-3.5 text-emerald-600" />
                   {c.resolution}
-                  {c.resolved_at && ` (${new Date(c.resolved_at).toLocaleDateString("mn-MN")})`}
+                  {c.resolved_at && ` (${fmtDateNum(c.resolved_at)})`}
                 </p>
               ) : (
                 <Button size="sm" variant="secondary" onClick={() => setResolveFor(c)} disabled={pending}>
@@ -198,7 +199,7 @@ export function ComplaintShell({
               ))}
             </Select>
           </Field>
-          <Field label="Ноцтой байдал" hint="Ноцтой гомдол шийдэгдтэл холбогдох шимтгэл түр саатна (F-461).">
+          <Field label="Ноцтой байдал" hint="Ноцтой гомдол шийдэгдтэл холбогдох шимтгэл түр саатна.">
             <Select value={severity} onChange={(e) => setSeverity(e.target.value as "normal" | "serious")}>
               <option value="normal">Энгийн</option>
               <option value="serious">Ноцтой</option>

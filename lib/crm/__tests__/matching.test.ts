@@ -3,7 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_MATCH_THRESHOLDS,
   DEFAULT_MATCH_WEIGHTS,
+  PROPERTY_TAG_GROUPS,
+  buildMatchMessage,
   deliveryTier,
+  isServiceCompatible,
+  normalizePropertyTags,
+  relevantPrice,
   normalizeMatchThresholds,
   normalizeMatchWeights,
   propertyFeatureTokens,
@@ -100,14 +105,29 @@ describe("scoreMatch — зэргэлдээ бүс (тохируулгат %)", 
   });
 });
 
-describe("scoreMatch — төсөв (шатлан буурах хэтрэлт)", () => {
-  it("хүлцлийн хагаст (5%/10%) төсвийн оноо тал нь болно", () => {
+describe("scoreMatch — төсөв (§6.9: дээд төсөв эсвэл харилцагч зөвшөөрсөн хэтрэлт)", () => {
+  it("зөвшөөрөлгүй хэтрэлт (5%) 0 оноо — хүлцэл гэж байхгүй", () => {
     const res = scoreMatch(buyer, { ...apartment, price: 420_000_000 }); // +5%
-    expect(res.breakdown.find((b) => b.key === "budget")?.earned).toBe(12.5);
+    const b = res.breakdown.find((x) => x.key === "budget");
+    expect(b?.earned).toBe(0);
+    expect(b?.detail).toContain("зөвшөөрөөгүй");
   });
 
-  it("хүлцлээс хэтэрвэл 0", () => {
-    const res = scoreMatch(buyer, { ...apartment, price: 480_000_000 }); // +20%
+  it("харилцагч зөвшөөрсөн дээд дүнд багтвал бүтэн оноо", () => {
+    const approved: MatchProfileInput = { ...buyer, budgetOverrunApproved: true, budgetOverrunMax: 450_000_000 };
+    const res = scoreMatch(approved, { ...apartment, price: 440_000_000 });
+    expect(res.breakdown.find((b) => b.key === "budget")?.earned).toBe(25);
+  });
+
+  it("зөвшөөрсөн дээд дүнгээс хэтэрвэл 0", () => {
+    const approved: MatchProfileInput = { ...buyer, budgetOverrunApproved: true, budgetOverrunMax: 450_000_000 };
+    const res = scoreMatch(approved, { ...apartment, price: 480_000_000 });
+    expect(res.breakdown.find((b) => b.key === "budget")?.earned).toBe(0);
+  });
+
+  it("зөвшөөрөл тэмдэглээгүй бол дээд дүн өгсөн ч тооцохгүй", () => {
+    const notApproved: MatchProfileInput = { ...buyer, budgetOverrunApproved: false, budgetOverrunMax: 450_000_000 };
+    const res = scoreMatch(notApproved, { ...apartment, price: 440_000_000 });
     expect(res.breakdown.find((b) => b.key === "budget")?.earned).toBe(0);
   });
 
@@ -120,6 +140,47 @@ describe("scoreMatch — төсөв (шатлан буурах хэтрэлт)",
       rentPrice: 1_800_000,
     });
     expect(res.breakdown.find((b) => b.key === "budget")?.earned).toBe(25);
+  });
+});
+
+describe("худалдаа/түрээс хольж тохируулахгүй (§6.9 Төсөв, Төрөл)", () => {
+  const rentalFlat: MatchPropertyInput = {
+    ...apartment,
+    serviceKind: "standard_rental",
+    price: null,
+    rentPrice: 2_000_000,
+  };
+
+  it("500 сая төсөвтэй худалдан авагчид сарын 2 сая түрээсийн үл хөдлөх тохирохгүй", () => {
+    const rich: MatchProfileInput = { ...buyer, budgetMax: 500_000_000 };
+    const res = scoreMatch(rich, rentalFlat);
+    expect(res.compatible).toBe(false);
+    expect(res.score).toBe(0);
+    expect(res.strength).toBe("weak");
+    expect(res.breakdown.find((b) => b.key === "budget")?.earned).toBe(0);
+    expect(relevantPrice(rich, rentalFlat)).toBeNull();
+  });
+
+  it("түрээслэгчид худалдах үл хөдлөх тохирохгүй", () => {
+    const tenant: MatchProfileInput = { ...buyer, profileType: "tenant", budgetMax: 2_000_000 };
+    const res = scoreMatch(tenant, apartment);
+    expect(res.compatible).toBe(false);
+    expect(res.score).toBe(0);
+  });
+
+  it("нийцлийн хүснэгт", () => {
+    expect(isServiceCompatible("buyer", "sale")).toBe(true);
+    expect(isServiceCompatible("investor", "sale")).toBe(true);
+    expect(isServiceCompatible("intl_buyer", "sale")).toBe(true);
+    expect(isServiceCompatible("buyer", "standard_rental")).toBe(false);
+    expect(isServiceCompatible("buyer", "managed_rental")).toBe(false);
+    expect(isServiceCompatible("tenant", "standard_rental")).toBe(true);
+    expect(isServiceCompatible("tenant", "managed_rental")).toBe(true);
+    expect(isServiceCompatible("tenant", "sale")).toBe(false);
+  });
+
+  it("нийцсэн хослол compatible=true", () => {
+    expect(scoreMatch(buyer, apartment).compatible).toBe(true);
   });
 });
 
@@ -220,5 +281,60 @@ describe("объектын токенчлол", () => {
       "Хөрөнгө оруулалт",
       "Шинэ",
     ]);
+  });
+
+  it("§6.10.2 хэмжээ, нөхцөл байдлын шошго тохируулгад орно", () => {
+    expect(propertyFeatureTokens([], { size: ["70–90 м²"], condition: "Шинэ засвартай" })).toEqual([
+      "70–90 м²",
+      "Шинэ засвартай",
+    ]);
+    const res = scoreMatch(
+      { ...buyer, mustHaves: ["Шинэ засвартай"] },
+      { ...apartment, featureTokens: propertyFeatureTokens([], { condition: ["Шинэ засвартай"] }) }
+    );
+    expect(res.breakdown.find((b) => b.key === "must_haves")?.earned).toBe(15);
+  });
+
+  it("normalizePropertyTags — 7 бүлэг, давхардал/хоосон утгагүй", () => {
+    const t = normalizePropertyTags({ location: [" Зайсан ", "Зайсан", ""], size: "80 м²", junk: ["x"] });
+    expect(Object.keys(t)).toEqual([...PROPERTY_TAG_GROUPS]);
+    expect(t.location).toEqual(["Зайсан"]);
+    expect(t.size).toEqual(["80 м²"]);
+    expect(t.condition).toEqual([]);
+    expect(normalizePropertyTags(null).type).toEqual([]);
+  });
+});
+
+describe("buildMatchMessage — хувь хүнд чиглэсэн зурвас (§6.10.5)", () => {
+  it("нэр, үл хөдлөхийн гол мэдээлэл, холбоосыг агуулна", () => {
+    const text = buildMatchMessage({
+      contactName: "Болд Батаа",
+      propertyName: "Зайсан 3 өрөө",
+      serviceKind: "sale",
+      price: 380_000_000,
+      rooms: 3,
+      areaM2: 72,
+      district: "Хан-Уул",
+      url: "https://www.nemi.mn/listings/abc",
+      agentName: "Сараа",
+    });
+    expect(text).toContain("Сайн байна уу, Болд!");
+    expect(text).toContain("худалдах үл хөдлөх");
+    expect(text).toContain("Хан-Уул, 3 өрөө, 72 м², 380 000 000₮");
+    expect(text).toContain("https://www.nemi.mn/listings/abc");
+    expect(text).toContain("— Сараа");
+  });
+
+  it("түрээсэд сарын үнэ, нэргүйд ерөнхий мэндчилгээ", () => {
+    const text = buildMatchMessage({
+      contactName: null,
+      propertyName: "Төв 1 өрөө",
+      serviceKind: "managed_rental",
+      rentPrice: 1_800_000,
+    });
+    expect(text.startsWith("Сайн байна уу!")).toBe(true);
+    expect(text).toContain("түрээсийн");
+    expect(text).toContain("сарын 1 800 000₮");
+    expect(text).not.toContain("Дэлгэрэнгүй");
   });
 });

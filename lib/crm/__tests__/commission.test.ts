@@ -119,7 +119,7 @@ describe("commission — хамтын зуучлал (F-468)", () => {
     });
     expect(r.rows.some((x) => x.role === "selling")).toBe(false);
     expect(r.rows).toHaveLength(2);
-    expect(r.notes.some((n) => n.includes("F-468"))).toBe(true);
+    expect(r.notes.some((n) => n.includes("Хамтын зуучлалын туг"))).toBe(true);
     // Босгоос доогуур тул 20% + 20%.
     expect(r.totalRatePct).toBe(40);
   });
@@ -210,7 +210,7 @@ describe("commission — нийлбэрийн cap (F-459)", () => {
     });
     expect(r.totalRatePct).toBe(55); // 10+10+10+25
     expect(r.locked).toBe(true);
-    expect(r.errors.some((e) => e.includes("F-459"))).toBe(true);
+    expect(r.errors.some((e) => e.includes("дээд хязгаараас"))).toBe(true);
   });
 
   it("хязгаарт багтвал түгжигдэхгүй", () => {
@@ -237,7 +237,7 @@ describe("commission — replacement (F-414)", () => {
     });
     expect(r.rows).toHaveLength(2);
     expect(r.rows.every((x) => x.amount === 0 && x.appliedRatePct === 0)).toBe(true);
-    expect(r.notes.some((n) => n.includes("F-414"))).toBe(true);
+    expect(r.notes.some((n) => n.includes("Дахин түрээслүүлэлт"))).toBe(true);
   });
 
   it("replacement төрөл RENT журамд буудаг", () => {
@@ -275,7 +275,7 @@ describe("commission — хамтарсан үүргийн split (F-458)", () =>
       baseAmount: 1_000_000,
       price: 0,
     });
-    expect(r.errors.some((e) => e.includes("F-458"))).toBe(true);
+    expect(r.errors.some((e) => e.includes("хуваарилалт бүртгэгдээгүй"))).toBe(true);
     expect(r.rows.every((x) => x.evidence.missing_split === true)).toBe(true);
     // Түр тэнцүү хуваарилалтаар тооцогдсон ч «Хянасан» руу DB guard хаана.
     expect(r.rows[0].appliedRatePct).toBe(15);

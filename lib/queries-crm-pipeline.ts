@@ -8,6 +8,11 @@ import type {
   KycStatus,
   CrmRole,
 } from "@/lib/constants-crm";
+import { gateRequirementLabel } from "@/lib/crm/gates";
+import { normalizeDealFlow, type ApprovalStatus, type OfferStatus } from "@/lib/crm/deal-flow";
+import { normalizeAutomationThresholds } from "@/lib/crm/rules";
+import { getLookups, getGateRequirements, getSettingValue } from "@/lib/queries-crm-core";
+import { getAgentOptions } from "@/lib/queries-crm-leads";
 
 /**
  * Урсгал/боломж, үйл ажиллагааны уншилтууд (U4 — F-350–362, F-300–312).
@@ -34,6 +39,8 @@ export type BoardOpp = {
   property_id: string | null;
   property_name: string | null;
   property_number: string | null;
+  next_step: string | null;
+  next_step_date: string | null;
 };
 
 export type BoardStage = {
@@ -46,6 +53,7 @@ export type BoardStage = {
   is_terminal: boolean;
   terminal_state: OppState | null;
   is_closing_direction: boolean;
+  guidance?: string | null;
 };
 
 export type BoardColumn = {
@@ -63,7 +71,7 @@ export type PipelineBoard = {
 
 const BOARD_OPP_SELECT =
   "id, stage_id, state, amount, currency, expected_close_on, aml_hold, stage_entered_at, owner_id, " +
-  "contact_id, property_id, " +
+  "contact_id, property_id, next_step, next_step_date, " +
   "owner:profiles!crm_opportunities_owner_id_fkey(full_name), " +
   "contact:crm_contacts!crm_opportunities_contact_id_fkey(display_name, kyc_public_status), " +
   "property:crm_properties!crm_opportunities_property_id_fkey(name, number)";
@@ -168,18 +176,45 @@ export async function getVisiblePipelines(): Promise<{ id: string; code: string;
   return (data ?? []) as { id: string; code: string; name: string }[];
 }
 
-// ── Боломжийн карт ────────────────────────────────────────
+/// ── Боломжийн карт ────────────────────────────────────────
 
+/** Саналын мөр (crm_get_opp_offers — листингийн карт худалдан авагч талын саналыг харна). */
 export type OfferRow = {
   id: string;
-  direction: string;
+  opportunity_id: string;
+  /** Энэ боломж дээр бүртгэгдсэн эсэх (false = ижил үл хөдлөхийн өөр боломжийнх). */
+  own: boolean;
+  direction: "offer" | "counter";
+  side: "buyer" | "seller" | null;
+  status: OfferStatus;
   amount: number;
+  asking_amount: number | null;
+  concession_pct: number | null;
   terms: Json | null;
+  payment_terms: string | null;
+  financing: string | null;
+  handover_on: string | null;
+  inclusions: string | null;
+  exclusions: string | null;
   valid_until: string | null;
+  received_at: string | null;
   relayed_at: string | null;
   position: string | null;
   obstacle: string | null;
   next_step: string | null;
+  next_step_date: string | null;
+  parent_offer_id: string | null;
+  doc_id: string | null;
+  approval_status: ApprovalStatus;
+  approval_note: string | null;
+  approved_at: string | null;
+  accepted_at: string | null;
+  acceptance_channel: string | null;
+  acceptance_note: string | null;
+  acceptance_doc_id: string | null;
+  decided_at: string | null;
+  decision_note: string | null;
+  created_by: string;
   created_by_name: string | null;
   created_at: string;
 };
@@ -202,10 +237,67 @@ export type TransitionOption = {
   requires_reason: boolean;
   allowed_roles: CrmRole[];
   gate_code: GateCode | null;
-  /** Зорилтот шатны гейтийн ДУТУУ шаардлагууд (хоосон = нээлттэй). */
+  /** Зорилтот шатны шилжих шалгуурын ДУТУУ шаардлагууд (хоосон = нээлттэй). */
   gate_missing: string[];
   is_terminal: boolean;
   terminal_state: OppState | null;
+};
+
+export type ShowingRow = {
+  id: string;
+  opportunity_id: string | null;
+  contact_id: string;
+  contact_name: string | null;
+  property_id: string;
+  property_name: string | null;
+  property_number: string | null;
+  agent_id: string;
+  agent_name: string | null;
+  scheduled_at: string;
+  duration_min: number | null;
+  meeting_point: string | null;
+  participants: string | null;
+  status: "scheduled" | "done" | "cancelled" | "no_show";
+  done_at: string | null;
+  cancel_reason: string | null;
+  match_strength: string | null;
+  match_score: number | null;
+  weak_match_reason: string | null;
+  feedback_category: string | null;
+  feedback_note: string | null;
+  feedback_at: string | null;
+  interest: string | null;
+  next_action: string | null;
+  next_step_date: string | null;
+};
+
+export type PriceAnalysisRow = {
+  id: string;
+  comparables: { address: string; price: number; area_m2?: number | null; note?: string | null }[];
+  price_min: number | null;
+  price_max: number | null;
+  recommended_price: number;
+  note: string | null;
+  created_by_name: string | null;
+  created_at: string;
+};
+
+export type MatchOption = {
+  property_id: string;
+  property_name: string;
+  property_number: string;
+  strength: string;
+  score: number;
+  suggested_at: string | null;
+  response: string | null;
+};
+
+export type OppTxnSummary = {
+  id: string;
+  number: string;
+  status: string;
+  type: string;
+  file_completeness_pct: number;
 };
 
 export type OpportunityDetail = {
@@ -214,6 +306,7 @@ export type OpportunityDetail = {
   amount: number | null;
   currency: string;
   expected_close_on: string | null;
+  expected_fee_mnt: number | null;
   aml_hold: boolean;
   stage_id: string;
   stage_entered_at: string;
@@ -222,7 +315,12 @@ export type OpportunityDetail = {
   owner_id: string;
   owner_name: string | null;
   need_profile_id: string | null;
+  need_profile: { id: string; profile_type: string; status: string; completeness_pct: number | null } | null;
   lead_id: string | null;
+  next_step: string | null;
+  next_step_date: string | null;
+  meeting_at: string | null;
+  meeting_place: string | null;
   created_at: string;
   pipeline: { id: string; code: string; name: string };
   stages: BoardStage[];
@@ -233,31 +331,142 @@ export type OpportunityDetail = {
     kyc_public_status: KycStatus;
     phone: string | null;
   };
-  property: { id: string; name: string; number: string; status: string } | null;
+  property: {
+    id: string;
+    name: string;
+    number: string;
+    status: string;
+    service_kind: string;
+    price: number | null;
+    rent_price: number | null;
+  } | null;
   lost_reason_label: string | null;
   offers: OfferRow[];
   history: StageHistoryRow[];
   transitions: TransitionOption[];
+  showings: ShowingRow[];
+  priceAnalyses: PriceAnalysisRow[];
+  matchOptions: MatchOption[];
+  transaction: OppTxnSummary | null;
 };
 
 const OPP_DETAIL_SELECT =
-  "id, state, amount, currency, expected_close_on, aml_hold, stage_id, stage_entered_at, " +
+  "id, state, amount, currency, expected_close_on, expected_fee_mnt, aml_hold, stage_id, stage_entered_at, " +
   "lost_reason_id, lost_note, owner_id, need_profile_id, lead_id, created_at, pipeline_id, " +
+  "next_step, next_step_date, meeting_at, meeting_place, contact_id, property_id, " +
   "owner:profiles!crm_opportunities_owner_id_fkey(full_name), " +
   "lost_reason:crm_lookups!crm_opportunities_lost_reason_id_fkey(label), " +
+  "need_profile:crm_need_profiles!crm_opportunities_need_profile_id_fkey(id, profile_type, status, completeness_pct), " +
   "pipeline:crm_pipelines!crm_opportunities_pipeline_id_fkey(id, code, name, " +
-  "stages:crm_stages(id, code, name, sort_order, probability, gate_code, is_terminal, terminal_state, is_closing_direction)), " +
+  "stages:crm_stages(id, code, name, sort_order, probability, gate_code, is_terminal, terminal_state, is_closing_direction, guidance)), " +
   "contact:crm_contacts!crm_opportunities_contact_id_fkey(id, display_name, number, kyc_public_status, " +
   "phones:crm_contact_phones(raw, is_primary)), " +
-  "property:crm_properties!crm_opportunities_property_id_fkey(id, name, number, status)";
+  "property:crm_properties!crm_opportunities_property_id_fkey(id, name, number, status, service_kind, price, rent_price)";
+
+const SHOWING_SELECT =
+  "id, opportunity_id, contact_id, property_id, agent_id, scheduled_at, duration_min, meeting_point, participants, " +
+  "status, done_at, cancel_reason, match_strength, match_score, weak_match_reason, feedback_category, feedback_note, " +
+  "feedback_at, interest, next_action, next_step_date, " +
+  "contact:crm_contacts!crm_showings_contact_id_fkey(display_name), " +
+  "property:crm_properties!crm_showings_property_id_fkey(name, number), " +
+  "agent:profiles!crm_showings_agent_id_fkey(full_name)";
+
+type RawShowingRow = Omit<ShowingRow, "contact_name" | "property_name" | "property_number" | "agent_name"> & {
+  contact: { display_name: string } | null;
+  property: { name: string; number: string } | null;
+  agent: { full_name: string | null } | null;
+};
+
+function toShowingRow({ contact, property, agent, ...r }: RawShowingRow): ShowingRow {
+  return {
+    ...r,
+    contact_name: contact?.display_name ?? null,
+    property_name: property?.name ?? null,
+    property_number: property?.number ?? null,
+    agent_name: agent?.full_name ?? null,
+  };
+}
+
+type ServerClient = Awaited<ReturnType<typeof createClient>>;
+
+/** Боломжийн шилжилтийн сонголтууд + зорилтот шат бүрийн дутуу шаардлага (DB эх үнэн). */
+async function loadTransitions(
+  supabase: ServerClient,
+  oppId: string,
+  stageId: string,
+  stages: BoardStage[],
+  isOpen: boolean
+): Promise<TransitionOption[]> {
+  const { data } = await supabase
+    .from("crm_stage_transitions")
+    .select("to_stage_id, kind, requires_reason, allowed_roles")
+    .eq("from_stage_id", stageId);
+  type RawTr = { to_stage_id: string; kind: string; requires_reason: boolean; allowed_roles: CrmRole[] };
+  const stageById = new Map(stages.map((s) => [s.id, s]));
+  const out: TransitionOption[] = [];
+  for (const tr of (data ?? []) as unknown as RawTr[]) {
+    const target = stageById.get(tr.to_stage_id);
+    if (!target) continue;
+    let gateMissing: string[] = [];
+    if (target.gate_code && isOpen) {
+      const { data: missing, error: gateErr } = await supabase.rpc("crm_check_gate", {
+        p_opportunity: oppId,
+        p_gate: target.gate_code,
+      });
+      if (gateErr) {
+        console.error("loadTransitions gate:", gateErr.message);
+        gateMissing = ["Шалгуурыг шалгаж чадсангүй — хуудсыг шинэчилнэ үү"];
+      } else {
+        gateMissing = (missing ?? []) as string[];
+      }
+    }
+    out.push({
+      to_stage_id: tr.to_stage_id,
+      to_stage_name: target.name,
+      to_stage_code: target.code,
+      kind: tr.kind,
+      requires_reason: tr.requires_reason,
+      allowed_roles: tr.allowed_roles,
+      gate_code: target.gate_code,
+      gate_missing: gateMissing,
+      is_terminal: target.is_terminal,
+      terminal_state: target.terminal_state,
+    });
+  }
+  out.sort((a, b) => (stageById.get(a.to_stage_id)?.sort_order ?? 0) - (stageById.get(b.to_stage_id)?.sort_order ?? 0));
+  return out;
+}
+
+/** Канбанаас «Шат солих» — нэг боломжийн шилжилтийн сонголт (сервер action-аас дуудна). */
+export async function getOpportunityTransitions(
+  id: string
+): Promise<{ stageId: string; transitions: TransitionOption[] } | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("crm_opportunities")
+    .select(
+      "id, state, stage_id, pipeline:crm_pipelines!crm_opportunities_pipeline_id_fkey(" +
+        "stages:crm_stages(id, code, name, sort_order, probability, gate_code, is_terminal, terminal_state, is_closing_direction))"
+    )
+    .eq("id", id)
+    .maybeSingle();
+  if (!data) return null;
+  const raw = data as unknown as {
+    id: string;
+    state: OppState;
+    stage_id: string;
+    pipeline: { stages: BoardStage[] } | null;
+  };
+  const stages = raw.pipeline?.stages ?? [];
+  return {
+    stageId: raw.stage_id,
+    transitions: await loadTransitions(supabase, id, raw.stage_id, stages, raw.state === "open"),
+  };
+}
 
 export async function getOpportunity(id: string): Promise<OpportunityDetail | null> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("crm_opportunities")
-    .select(OPP_DETAIL_SELECT)
-    .eq("id", id)
-    .maybeSingle();
+  const { data, error } = await supabase.from("crm_opportunities").select(OPP_DETAIL_SELECT).eq("id", id).maybeSingle();
   if (error) {
     console.error("getOpportunity:", error.message);
     return null;
@@ -270,6 +479,7 @@ export async function getOpportunity(id: string): Promise<OpportunityDetail | nu
     amount: number | null;
     currency: string;
     expected_close_on: string | null;
+    expected_fee_mnt: number | null;
     aml_hold: boolean;
     stage_id: string;
     stage_entered_at: string;
@@ -280,8 +490,15 @@ export async function getOpportunity(id: string): Promise<OpportunityDetail | nu
     lead_id: string | null;
     created_at: string;
     pipeline_id: string;
+    next_step: string | null;
+    next_step_date: string | null;
+    meeting_at: string | null;
+    meeting_place: string | null;
+    contact_id: string;
+    property_id: string | null;
     owner: { full_name: string | null } | null;
     lost_reason: { label: string } | null;
+    need_profile: OpportunityDetail["need_profile"];
     pipeline: { id: string; code: string; name: string; stages: BoardStage[] } | null;
     contact: {
       id: string;
@@ -290,22 +507,27 @@ export async function getOpportunity(id: string): Promise<OpportunityDetail | nu
       kyc_public_status: KycStatus;
       phones: { raw: string; is_primary: boolean }[];
     } | null;
-    property: { id: string; name: string; number: string; status: string } | null;
+    property: OpportunityDetail["property"];
   };
   const raw = data as unknown as Raw;
   if (!raw.pipeline || !raw.contact) return null;
   const stages = [...raw.pipeline.stages].sort((a, b) => a.sort_order - b.sort_order);
+  const isListing = raw.pipeline.code === "PL-2";
 
-  // Санал, түүх, шилжилтүүд зэрэгцээ.
-  const [offersRes, historyRes, trsRes] = await Promise.all([
-    supabase
-      .from("crm_offers")
-      .select(
-        "id, direction, amount, terms, valid_until, relayed_at, position, obstacle, next_step, created_at, " +
-          "author:profiles!crm_offers_created_by_fkey(full_name)"
-      )
-      .eq("opportunity_id", id)
-      .order("created_at", { ascending: false }),
+  // Листинг: тухайн үл хөдлөх дээрх бүх үзлэг; худалдан авагч: өөрийн үзлэг.
+  let showingsQuery = supabase.from("crm_showings").select(SHOWING_SELECT);
+  if (isListing) {
+    showingsQuery = raw.property_id
+      ? showingsQuery.eq("property_id", raw.property_id)
+      : showingsQuery.eq("opportunity_id", id);
+  } else {
+    showingsQuery = showingsQuery.or(
+      `opportunity_id.eq.${id},and(opportunity_id.is.null,contact_id.eq.${raw.contact_id})`
+    );
+  }
+
+  const [offersRes, historyRes, transitions, showingsRes, analysesRes, txnRes] = await Promise.all([
+    supabase.rpc("crm_get_opp_offers", { p_opp: id }),
     supabase
       .from("crm_stage_history")
       .select(
@@ -316,16 +538,32 @@ export async function getOpportunity(id: string): Promise<OpportunityDetail | nu
       )
       .eq("opportunity_id", id)
       .order("entered_at", { ascending: false }),
+    loadTransitions(supabase, id, raw.stage_id, stages, raw.state === "open"),
+    showingsQuery.order("scheduled_at", { ascending: false }).limit(50),
     supabase
-      .from("crm_stage_transitions")
-      .select("to_stage_id, kind, requires_reason, allowed_roles")
-      .eq("from_stage_id", raw.stage_id),
+      .from("crm_price_analyses")
+      .select(
+        "id, comparables, price_min, price_max, recommended_price, note, created_at, " +
+          "author:profiles!crm_price_analyses_created_by_fkey(full_name)"
+      )
+      .eq("opportunity_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("crm_transactions")
+      .select("id, number, status, type, file_completeness_pct")
+      .eq("opportunity_id", id)
+      .neq("status", "cancelled")
+      .order("created_at", { ascending: false })
+      .limit(1),
   ]);
+  if (offersRes.error) console.error("getOpportunity offers:", offersRes.error.message);
+  if (showingsRes.error) console.error("getOpportunity showings:", showingsRes.error.message);
 
-  type RawOffer = Omit<OfferRow, "created_by_name"> & { author: { full_name: string | null } | null };
-  const offers = ((offersRes.data ?? []) as unknown as RawOffer[]).map(({ author, ...o }) => ({
+  const offers = ((offersRes.data ?? []) as unknown as OfferRow[]).map((o) => ({
     ...o,
-    created_by_name: author?.full_name ?? null,
+    amount: Number(o.amount),
+    asking_amount: o.asking_amount != null ? Number(o.asking_amount) : null,
+    concession_pct: o.concession_pct != null ? Number(o.concession_pct) : null,
   }));
 
   type RawHist = {
@@ -347,49 +585,50 @@ export async function getOpportunity(id: string): Promise<OpportunityDetail | nu
     left_at: h.left_at,
   }));
 
-  type RawTr = { to_stage_id: string; kind: string; requires_reason: boolean; allowed_roles: CrmRole[] };
-  const rawTrs = (trsRes.data ?? []) as unknown as RawTr[];
-  const stageById = new Map(stages.map((s) => [s.id, s]));
+  type RawAnalysis = Omit<PriceAnalysisRow, "created_by_name"> & { author: { full_name: string | null } | null };
+  const priceAnalyses = ((analysesRes.data ?? []) as unknown as RawAnalysis[]).map(({ author, ...a }) => ({
+    ...a,
+    comparables: Array.isArray(a.comparables) ? a.comparables : [],
+    created_by_name: author?.full_name ?? null,
+  }));
 
-  // Зорилтот шат гейттэй бол дутуу жагсаалтыг DB-ийн эх үнэнээс (crm_check_gate).
-  const transitions: TransitionOption[] = [];
-  for (const tr of rawTrs) {
-    const target = stageById.get(tr.to_stage_id);
-    if (!target) continue;
-    let gateMissing: string[] = [];
-    if (target.gate_code && raw.state === "open") {
-      const { data: missing, error: gateErr } = await supabase.rpc("crm_check_gate", {
-        p_opportunity: id,
-        p_gate: target.gate_code,
-      });
-      if (gateErr) {
-        console.error("getOpportunity gate:", gateErr.message);
-        gateMissing = ["Гейт шалгалт амжилтгүй"];
-      } else {
-        gateMissing = (missing ?? []) as string[];
-      }
+  // Үзлэгийн өмнөх тохирол: хэрэгцээний профайлын тохируулгын мөрүүд.
+  let matchOptions: MatchOption[] = [];
+  if (!isListing) {
+    let profileIds: string[] = raw.need_profile_id ? [raw.need_profile_id] : [];
+    if (!profileIds.length) {
+      const { data: nps } = await supabase
+        .from("crm_need_profiles")
+        .select("id")
+        .eq("contact_id", raw.contact_id)
+        .eq("status", "active");
+      profileIds = (nps ?? []).map((n) => n.id);
     }
-    transitions.push({
-      to_stage_id: tr.to_stage_id,
-      to_stage_name: target.name,
-      to_stage_code: target.code,
-      kind: tr.kind,
-      requires_reason: tr.requires_reason,
-      allowed_roles: tr.allowed_roles,
-      gate_code: target.gate_code,
-      gate_missing: gateMissing,
-      is_terminal: target.is_terminal,
-      terminal_state: target.terminal_state,
-    });
+    if (profileIds.length) {
+      const { data: ms } = await supabase
+        .from("crm_matches")
+        .select(
+          "property_id, strength, score, suggested_at, response, " +
+            "property:crm_properties!crm_matches_property_id_fkey(name, number)"
+        )
+        .in("need_profile_id", profileIds)
+        .order("score", { ascending: false })
+        .limit(20);
+      type RawMatch = Omit<MatchOption, "property_name" | "property_number"> & {
+        property: { name: string; number: string } | null;
+      };
+      matchOptions = ((ms ?? []) as unknown as RawMatch[]).map(({ property, ...m }) => ({
+        ...m,
+        score: Number(m.score),
+        property_name: property?.name ?? "?",
+        property_number: property?.number ?? "",
+      }));
+    }
   }
-  transitions.sort((a, b) => {
-    const sa = stageById.get(a.to_stage_id)?.sort_order ?? 0;
-    const sb = stageById.get(b.to_stage_id)?.sort_order ?? 0;
-    return sa - sb;
-  });
 
   const phones = raw.contact.phones ?? [];
   const primary = phones.find((p) => p.is_primary) ?? phones[0];
+  const txn = ((txnRes.data ?? []) as unknown as OppTxnSummary[])[0] ?? null;
 
   return {
     id: raw.id,
@@ -397,6 +636,7 @@ export async function getOpportunity(id: string): Promise<OpportunityDetail | nu
     amount: raw.amount,
     currency: raw.currency,
     expected_close_on: raw.expected_close_on,
+    expected_fee_mnt: raw.expected_fee_mnt,
     aml_hold: raw.aml_hold,
     stage_id: raw.stage_id,
     stage_entered_at: raw.stage_entered_at,
@@ -405,7 +645,12 @@ export async function getOpportunity(id: string): Promise<OpportunityDetail | nu
     owner_id: raw.owner_id,
     owner_name: raw.owner?.full_name ?? null,
     need_profile_id: raw.need_profile_id,
+    need_profile: raw.need_profile,
     lead_id: raw.lead_id,
+    next_step: raw.next_step,
+    next_step_date: raw.next_step_date,
+    meeting_at: raw.meeting_at,
+    meeting_place: raw.meeting_place,
     created_at: raw.created_at,
     pipeline: { id: raw.pipeline.id, code: raw.pipeline.code, name: raw.pipeline.name },
     stages,
@@ -421,7 +666,130 @@ export async function getOpportunity(id: string): Promise<OpportunityDetail | nu
     offers,
     history,
     transitions,
+    showings: ((showingsRes.data ?? []) as unknown as RawShowingRow[]).map(toShowingRow),
+    priceAnalyses,
+    matchOptions,
+    transaction: txn,
   };
+}
+
+/** Гейт код → идэвхтэй шаардлагуудын дэлгэцийн шошго (DB-ийн дутуу жагсаалттай ижил). */
+export function buildGateLabels(
+  reqs: { gate_code: GateCode; pipeline_id: string | null; checker_kind: string; params: unknown; is_active: boolean }[],
+  pipelineId: string
+): Partial<Record<GateCode, string[]>> {
+  const out: Partial<Record<GateCode, string[]>> = {};
+  for (const r of reqs) {
+    if (!r.is_active) continue;
+    if (r.pipeline_id && r.pipeline_id !== pipelineId) continue;
+    const params = r.params && typeof r.params === "object" ? (r.params as Record<string, unknown>) : null;
+    const label = gateRequirementLabel(r.checker_kind, params);
+    const list = (out[r.gate_code] ??= []);
+    if (!list.includes(label)) list.push(label);
+  }
+  return out;
+}
+
+// ── Боломж үүсгэх модалын сонголтууд ─────────────────────
+
+export type DealSourceOption = {
+  kind: "lead" | "contact";
+  id: string;
+  contact_id: string;
+  label: string;
+  sub: string | null;
+};
+
+function cleanTerm(q: string): string {
+  return q.trim().replace(/[%,()*]/g, " ").trim();
+}
+
+/** Нээлттэй сэжим болон харилцагчаас хайх (RLS эрхийн хүрээнд). */
+export async function searchDealSources(q: string): Promise<DealSourceOption[]> {
+  const supabase = await createClient();
+  const term = cleanTerm(q);
+  let contactsQ = supabase.from("crm_contacts").select("id, display_name, number").order("display_name").limit(15);
+  if (term) contactsQ = contactsQ.or(`display_name.ilike.%${term}%,number.ilike.%${term}%`);
+  const [leadsRes, contactsRes] = await Promise.all([
+    supabase
+      .from("crm_leads")
+      .select("id, contact_id, status, created_at, contact:crm_contacts!crm_leads_contact_id_fkey(display_name, number)")
+      .in("status", ["new", "active"])
+      .order("created_at", { ascending: false })
+      .limit(term ? 200 : 15),
+    contactsQ,
+  ]);
+  type RawLead = {
+    id: string;
+    contact_id: string;
+    status: string;
+    created_at: string;
+    contact: { display_name: string; number: string } | null;
+  };
+  const lower = term.toLowerCase();
+  const leads = ((leadsRes.data ?? []) as unknown as RawLead[])
+    .filter(
+      (l) =>
+        !lower ||
+        (l.contact?.display_name ?? "").toLowerCase().includes(lower) ||
+        (l.contact?.number ?? "").toLowerCase().includes(lower)
+    )
+    .slice(0, 15)
+    .map<DealSourceOption>((l) => ({
+      kind: "lead",
+      id: l.id,
+      contact_id: l.contact_id,
+      label: l.contact?.display_name ?? "?",
+      sub: l.status === "new" ? "Шинэ сэжим" : "Идэвхтэй сэжим",
+    }));
+  const contacts = ((contactsRes.data ?? []) as { id: string; display_name: string; number: string }[]).map<DealSourceOption>(
+    (c) => ({ kind: "contact", id: c.id, contact_id: c.id, label: c.display_name, sub: c.number })
+  );
+  return [...leads, ...contacts];
+}
+
+export type PropertyOption = {
+  id: string;
+  number: string;
+  name: string;
+  status: string;
+  service_kind: string;
+  price: number | null;
+  rent_price: number | null;
+};
+
+export async function searchPropertyOptions(q: string): Promise<PropertyOption[]> {
+  const supabase = await createClient();
+  const term = cleanTerm(q);
+  let query = supabase
+    .from("crm_properties")
+    .select("id, number, name, status, service_kind, price, rent_price")
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (term) query = query.or(`name.ilike.%${term}%,number.ilike.%${term}%`);
+  const { data, error } = await query;
+  if (error) console.error("searchPropertyOptions:", error.message);
+  return (data ?? []) as unknown as PropertyOption[];
+}
+
+export type NeedProfileOption = {
+  id: string;
+  profile_type: string;
+  status: string;
+  completeness_pct: number | null;
+  budget_max: number | null;
+};
+
+export async function getContactNeedProfiles(contactId: string): Promise<NeedProfileOption[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("crm_need_profiles")
+    .select("id, profile_type, status, completeness_pct, budget_max")
+    .eq("contact_id", contactId)
+    .in("status", ["active", "paused"])
+    .order("created_at", { ascending: false });
+  if (error) console.error("getContactNeedProfiles:", error.message);
+  return (data ?? []) as unknown as NeedProfileOption[];
 }
 
 /** Шатны түүх дангаар (F-357 — тайлангийн хэрэглээ). */
@@ -680,5 +1048,31 @@ export async function getAgentDayboard(): Promise<AgentDayboard | null> {
     pendingFeedback,
     openOppCount: opps.length,
     weightedForecast,
+  };
+}
+
+// ── Боломжийн картын хуудасны өгөгдөл (агент, оффисын хоёр панель) ──
+
+export async function getOpportunityPageData(id: string) {
+  const opp = await getOpportunity(id);
+  if (!opp) return null;
+  const [activities, lostReasons, objections, agents, gateReqs, dealFlowRaw, thresholdsRaw] = await Promise.all([
+    getActivityTimeline({ opportunityId: id }),
+    getLookups("lost_reason"),
+    getLookups("objection"),
+    getAgentOptions(),
+    getGateRequirements(),
+    getSettingValue("deal_flow"),
+    getSettingValue("automation_thresholds"),
+  ]);
+  return {
+    opp,
+    activities,
+    lostReasons,
+    objections,
+    agents,
+    gateLabels: buildGateLabels(gateReqs, opp.pipeline.id),
+    dealFlow: normalizeDealFlow(dealFlowRaw),
+    feedbackHours: normalizeAutomationThresholds(thresholdsRaw).showing_feedback_hours,
   };
 }

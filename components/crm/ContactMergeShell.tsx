@@ -1,24 +1,26 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeftRight, GitMerge } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, GitMerge } from "lucide-react";
 
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
 import { BackLink } from "@/components/ui/back-link";
-import { mergeContacts } from "@/lib/actions/crm-leads";
+import { mergeContactsChecked, mergePreflight } from "@/lib/actions/crm-ownership";
+import { toast } from "@/components/ui/toast";
 import { fmtDate, fmtDateTime } from "@/lib/format";
 import type { ContactDetail } from "@/lib/queries-crm-contacts";
 import { CONSENT_STATUS_LABEL, type ConsentStatus } from "@/lib/constants-crm";
 import { MERGE_FIELDS, MERGE_FIELD_LABEL, type MergeField } from "@/lib/validation/crm";
 
 /**
- * Merge дэлгэц (F-108/109) — зөвхөн ops_qc (сервер талд давхар шалгагдана).
- * Талбар тус бүрээр аль утга үлдэхийг сонгоно; холбоотой БҮХ бичлэг автоматаар
- * үндсэн бүртгэл рүү шилжинэ; устгагдах тал soft-archive, түүх устгагдахгүй.
+ * Бүртгэл нэгтгэх (§6.26, §6.29.1) — зөвхөн Үйл ажиллагаа-ЧМТ (сервер, DB
+ * давхар шалгана). Талбар тус бүрээр аль утга үлдэхийг сонгоно; холбоотой бүх
+ * бичлэг үндсэн бүртгэл рүү шилжинэ; хоёр талд өөр агентын нээлттэй сэжим бол
+ * эхлээд эзэмшлийн маргааныг шийднэ.
  */
 export function ContactMergeShell({
   a,
@@ -43,6 +45,17 @@ export function ContactMergeShell({
 
   const [choices, setChoices] = useState<Partial<Record<MergeField, "primary" | "merged">>>({});
   const [amlNote, setAmlNote] = useState("");
+  const [preflight, setPreflight] = useState<{ warnings: string[]; blocking: string | null } | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    mergePreflight(primary.id, merged.id).then((res) => {
+      if (alive) setPreflight({ warnings: res.warnings ?? [], blocking: res.blocking ?? res.error ?? null });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [primary.id, merged.id]);
 
   function fieldValue(c: ContactDetail, f: MergeField): string {
     switch (f) {
@@ -68,7 +81,7 @@ export function ContactMergeShell({
   function submit() {
     setError(null);
     startTransition(async () => {
-      const res = await mergeContacts({
+      const res = await mergeContactsChecked({
         primaryId: primary.id,
         mergedId: merged.id,
         choices: choices as Record<string, "primary" | "merged">,
@@ -78,6 +91,7 @@ export function ContactMergeShell({
         setError(res.error ?? "Нэгтгэхэд алдаа гарлаа.");
         return;
       }
+      toast.success("Бүртгэлүүд нэгтгэгдлээ");
       router.push(`${basePath}/contacts/${primary.id}`);
       router.refresh();
     });
@@ -89,7 +103,7 @@ export function ContactMergeShell({
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-extrabold text-ink">Бүртгэл нэгтгэх (F-108)</h1>
+          <h1 className="text-2xl font-extrabold text-ink">Бүртгэл нэгтгэх</h1>
           <p className="text-sm text-muted">
             Холбоотой бүх бичлэг (сэжим, профайл, боломж, хэлцэл, баримт…) үндсэн бүртгэл рүү автоматаар шилжинэ;
             устгагдах талын түүх сэргээгдэхүйц архивлагдана.
@@ -99,15 +113,26 @@ export function ContactMergeShell({
           <Button size="sm" variant="outline" onClick={() => setSwapped((v) => !v)}>
             <ArrowLeftRight className="size-4" /> Үндсэнийг солих
           </Button>
-          <Button size="sm" onClick={submit} disabled={pending}>
+          <Button size="sm" onClick={submit} disabled={pending || !!preflight?.blocking}>
             <GitMerge className="size-4" /> {pending ? "Нэгтгэж байна…" : "Нэгтгэх"}
           </Button>
         </div>
       </div>
 
       {error ? (
-        <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
+        <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
       ) : null}
+      {preflight?.blocking ? (
+        <p className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          {preflight.blocking}
+        </p>
+      ) : null}
+      {preflight?.warnings.map((w) => (
+        <p key={w} className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {w}
+        </p>
+      ))}
 
       <Card>
         <CardBody className="p-0">
@@ -179,7 +204,7 @@ export function ContactMergeShell({
         </CardBody>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardBody>
             <h3 className="text-sm font-bold text-ink">Автоматаар нэгдэх зүйлс</h3>
@@ -190,7 +215,7 @@ export function ContactMergeShell({
               <li>Сэжим, профайл, боломж, хэлцэл, түрээс, баримт — бүгд үндсэн рүү</li>
               <li>
                 Анхны бүртгэсэн огноо ({fmtDate(primary.created_at <= merged.created_at ? primary.created_at : merged.created_at)})
-                + эх сурвалж merge түүхэд хадгалагдана (F-109)
+                + эх сурвалж нэгтгэлийн түүхэд хадгалагдана (эзэмшлийн нотолгоо)
               </li>
             </ul>
           </CardBody>
@@ -199,8 +224,8 @@ export function ContactMergeShell({
           <CardBody>
             <h3 className="text-sm font-bold text-ink">МУТСТ-ийн зөвшөөрөл (нөхцөлт)</h3>
             <p className="mt-1 text-xs text-muted">
-              Аль нэг бүртгэл нээлттэй МУТСТ кейстэй бол МУТСТ-ийн ажилтны зөвшөөрлийн тэмдэглэл заавал (F-109);
-              хоёулаа идэвхтэй гэрээтэй бол систем нэгтгэхээс татгалзана.
+              Аль нэг бүртгэл нээлттэй МУТСТ кейстэй бол МУТСТ-ийн ажилтны зөвшөөрлийн тэмдэглэл заавал; хоёулаа идэвхтэй
+              гэрээтэй бол систем нэгтгэхгүй. Түрээсийн гэрээтэй бүртгэлийг үндсэн болгоно.
             </p>
             <Field label="Зөвшөөрлийн тэмдэглэл">
               <Input value={amlNote} onChange={(e) => setAmlNote(e.target.value)} placeholder="МУТСТ-ийн ажилтны нэр, огноо" />

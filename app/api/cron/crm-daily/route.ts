@@ -9,12 +9,30 @@ import {
   conditionParam,
   logRuleRun,
   hasRuleRun,
+  normalizeAutomationThresholds,
+  leadProtectionState,
+  isHotLeadInactive,
+  showingFeedbackState,
+  isOfferExpiring,
+  isOfferFollowupDue,
+  isoDaysBetween,
   type AdminClient,
   type AutomationRule,
+  type AutomationThresholds,
 } from "@/lib/crm/rules";
+import {
+  computeLeadScore,
+  normalizeScoreFactors,
+  normalizeScoreWeights,
+  recontactDays,
+  DEFAULT_RECONTACT_RANGES,
+  type NeedProfileSnapshot,
+  type RecontactRanges,
+} from "@/lib/crm/scoring";
+import { toIsoDate } from "@/lib/crm/calendar";
 import { notifyCrm, deliverDeferredNotifications, escalateUnreadNotifications } from "@/lib/crm/notify";
 import { arrearsStepFor, missingEscalationSteps, isPreReminderDue, type ArrearsLadder } from "@/lib/crm/arrears";
-import type { Json } from "@/types/database";
+import type { Database, Json } from "@/types/database";
 import type { CrmRole, LeadGrade } from "@/lib/constants-crm";
 
 /**
@@ -41,8 +59,57 @@ export const maxDuration = 300;
 
 const DAY_MS = 86400000;
 
+/** Өнөөдөр — Улаанбаатарын огноогоор. */
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return toIsoDate(new Date());
+}
+
+/** Үнийн санал, хэлэлцээрийн шатны кодууд (§6.13/§6.14, U1 шатны буулгалт). */
+const OFFER_STAGE_CODES = ["offer", "negotiation"];
+
+type NeedProfileRow = Database["public"]["Tables"]["crm_need_profiles"]["Row"];
+
+function jsonArr(v: Json | null | undefined): unknown[] {
+  return Array.isArray(v) ? (v as unknown[]) : [];
+}
+
+/** crm_need_profiles мөр → онооны профайлын агшин зураг (§6.6/§6.7). */
+function profileSnapshot(p: NeedProfileRow): NeedProfileSnapshot {
+  return {
+    goalId: p.goal_id,
+    locations: jsonArr(p.locations),
+    propertyTypes: p.property_types,
+    budgetMin: p.budget_min,
+    budgetMax: p.budget_max,
+    budgetTarget: p.budget_target,
+    financing: p.financing,
+    roomsMin: p.rooms_min,
+    areaMin: p.area_min,
+    timeline: p.timeline,
+    moveInDate: p.move_in_date,
+    profileType: p.profile_type,
+    mustHaves: jsonArr(p.must_haves),
+    niceToHaves: jsonArr(p.nice_to_haves),
+    dealBreakers: jsonArr(p.deal_breakers),
+    decisionMaker: p.decision_maker,
+    decisionMakerId: p.decision_maker_id,
+    decisionMakerInvolved: p.decision_maker_involved,
+    blocker: p.blocker,
+    blockerId: p.blocker_id,
+  };
+}
+
+/** crm_settings 'recontact_ranges' → ангилал бүрд бүрэн муж (дутуу бол анхдагч). */
+function recontactRangesOf(raw: unknown): RecontactRanges {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Partial<RecontactRanges>;
+  const out = { ...DEFAULT_RECONTACT_RANGES };
+  for (const g of ["a", "b", "c", "d"] as const) {
+    const v = r[g];
+    if (v && typeof v.min_days === "number" && typeof v.max_days === "number" && typeof v.default_days === "number") {
+      out[g] = v;
+    }
+  }
+  return out;
 }
 
 function addDaysIso(iso: string, days: number): string {
@@ -78,6 +145,13 @@ function roleProfiles(idx: StaffIndex, officeId: string, roles: CrmRole[]): stri
   return (idx.get(officeId) ?? [])
     .filter((s) => s.roles.some((r) => (roles as string[]).includes(r)))
     .map((s) => s.profile_id);
+}
+
+function teamLeadsOf(idx: StaffIndex, officeId: string, profileId: string | null): string[] {
+  const staff = idx.get(officeId) ?? [];
+  const team = staff.find((s) => s.profile_id === profileId)?.team_id;
+  if (!team) return [];
+  return staff.filter((s) => s.team_id === team && s.roles.includes("team_lead")).map((s) => s.profile_id);
 }
 
 /** Тохиргооны одоогийн утга — оффис бүрд кэштэй. */
@@ -157,6 +231,14 @@ export async function GET(request: Request) {
   const offices = await listCrmOffices(admin);
   const staffIdx = await loadStaffIndex(admin);
   const officeSetting = makeSettingReader(admin);
+  const thresholdCache = new Map<string, AutomationThresholds>();
+  const thresholdsOf = async (officeId: string): Promise<AutomationThresholds> => {
+    const hit = thresholdCache.get(officeId);
+    if (hit) return hit;
+    const th = normalizeAutomationThresholds(await officeSetting<unknown>(officeId, "automation_thresholds"));
+    thresholdCache.set(officeId, th);
+    return th;
+  };
 
   const gate: Gate = (officeId, code) => {
     const rule = ruleMap.get(`${officeId}:${code}`) ?? null;
@@ -176,6 +258,13 @@ export async function GET(request: Request) {
     d28Suggested: 0,
     d29Alerts: 0,
     unprotectedMarked: 0,
+    protectionWarned: 0,
+    hotLeadInactive: 0,
+    nextStepOverdue: 0,
+    offerFollowups: 0,
+    offersExpiring: 0,
+    showingFeedbackOverdue: 0,
+    showingFeedbackEscalated: 0,
     goldenRuleViolations: 0,
     f205Tasks: 0,
     f512Tasks: 0,
@@ -220,8 +309,8 @@ export async function GET(request: Request) {
         await createTask(admin, {
           officeId: inv.office_id,
           responsibleId: responsible,
-          title: `Төлбөрийн урьдчилсан сануулга — ${inv.number} (Д-15)`,
-          description: `Нэхэмжлэх ${inv.number} (${Number(inv.amount).toLocaleString()}₮) ${inv.due_on}-нд төлөгдөнө — түрээслэгчид сануулна уу. Гадаад SMS/и-мэйл: INT- интеграцгүй тул дотоод даалгавар (F-654).`,
+          title: `Төлбөрийн урьдчилсан сануулга — ${inv.number}`,
+          description: `Нэхэмжлэх ${inv.number} (${Number(inv.amount).toLocaleString()}₮) ${inv.due_on}-нд төлөгдөнө — түрээслэгчид сануулна уу.`,
           entity: "invoice",
           entityId: inv.id,
           ruleCode: "D-15",
@@ -311,8 +400,8 @@ export async function GET(request: Request) {
           taskId = await createTask(admin, {
             officeId: inv.office_id,
             responsibleId: responsible,
-            title: `Хоцролт — ${step.step}-р шат: ${inv.number} (Д-16)`,
-            description: `Нэхэмжлэх ${inv.number} (${Number(inv.amount).toLocaleString()}₮, төлөх өдөр ${inv.due_on}) хоцорсон — шатлалын ${step.step}-р шатны арга хэмжээ (F-535).`,
+            title: `Хоцролт — ${step.step}-р шат: ${inv.number}`,
+            description: `Нэхэмжлэх ${inv.number} (${Number(inv.amount).toLocaleString()}₮, төлөх өдөр ${inv.due_on}) хоцорсон — шатлалын ${step.step}-р шатны арга хэмжээ.`,
             priority: "high",
             deadlineMs: DAY_MS,
             entity: "invoice",
@@ -373,7 +462,7 @@ export async function GET(request: Request) {
           await createTask(admin, {
             officeId: lease.office_id,
             responsibleId: pm,
-            title: `Сунгалтын бэлтгэл — ${lease.number} (Д-17)`,
+            title: `Сунгалтын бэлтгэл — ${lease.number}`,
             description: `Гэрээ ${lease.end_on}-нд дуусна (${daysLeft} хоног). Түрээсийн түүх, төлбөрийн байдал, шинэ нөхцөлийн санал бэлтгэнэ.`,
             deadlineMs: 7 * DAY_MS,
             entity: "lease",
@@ -400,8 +489,8 @@ export async function GET(request: Request) {
         await createTask(admin, {
           officeId: lease.office_id,
           responsibleId: lease.created_by,
-          title: `Сунгалтын хэлэлцээр — ${lease.number} (Д-18)`,
-          description: `Гэрээ ${lease.end_on}-нд дуусна (${daysLeft} хоног) — сунгалт шийдэгдээгүй. Түрээслэгч/өмчлөгчтэй хэлэлцээр хийнэ (өмчлөгчид мэдэгдэх гадаад суваг INT- заглушка).`,
+          title: `Сунгалтын хэлэлцээр — ${lease.number}`,
+          description: `Гэрээ ${lease.end_on}-нд дуусна (${daysLeft} хоног) — сунгалт шийдэгдээгүй. Түрээслэгч/өмчлөгчтэй хэлэлцээр хийнэ.`,
           priority: "high",
           deadlineMs: 5 * DAY_MS,
           entity: "lease",
@@ -457,7 +546,7 @@ export async function GET(request: Request) {
           recipients: [],
           includeRoles: ["property_manager"],
           title: "Сарын бүртгэл дутуу",
-          body: `Энэ сард ${agg.cur} объектын сарын менежментийн бүртгэл дутуу байна (Д-21).`,
+          body: `Энэ сард ${agg.cur} объектын сарын менежментийн бүртгэл дутуу байна.`,
           link: "/office/crm/rentals/monthly",
           admin,
           now,
@@ -472,7 +561,7 @@ export async function GET(request: Request) {
           recipients: [],
           includeRoles: ["property_manager", "ops_qc"],
           title: "Өнгөрсөн сарын бүртгэл дутуу",
-          body: `Өнгөрсөн сарын ${agg.prev} бүртгэл 100% болоогүй — PM тооцоо хойшилно (F-559).`,
+          body: `Өнгөрсөн сарын ${agg.prev} бүртгэл 100% болоогүй — PM тооцоо хойшилно.`,
           link: `/office/crm/rentals/monthly?month=${prevMonth.slice(0, 7)}`,
           admin,
           now,
@@ -500,8 +589,8 @@ export async function GET(request: Request) {
       await createTask(admin, {
         officeId: lease.office_id,
         responsibleId: pm,
-        title: `Гарах үзлэг + барьцааны тооцоо — ${lease.number} (Д-23)`,
-        description: `Гэрээ дуусгавар болсон — move-out үзлэг, суутгалын задаргаа (F-541–544), барьцаа буцаалт хийнэ (${Number(lease.deposit_amount).toLocaleString()}₮).`,
+        title: `Гарах үзлэг + барьцааны тооцоо — ${lease.number}`,
+        description: `Гэрээ дуусгавар болсон — move-out үзлэг, суутгалын задаргаа, барьцаа буцаалт хийнэ (${Number(lease.deposit_amount).toLocaleString()}₮).`,
         priority: "high",
         deadlineMs: 3 * DAY_MS,
         entity: "lease",
@@ -528,75 +617,151 @@ export async function GET(request: Request) {
     summary.errors.push(`D-23: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  // ── 6. Д-27: идэвхгүйн тоолуурын refresh + Д-28/29 + F-127/128 ──
+  // ── 6. Сэжим: Д-27 оноо + идэвхгүйн тоолуур, Д-28/29 давтамж, §6.26
+  //    эзэмшлийн хамгаалалт, §6.28.6 халуун сэжим, §6.4 дараагийн үйлдэл ──
   try {
     type LeadRow = {
       id: string;
       office_id: string;
       owner_id: string | null;
+      contact_id: string;
       grade: LeadGrade | null;
       status: string;
       last_contact_at: string | null;
+      first_contact_at: string | null;
       created_at: string;
+      next_step: string | null;
       next_step_date: string | null;
       inactivity_days: number;
       unprotected: boolean;
+      score: number | null;
     };
     const { data: leadsRaw } = await admin
       .from("crm_leads")
-      .select("id, office_id, owner_id, grade, status, last_contact_at, created_at, next_step_date, inactivity_days, unprotected")
-      .in("status", ["new", "active"]);
+      .select(
+        "id, office_id, owner_id, contact_id, grade, status, last_contact_at, first_contact_at, created_at, " +
+          "next_step, next_step_date, inactivity_days, unprotected, score"
+      )
+      .in("status", ["new", "active"])
+      .limit(5000);
     const leads = (leadsRaw ?? []) as unknown as LeadRow[];
 
-    const DEFAULT_FREQ: Record<LeadGrade, number> = { a: 3, b: 7, c: 21, d: 60 };
-    const DEFAULT_INACTIVITY: Record<LeadGrade, number> = { a: 14, b: 30, c: 60, d: 90 };
+    // Оноонд хэрэгтэй профайл ба 30 хоногийн идэвх (багцаар).
+    const profileByContact = new Map<string, NeedProfileRow>();
+    const acts30 = new Map<string, number>();
+    const since30 = new Date(now.getTime() - 30 * DAY_MS).toISOString();
+    for (let i = 0; i < leads.length; i += 200) {
+      const chunk = leads.slice(i, i + 200);
+      const [{ data: profs }, { data: acts }] = await Promise.all([
+        admin
+          .from("crm_need_profiles")
+          .select("*")
+          .in("contact_id", [...new Set(chunk.map((l) => l.contact_id))])
+          .eq("status", "active")
+          .order("created_at", { ascending: false }),
+        admin
+          .from("crm_activities")
+          .select("lead_id")
+          .in("lead_id", chunk.map((l) => l.id))
+          .gte("created_at", since30),
+      ]);
+      for (const p of (profs ?? []) as unknown as NeedProfileRow[]) {
+        if (!profileByContact.has(p.contact_id)) profileByContact.set(p.contact_id, p);
+      }
+      for (const a of acts ?? []) if (a.lead_id) acts30.set(a.lead_id, (acts30.get(a.lead_id) ?? 0) + 1);
+    }
 
     for (const lead of leads) {
       const inact = daysSince(lead.last_contact_at ?? lead.created_at, today);
+      const th = await thresholdsOf(lead.office_id);
+      const teamLeads = teamLeadsOf(staffIdx, lead.office_id, lead.owner_id);
 
-      // Д-27: тоолуур шинэчлэх (өөрчлөгдсөн үед л бичнэ).
+      // Д-27: оноо (§6.6) + идэвхгүйн тоолуурын өдөр тутмын шинэчлэл.
       const g27 = gate(lead.office_id, "D-27");
-      if (g27.run && inact !== lead.inactivity_days) {
-        const { error } = await admin.from("crm_leads").update({ inactivity_days: inact }).eq("id", lead.id);
-        if (!error) summary.d27Refreshed += 1;
+      if (g27.run) {
+        const [weightsRaw, factorsRaw] = await Promise.all([
+          officeSetting<unknown>(lead.office_id, "lead_score_weights"),
+          officeSetting<unknown>(lead.office_id, "lead_score_factors"),
+        ]);
+        const prof = profileByContact.get(lead.contact_id) ?? null;
+        const result = computeLeadScore(
+          {
+            profile: prof ? profileSnapshot(prof) : null,
+            completenessPct: prof?.completeness_pct ?? null,
+            activityCount30d: acts30.get(lead.id) ?? 0,
+            lastContactDays: lead.last_contact_at ? daysSince(lead.last_contact_at, today) : null,
+          },
+          normalizeScoreWeights(weightsRaw),
+          normalizeScoreFactors(factorsRaw)
+        );
+        const patch: { inactivity_days?: number; score?: number; score_breakdown?: Json } = {};
+        if (inact !== lead.inactivity_days) patch.inactivity_days = inact;
+        if (lead.score == null || Math.abs(Number(lead.score) - result.score) >= 0.1) {
+          patch.score = result.score;
+          patch.score_breakdown = result.breakdown as unknown as Json;
+        }
+        if (Object.keys(patch).length) {
+          const { error } = await admin.from("crm_leads").update(patch).eq("id", lead.id);
+          if (!error) summary.d27Refreshed += 1;
+        }
       }
 
-      const freq =
-        (await officeSetting<Record<LeadGrade, number>>(lead.office_id, "recontact_frequency")) ?? DEFAULT_FREQ;
+      const ranges = recontactRangesOf(await officeSetting<unknown>(lead.office_id, "recontact_ranges"));
 
-      // Д-28: ангилалтай, дараагийн алхмын огноогүй (шинэ) сэжимд саналын огноо.
+      // Д-28: ангилалтай, дараагийн үйлдлийн огноогүй шинэ сэжимд саналын огноо (§6.5).
       if (lead.status === "new" && lead.grade && !lead.next_step_date) {
         const g28 = gate(lead.office_id, "D-28");
         if (g28.run) {
-          const suggest = addDaysIso(today, freq[lead.grade] ?? 7);
+          const suggest = addDaysIso(today, recontactDays(lead.grade, null, ranges));
           const { error } = await admin
             .from("crm_leads")
-            .update({ next_step_date: suggest, next_step: "Эргэн холбогдох (Д-28)" })
+            .update({ next_step_date: suggest, next_step: lead.next_step ?? "Эргэн холбогдох" })
             .eq("id", lead.id)
             .is("next_step_date", null);
           if (!error) summary.d28Suggested += 1;
         }
       }
 
-      // Д-29: давтамж хэтэрсэн — агентад сануулга, 2× хэтрэлтэд багийн ахлагчид.
-      if (lead.status === "active" && lead.grade && lead.owner_id) {
+      // §6.4: дараагийн үйлдлийн хугацаа хэтэрсэн — өдөр бүр сануулга, долоо
+      // хоногийн дүн шинжилгээнд зориулж өдөр бүр лог.
+      let nextStepAlerted = false;
+      if (lead.owner_id && lead.next_step_date && lead.next_step_date < today) {
+        const overdueDays = isoDaysBetween(lead.next_step_date, today);
+        const res = await notifyCrm({
+          officeId: lead.office_id,
+          event: "next_step_overdue",
+          recipients: [lead.owner_id, ...(overdueDays >= th.next_step_overdue_escalate_days ? teamLeads : [])],
+          title: "Дараагийн үйлдлийн хугацаа хэтэрлээ",
+          body: `Сэжимийн «${lead.next_step ?? "дараагийн үйлдэл"}» ${overdueDays} хоног хэтэрсэн. Холбогдож, шинэ огноо товлоно уу.`,
+          link: `/agent/crm/leads/${lead.id}`,
+          entity: "crm_leads",
+          entityId: lead.id,
+          admin,
+          now,
+        });
+        nextStepAlerted = res.delivered > 0 || res.deferred > 0;
+        await logRuleRun(admin, {
+          officeId: lead.office_id,
+          ruleCode: "next_step_overdue",
+          entity: "crm_leads",
+          entityId: lead.id,
+          status: "ok",
+          result: { date: today, next_step_date: lead.next_step_date, overdue_days: overdueDays, owner_id: lead.owner_id },
+        });
+        summary.nextStepOverdue += 1;
+      }
+
+      // Д-29: ангиллын давтамж хэтэрсэн идэвхтэй сэжим (§6.5).
+      if (lead.status === "active" && lead.grade && lead.owner_id && !nextStepAlerted) {
         const g29 = gate(lead.office_id, "D-29");
-        const limit = freq[lead.grade] ?? 7;
+        const limit = recontactDays(lead.grade, null, ranges);
         if (g29.run && inact >= limit) {
-          const doubled = inact >= limit * 2;
-          const staff = staffIdx.get(lead.office_id) ?? [];
-          const ownerRow = staff.find((s) => s.profile_id === lead.owner_id);
-          const teamLeads = doubled
-            ? staff
-                .filter((s) => s.roles.includes("team_lead") && ownerRow?.team_id && s.team_id === ownerRow.team_id)
-                .map((s) => s.profile_id)
-            : [];
           const res = await notifyCrm({
             officeId: lead.office_id,
             event: "next_step_overdue",
-            recipients: [lead.owner_id, ...teamLeads],
-            title: doubled ? "Эргэн холбогдолт ноцтой хэтэрлээ" : "Эргэн холбогдох давтамж хэтэрлээ",
-            body: `${lead.grade.toUpperCase()} ангиллын сэжим ${inact} хоног идэвхгүй (босго ${limit} — Д-29).`,
+            recipients: [lead.owner_id],
+            title: inact >= limit * 2 ? "Эргэн холбогдолт ноцтой хэтэрлээ" : "Эргэн холбогдох давтамж хэтэрлээ",
+            body: `${lead.grade.toUpperCase()} ангиллын сэжимтэй ${inact} хоног холбогдоогүй (давтамж ${limit} хоног).`,
             link: `/agent/crm/leads/${lead.id}`,
             entity: "crm_leads",
             entityId: lead.id,
@@ -605,24 +770,102 @@ export async function GET(request: Request) {
           });
           if (res.delivered > 0) summary.d29Alerts += 1;
         }
+      }
 
-        // F-127/128: идэвхгүйн босго давбал хамгаалалтгүй тэмдэглэгээ + эргэлтийн санал.
-        const inactivityCfg =
-          (await officeSetting<Record<LeadGrade, number>>(lead.office_id, "inactivity_thresholds")) ??
-          DEFAULT_INACTIVITY;
-        const threshold = inactivityCfg[lead.grade] ?? 90;
-        if (inact >= threshold && !lead.unprotected) {
+      // §6.28.6: халуун сэжим идэвхгүй — Багийн ахлагчид (баггүй бол БХЗ).
+      if (lead.owner_id && isHotLeadInactive({ grade: lead.grade, status: lead.status, inactivityDays: inact }, th)) {
+        const res = await notifyCrm({
+          officeId: lead.office_id,
+          event: "hot_lead_inactive",
+          recipients: [lead.owner_id, ...teamLeads],
+          includeRoles: teamLeads.length ? [] : ["sales_director"],
+          title: "Халуун сэжим идэвхгүй байна",
+          body: `A ангиллын сэжимтэй ${inact} хоног холбогдоогүй. Агент өнөөдөр холбогдох шаардлагатай.`,
+          link: `/office/crm/leads/${lead.id}`,
+          entity: "crm_leads",
+          entityId: lead.id,
+          admin,
+          now,
+        });
+        if (res.delivered > 0) summary.hotLeadInactive += 1;
+      }
+
+      // §6.26: зөвхөн нэр, утастай (утга бүхий холболтгүй) шинэ сэжим.
+      const protection = leadProtectionState(
+        {
+          status: lead.status,
+          createdAt: new Date(lead.created_at),
+          firstContactAt: lead.first_contact_at ? new Date(lead.first_contact_at) : null,
+          unprotected: lead.unprotected,
+        },
+        now,
+        th.lead_protection
+      );
+      if (protection === "warn" && lead.owner_id) {
+        if (!(await hasRuleRun(admin, { officeId: lead.office_id, ruleCode: "lead_protection_warn", entity: "crm_leads", entityId: lead.id }))) {
+          await notifyCrm({
+            officeId: lead.office_id,
+            event: "lead_unprotected",
+            recipients: [lead.owner_id],
+            title: "Сэжимийн эзэмшлийн хамгаалалт дуусах гэж байна",
+            body: `Утга бүхий холболт бүртгэгдээгүй. ${th.lead_protection.warn_before_days} хоногийн дотор холбогдож бүртгэхгүй бол эзэмшил хамгаалагдахгүй.`,
+            link: `/agent/crm/leads/${lead.id}`,
+            entity: "crm_leads",
+            entityId: lead.id,
+            admin,
+            now,
+          });
+          await logRuleRun(admin, { officeId: lead.office_id, ruleCode: "lead_protection_warn", entity: "crm_leads", entityId: lead.id, status: "ok" });
+          summary.protectionWarned += 1;
+        }
+      } else if (protection === "expire") {
+        const { error } = await admin
+          .from("crm_leads")
+          .update({ unprotected: true })
+          .eq("id", lead.id)
+          .is("first_contact_at", null);
+        if (!error) {
+          summary.unprotectedMarked += 1;
+          await logRuleRun(admin, {
+            officeId: lead.office_id,
+            ruleCode: "F-127",
+            entity: "crm_leads",
+            entityId: lead.id,
+            status: "ok",
+            result: { reason: "no_meaningful_contact", days: th.lead_protection.new_no_contact_days },
+          });
+          await notifyCrm({
+            officeId: lead.office_id,
+            event: "lead_unprotected",
+            recipients: [lead.owner_id, ...teamLeads],
+            includeRoles: ["sales_director"],
+            title: "Сэжим хамгаалалтгүй боллоо",
+            body: `${th.lead_protection.new_no_contact_days} хоногт утга бүхий холболт бүртгэгдээгүй — эргэлтэд оруулах эсэхийг хянана уу.`,
+            link: `/office/crm/leads/${lead.id}`,
+            entity: "crm_leads",
+            entityId: lead.id,
+            admin,
+            now,
+          });
+        }
+      }
+
+      // F-127/128: идэвхтэй сэжимийн идэвхгүйн босго (БХЗ тогтооно — §6.26).
+      if (lead.status === "active" && lead.grade && lead.owner_id && !lead.unprotected) {
+        const inactivityCfg = await officeSetting<Record<LeadGrade, number>>(lead.office_id, "inactivity_thresholds");
+        const threshold = inactivityCfg?.[lead.grade];
+        if (typeof threshold === "number" && threshold > 0 && inact >= threshold) {
           const { error } = await admin.from("crm_leads").update({ unprotected: true }).eq("id", lead.id);
           if (!error) {
             summary.unprotectedMarked += 1;
             await logRuleRun(admin, { officeId: lead.office_id, ruleCode: "F-128", entity: "crm_leads", entityId: lead.id, status: "ok", result: { inactivity_days: inact, threshold } });
             await notifyCrm({
               officeId: lead.office_id,
-              event: "next_step_overdue",
+              event: "lead_unprotected",
               recipients: [lead.owner_id],
               includeRoles: ["sales_director"],
               title: "Сэжим хамгаалалтгүй боллоо",
-              body: `Идэвхгүй ${inact} хоног (босго ${threshold}) — эргэлтэд оруулах/дахин хуваарилах саналыг хянана уу (F-128).`,
+              body: `Идэвхгүй ${inact} хоног (босго ${threshold}) — эргэлтэд оруулах эсвэл дахин хуваарилах эсэхийг хянана уу.`,
               link: `/office/crm/leads/${lead.id}`,
               entity: "crm_leads",
               entityId: lead.id,
@@ -635,6 +878,202 @@ export async function GET(request: Request) {
     }
   } catch (e) {
     summary.errors.push(`D-27/28/29: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // ── 6б. Боломж: дараагийн үйлдэл (§6.4), үнийн саналын давтамж ба хүчинтэй
+  //    хугацаа (§6.16, §6.28.4), үзлэгийн эргэх холбоо (§6.15, §6.28.3) ──
+  try {
+    const { data: oppsRaw } = await admin
+      .from("crm_opportunities")
+      .select("id, office_id, owner_id, stage_id, contact_id")
+      .eq("state", "open")
+      .limit(5000);
+    const opps = (oppsRaw ?? []) as unknown as {
+      id: string;
+      office_id: string;
+      owner_id: string;
+      stage_id: string;
+      contact_id: string;
+    }[];
+    const contactName = new Map<string, string>();
+    for (let i = 0; i < opps.length; i += 200) {
+      const ids = [...new Set(opps.slice(i, i + 200).map((o) => o.contact_id))];
+      const { data: cs } = await admin.from("crm_contacts").select("id, display_name").in("id", ids);
+      for (const c of cs ?? []) contactName.set(c.id, c.display_name);
+    }
+    const oppLabel = (o: { contact_id: string }) => contactName.get(o.contact_id) ?? "Харилцагч";
+    const stageIds = [...new Set(opps.map((o) => o.stage_id))];
+    const stageOf = new Map<string, { code: string; name: string }>();
+    if (stageIds.length) {
+      const { data: stages } = await admin.from("crm_stages").select("id, code, name").in("id", stageIds);
+      for (const s of stages ?? []) stageOf.set(s.id, { code: s.code, name: s.name });
+    }
+
+    // Боломж бүрийн сүүлийн бүртгэл.
+    const lastAct = new Map<string, { next_step: string | null; next_step_date: string | null; occurred_at: string }>();
+    for (let i = 0; i < opps.length; i += 200) {
+      const ids = opps.slice(i, i + 200).map((o) => o.id);
+      const { data: acts } = await admin
+        .from("crm_activities")
+        .select("opportunity_id, next_step, next_step_date, occurred_at")
+        .in("opportunity_id", ids)
+        .order("occurred_at", { ascending: false })
+        .limit(5000);
+      for (const a of acts ?? []) {
+        if (a.opportunity_id && !lastAct.has(a.opportunity_id)) lastAct.set(a.opportunity_id, a);
+      }
+    }
+
+    for (const o of opps) {
+      const th = await thresholdsOf(o.office_id);
+      const last = lastAct.get(o.id) ?? null;
+      const stage = stageOf.get(o.stage_id);
+      const label = oppLabel(o);
+      let alerted = false;
+
+      if (last?.next_step_date && last.next_step_date < today) {
+        const overdueDays = isoDaysBetween(last.next_step_date, today);
+        const res = await notifyCrm({
+          officeId: o.office_id,
+          event: "next_step_overdue",
+          recipients: [
+            o.owner_id,
+            ...(overdueDays >= th.next_step_overdue_escalate_days ? teamLeadsOf(staffIdx, o.office_id, o.owner_id) : []),
+          ],
+          title: "Дараагийн үйлдлийн хугацаа хэтэрлээ",
+          body: `«${label}»: «${last.next_step ?? "дараагийн үйлдэл"}» ${overdueDays} хоног хэтэрсэн.`,
+          link: `/agent/crm/pipeline/${o.id}`,
+          entity: "crm_opportunities",
+          entityId: o.id,
+          admin,
+          now,
+        });
+        alerted = res.delivered > 0 || res.deferred > 0;
+        await logRuleRun(admin, {
+          officeId: o.office_id,
+          ruleCode: "next_step_overdue",
+          entity: "crm_opportunities",
+          entityId: o.id,
+          status: "ok",
+          result: { date: today, next_step_date: last.next_step_date, overdue_days: overdueDays, owner_id: o.owner_id },
+        });
+        summary.nextStepOverdue += 1;
+      }
+
+      // §6.28.4: үнийн санал, хэлэлцээрийн шатанд тогтоосон давтамжаар сануулга.
+      if (!alerted && stage && OFFER_STAGE_CODES.includes(stage.code)) {
+        const lastTouch = last ? toIsoDate(new Date(last.occurred_at)) : null;
+        if (isOfferFollowupDue(lastTouch, today, th.offer_followup_days)) {
+          const res = await notifyCrm({
+            officeId: o.office_id,
+            event: "offer_followup_due",
+            recipients: [o.owner_id],
+            title: "Үнийн саналын эргэн холбогдолт",
+            body: `«${label}» «${stage.name}» шатанд байна — талуудтай холбогдож, явцыг бүртгэнэ үү.`,
+            link: `/agent/crm/pipeline/${o.id}`,
+            entity: "crm_opportunities",
+            entityId: o.id,
+            admin,
+            now,
+          });
+          if (res.delivered > 0) summary.offerFollowups += 1;
+        }
+      }
+    }
+
+    // §6.16: саналын хүчинтэй хугацаа дуусах гэж буй (санал бүрд нэг удаа).
+    const oppById = new Map(opps.map((o) => [o.id, o]));
+    if (opps.length) {
+      const { data: offers } = await admin
+        .from("crm_offers")
+        .select("id, office_id, opportunity_id, valid_until, direction")
+        .gte("valid_until", today)
+        .lte("valid_until", addDaysIso(today, 31))
+        .limit(2000);
+      for (const offer of offers ?? []) {
+        const opp = oppById.get(offer.opportunity_id);
+        if (!opp) continue;
+        const th = await thresholdsOf(offer.office_id);
+        if (!isOfferExpiring(offer.valid_until, today, th.offer_expiring_days)) continue;
+        if (await hasRuleRun(admin, { officeId: offer.office_id, ruleCode: "offer_expiring", entity: "crm_offers", entityId: offer.id })) {
+          continue;
+        }
+        await notifyCrm({
+          officeId: offer.office_id,
+          event: "offer_expiring",
+          recipients: [opp.owner_id],
+          title: "Үнийн саналын хүчинтэй хугацаа дуусах гэж байна",
+          body: `«${oppLabel(opp)}»: ${offer.direction === "counter" ? "сөрөг санал" : "санал"} ${offer.valid_until}-нд дуусна.`,
+          link: `/agent/crm/pipeline/${opp.id}`,
+          entity: "crm_offers",
+          entityId: offer.id,
+          admin,
+          now,
+        });
+        await logRuleRun(admin, { officeId: offer.office_id, ruleCode: "offer_expiring", entity: "crm_offers", entityId: offer.id, status: "ok", result: { valid_until: offer.valid_until } });
+        summary.offersExpiring += 1;
+      }
+    }
+
+    // §6.15/§6.28.3: үзлэгийн дараах эргэх холбоо — хугацаа хэтэрвэл агентад,
+    // дараагийн шатанд ахлагчид (баггүй бол БХЗ).
+    const { data: showings } = await admin
+      .from("crm_activities")
+      .select("id, office_id, owner_id, opportunity_id, lead_id, occurred_at")
+      .eq("channel", "showing")
+      .is("feedback_category", null)
+      .gte("occurred_at", new Date(now.getTime() - 14 * DAY_MS).toISOString())
+      .lte("occurred_at", now.toISOString())
+      .limit(2000);
+    for (const sh of showings ?? []) {
+      const th = await thresholdsOf(sh.office_id);
+      const state = showingFeedbackState(new Date(sh.occurred_at), false, now, th);
+      if (state === "none") continue;
+      const link = sh.opportunity_id
+        ? `/agent/crm/pipeline/${sh.opportunity_id}`
+        : sh.lead_id
+          ? `/agent/crm/leads/${sh.lead_id}`
+          : "/agent/crm";
+      if (!(await hasRuleRun(admin, { officeId: sh.office_id, ruleCode: "showing_feedback_overdue", entity: "crm_activities", entityId: sh.id }))) {
+        await notifyCrm({
+          officeId: sh.office_id,
+          event: "showing_feedback_overdue",
+          recipients: [sh.owner_id],
+          title: "Үзлэгийн эргэх холбоо хугацаа хэтэрлээ",
+          body: `Үзлэгээс хойш ${th.showing_feedback_hours} цаг өнгөрсөн — харилцагчийн саналыг авч бүртгэнэ үү.`,
+          link,
+          entity: "crm_activities",
+          entityId: sh.id,
+          admin,
+          now,
+        });
+        await logRuleRun(admin, { officeId: sh.office_id, ruleCode: "showing_feedback_overdue", entity: "crm_activities", entityId: sh.id, status: "ok" });
+        summary.showingFeedbackOverdue += 1;
+      }
+      if (
+        state === "escalate" &&
+        !(await hasRuleRun(admin, { officeId: sh.office_id, ruleCode: "showing_feedback_escalate", entity: "crm_activities", entityId: sh.id }))
+      ) {
+        const leadsTl = teamLeadsOf(staffIdx, sh.office_id, sh.owner_id);
+        await notifyCrm({
+          officeId: sh.office_id,
+          event: "showing_feedback_overdue",
+          recipients: leadsTl,
+          includeRoles: leadsTl.length ? [] : ["sales_director"],
+          title: "Үзлэгийн санал бүртгэгдээгүй байна",
+          body: `Үзлэгээс хойш ${th.showing_feedback_escalate_hours} цаг өнгөрсөн ч харилцагчийн санал бүртгэгдээгүй — агенттай хамт шийднэ үү.`,
+          link,
+          entity: "crm_activities",
+          entityId: sh.id,
+          admin,
+          now,
+        });
+        await logRuleRun(admin, { officeId: sh.office_id, ruleCode: "showing_feedback_escalate", entity: "crm_activities", entityId: sh.id, status: "ok" });
+        summary.showingFeedbackEscalated += 1;
+      }
+    }
+  } catch (e) {
+    summary.errors.push(`opportunities: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   // ── 7. F-105/125: алтан дүрмийн өдөр тутмын integrity шалгалт ──
@@ -667,7 +1106,7 @@ export async function GET(request: Request) {
         recipients: [],
         includeRoles: ["sales_director", "ops_qc"],
         title: "Алтан дүрмийн зөрчил илэрлээ",
-        body: `${ids.length} идэвхтэй сэжимд 5 бүрдлийн аль нэг дутуу (F-125) — самбараас шалгана уу.`,
+        body: `${ids.length} идэвхтэй сэжимд 5 бүрдлийн аль нэг дутуу — самбараас шалгана уу.`,
         link: "/office/crm/leads",
         admin,
         now,
@@ -707,7 +1146,7 @@ export async function GET(request: Request) {
         await createTask(admin, {
           officeId: agr.office_id,
           responsibleId: agent,
-          title: `Листингийн гэрээ дуусах дөхлөө — ${agr.property.number} (F-205)`,
+          title: `Листингийн гэрээ дуусах дөхлөө — ${agr.property.number}`,
           description: `Гэрээ №${agr.number} ${agr.expires_on}-нд дуусна. Сунгах эсвэл листингийг идэвхгүй болгоно.`,
           deadlineMs: 5 * DAY_MS,
           entity: "listing_agreement",
@@ -738,7 +1177,7 @@ export async function GET(request: Request) {
       await createTask(admin, {
         officeId: agr.office_id,
         responsibleId: pm,
-        title: `Менежментийн гэрээний сунгалт — ${agr.number} (F-512)`,
+        title: `Менежментийн гэрээний сунгалт — ${agr.number}`,
         description: `Гэрээ ${agr.end_on}-нд дуусна — өмчлөгчтэй сунгалтын хэлэлцээр эхлүүлнэ.`,
         deadlineMs: 7 * DAY_MS,
         entity: "management_agreement",
@@ -786,7 +1225,7 @@ export async function GET(request: Request) {
         recipients: [],
         includeRoles: ["finance", "sales_director"],
         title: "Тооцоо үүсээгүй хаагдсан хэлцэл",
-        body: `${txn.number} (${txn.closed_on}) — шимтгэлийн тооцоо үүсээгүй байна (F-454).`,
+        body: `${txn.number} (${txn.closed_on}) — шимтгэлийн тооцоо үүсээгүй байна.`,
         link: "/office/crm/commissions",
         entity: "crm_transactions",
         entityId: txn.id,
@@ -914,7 +1353,7 @@ export async function GET(request: Request) {
         recipients: [],
         includeRoles: ["sysadmin"],
         title: "Өдрийн cron алдаатай дууслаа",
-        body: `crm-daily: ${summary.errors.length} алдаа — rule_runs логоос харна уу (F-602).`,
+        body: `crm-daily: ${summary.errors.length} алдаа — автомат дүрмийн гүйцэтгэлийн логоос харна уу.`,
         link: "/office/crm/settings/rules",
         admin,
         now,

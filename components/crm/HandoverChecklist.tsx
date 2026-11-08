@@ -8,10 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toggleHandoverItem, addHandoverItem } from "@/lib/actions/crm-transactions";
 import type { TxnHandoverItem } from "@/lib/queries-crm-transactions";
+import { toIsoDate } from "@/lib/crm/calendar";
+import { isoAddDays } from "@/lib/crm/deal-flow";
 
 /**
- * Хүлээлцэх checklist (F-407) — «Гэрээ» шатанд загвараас автомат үүснэ (Д-08);
- * алхам бүр огноо + хариуцагчтай. Hold үед баталгаажуулалт DB-д түгжигдэнэ (§7.5-5).
+ * Хүлээлцэх алхмууд (§6.17 «Хүлээлцэх») — «Гэрээ» төлөвт загвараас автомат
+ * үүснэ; алхам бүр хугацаатай (гэрээний огноо + тохиргооны хоног), хугацаа
+ * хэтэрсэн нь ил. МУТСТ түгжээтэй үед баталгаажуулалт DB-д түгжигдэнэ.
  */
 export function HandoverChecklist({
   txnId,
@@ -30,6 +33,9 @@ export function HandoverChecklist({
   const [pending, startTransition] = useTransition();
 
   const doneCount = items.filter((i) => i.done).length;
+  const today = toIsoDate(new Date());
+  const in7 = isoAddDays(today, 7);
+  const dueSoon = items.filter((i) => !i.done && i.due_on && i.due_on <= in7).length;
 
   function toggle(item: TxnHandoverItem) {
     setError(null);
@@ -62,16 +68,17 @@ export function HandoverChecklist({
         <span className="font-medium text-ink">Хүлээлцэх алхмууд</span>
         <span className="text-muted">
           {doneCount}/{items.length}
+          {dueSoon ? <span className="ml-2 text-amber-700">7 хоногт {dueSoon} алхам дуусах</span> : null}
         </span>
       </div>
       {onHold && (
         <p className="rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-sm text-rose-700">
-          МУТСТ түгжээтэй — хүлээлцэх баталгаажуулалт хориглогдсон (§7.5).
+          МУТСТ түгжээтэй — хүлээлцэх баталгаажуулалт хориглогдсон.
         </p>
       )}
       {items.length === 0 ? (
         <p className="py-4 text-center text-sm text-muted">
-          Checklist хоосон — «Гэрээ» төлөвт орох үед загвараас автомат үүснэ (Д-08).
+          Алхам алга — хэлцэл «Гэрээ» төлөвт орох үед загвараас автоматаар үүснэ.
         </p>
       ) : (
         <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
@@ -82,15 +89,20 @@ export function HandoverChecklist({
                 checked={item.done}
                 disabled={!editable || pending || (onHold && !item.done)}
                 onChange={() => toggle(item)}
-                className="size-4 rounded border-line"
+                className="size-5 rounded border-line"
               />
               <div className="min-w-0 flex-1">
                 <p className={`truncate text-sm ${item.done ? "text-muted line-through" : "text-ink"}`}>
                   {item.label}
                 </p>
-                {item.done && item.done_on && (
-                  <p className="text-xs text-subtle">{item.done_on}</p>
-                )}
+                {item.done && item.done_on ? (
+                  <p className="text-xs text-subtle">Хийсэн: {item.done_on}</p>
+                ) : item.due_on ? (
+                  <p className={`text-xs ${item.due_on < today ? "font-medium text-rose-600" : "text-subtle"}`}>
+                    Хугацаа: {item.due_on}
+                    {item.due_on < today ? " (хэтэрсэн)" : ""}
+                  </p>
+                ) : null}
               </div>
             </li>
           ))}

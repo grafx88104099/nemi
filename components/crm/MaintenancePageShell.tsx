@@ -1,5 +1,6 @@
 "use client";
 
+import { fmtDateTime } from "@/lib/format";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CircleAlert, Clock3, Plus } from "lucide-react";
@@ -45,7 +46,7 @@ function slaBadge(row: MaintenanceRow) {
   const now = Date.now();
   const resolveBy = row.sla_resolve_by ? new Date(row.sla_resolve_by).getTime() : null;
   const respondBy = row.sla_respond_by ? new Date(row.sla_respond_by).getTime() : null;
-  if (resolveBy && now > resolveBy) return <Badge tone="rose">SLA хэтэрсэн (Д-20)</Badge>;
+  if (resolveBy && now > resolveBy) return <Badge tone="rose">SLA хэтэрсэн</Badge>;
   if (respondBy && now > respondBy && row.status === "new") return <Badge tone="rose">Хариу өгөх SLA хэтэрсэн</Badge>;
   if (resolveBy && resolveBy - now < 12 * 3600 * 1000) return <Badge tone="amber">SLA дөхөж буй</Badge>;
   return null;
@@ -120,7 +121,7 @@ export function MaintenancePageShell({
         <div className="flex gap-2">
           {isPm && (
             <Button size="sm" variant="outline" onClick={() => setVendorOpen(true)}>
-              <Plus className="size-4" /> Гүйцэтгэгч (F-550)
+              <Plus className="size-4" /> Гүйцэтгэгч
             </Button>
           )}
           <Button size="sm" onClick={() => setCreateOpen(true)}>
@@ -166,7 +167,7 @@ export function MaintenancePageShell({
               <th className="px-4 py-3 font-medium">Зэрэглэл</th>
               <th className="px-4 py-3 font-medium">Дүн (төсөв/гүйц.)</th>
               <th className="px-4 py-3 font-medium">Гүйцэтгэгч</th>
-              <th className="px-4 py-3 font-medium">SLA (F-552)</th>
+              <th className="px-4 py-3 font-medium">SLA</th>
               <th className="px-4 py-3 font-medium">Төлөв</th>
             </tr>
           </thead>
@@ -190,7 +191,7 @@ export function MaintenancePageShell({
                     {r.estimate_amount != null ? `${Number(r.estimate_amount).toLocaleString()}₮` : "—"}
                     {r.actual_amount != null ? ` / ${Number(r.actual_amount).toLocaleString()}₮` : ""}
                     {r.owner_approval_needed && !r.owner_approved_at && (
-                      <CircleAlert className="ml-1 inline size-4 text-amber-600" aria-label="Өмчлөгчийн зөвшөөрөл хэрэгтэй (F-548)" />
+                      <CircleAlert className="ml-1 inline size-4 text-amber-600" aria-label="Өмчлөгчийн зөвшөөрөл хэрэгтэй" />
                     )}
                   </td>
                   <td className="px-4 py-3 text-muted">{r.vendor_name ?? "—"}</td>
@@ -199,7 +200,7 @@ export function MaintenancePageShell({
                     <Badge tone={st.tone}>{st.label}</Badge>
                     {r.emergency_bypass && (
                       <Badge tone="rose" className="ml-1">
-                        Яаралтай bypass (F-549)
+                        Яаралтай bypass
                       </Badge>
                     )}
                   </td>
@@ -231,11 +232,11 @@ export function MaintenancePageShell({
               <p>Эх сурвалж: {detail.source} · Зэрэглэл: {URGENCY_LABEL[detail.urgency].label}</p>
               {detail.estimate_amount != null && <p>Төсөвт дүн: {Number(detail.estimate_amount).toLocaleString()}₮</p>}
               {detail.cost_bearer && <p>Хариуцагч тал: {EXPENSE_BEARER_LABEL[detail.cost_bearer]}</p>}
-              {detail.sla_respond_by && <p>Хариу өгөх SLA: {new Date(detail.sla_respond_by).toLocaleString()}</p>}
-              {detail.sla_resolve_by && <p>Шийдвэрлэх SLA: {new Date(detail.sla_resolve_by).toLocaleString()}</p>}
+              {detail.sla_respond_by && <p>Хариу өгөх SLA: {fmtDateTime(detail.sla_respond_by)}</p>}
+              {detail.sla_resolve_by && <p>Шийдвэрлэх SLA: {fmtDateTime(detail.sla_resolve_by)}</p>}
               {detail.owner_approval_needed && (
                 <p className={detail.owner_approved_at ? "text-emerald-600" : "text-amber-600"}>
-                  Өмчлөгчийн зөвшөөрөл (F-548): {detail.owner_approved_at ? "Авагдсан" : "Хүлээгдэж буй"}
+                  Өмчлөгчийн зөвшөөрөл: {detail.owner_approved_at ? "Авагдсан" : "Хүлээгдэж буй"}
                 </p>
               )}
             </div>
@@ -245,7 +246,7 @@ export function MaintenancePageShell({
             {/* Урсгалын үйлдлүүд (F-547) */}
             {detail.status === "new" && detail.owner_approval_needed && !detail.owner_approved_at && (
               <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => sendToApproval(detail.id))}>
-                Зөвшөөрөл хүсэх (F-548)
+                Зөвшөөрөл хүсэх
               </Button>
             )}
             {["new", "pending_approval"].includes(detail.status) && detail.owner_approval_needed && !detail.owner_approved_at && (
@@ -260,7 +261,7 @@ export function MaintenancePageShell({
             )}
             {["new", "pending_approval"].includes(detail.status) && (
               <div className="space-y-2 rounded-xl border border-line p-3">
-                <p className="font-medium text-ink">Оноох (F-550)</p>
+                <p className="font-medium text-ink">Оноох</p>
                 <Field label="Гүйцэтгэгч">
                   <Select value={assign.vendorId} onChange={(e) => setAssign({ ...assign, vendorId: e.target.value })}>
                     <option value="">— Сонгох —</option>
@@ -279,7 +280,7 @@ export function MaintenancePageShell({
                       checked={assign.emergencyBypass}
                       onChange={(e) => setAssign({ ...assign, emergencyBypass: e.target.checked })}
                     />
-                    Яаралтай нөхцөл — зөвшөөрлийг түр алгасах (F-549, дараа нөхөн баталгаажна)
+                    Яаралтай нөхцөл — зөвшөөрлийг түр алгасах (дараа нөхөн баталгаажна)
                   </label>
                 )}
                 <Button
@@ -306,7 +307,7 @@ export function MaintenancePageShell({
             )}
             {detail.status === "in_progress" && (
               <div className="space-y-2 rounded-xl border border-line p-3">
-                <p className="font-medium text-ink">Хаах (F-553 — нотолгоотой)</p>
+                <p className="font-medium text-ink">Хаах (нотолгоотой)</p>
                 <Field label="Гүйцэтгэлийн нотолгооны баримтын ID (зураг/акт)">
                   <Input value={close.completionDocId} onChange={(e) => setClose({ ...close, completionDocId: e.target.value })} placeholder="UUID" />
                 </Field>
@@ -314,7 +315,7 @@ export function MaintenancePageShell({
                   <Field label="Гүйцсэн дүн (₮)">
                     <Input type="number" value={close.actualAmount} onChange={(e) => setClose({ ...close, actualAmount: e.target.value })} />
                   </Field>
-                  <Field label="Хариуцагч тал (F-551)">
+                  <Field label="Хариуцагч тал">
                     <Select value={close.costBearer} onChange={(e) => setClose({ ...close, costBearer: e.target.value as "" | ExpenseBearer })}>
                       <option value="">— Сонгох —</option>
                       {EXPENSE_BEARERS.map((b) => (
@@ -360,7 +361,7 @@ export function MaintenancePageShell({
       <Modal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        title="Шинэ засварын хүсэлт (F-545)"
+        title="Шинэ засварын хүсэлт"
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setCreateOpen(false)}>
@@ -409,7 +410,7 @@ export function MaintenancePageShell({
                 <option value="pm_team">ҮХХ баг</option>
               </Select>
             </Field>
-            <Field label="Ангилал (F-546)">
+            <Field label="Ангилал">
               <Select value={f.categoryId} onChange={(e) => setF({ ...f, categoryId: e.target.value })}>
                 <option value="">— Сонгох —</option>
                 {categories.map((c) => (
@@ -421,7 +422,7 @@ export function MaintenancePageShell({
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Яаралтын зэрэглэл" hint="SLA автомат тооцогдоно (F-552)">
+            <Field label="Яаралтын зэрэглэл" hint="SLA автомат тооцогдоно">
               <Select value={f.urgency} onChange={(e) => setF({ ...f, urgency: e.target.value as Urgency })}>
                 {URGENCIES.map((u) => (
                   <option key={u} value={u}>
@@ -430,7 +431,7 @@ export function MaintenancePageShell({
                 ))}
               </Select>
             </Field>
-            <Field label="Төсөвт дүн (₮)" hint="Босгоос дээш → өмчлөгчийн зөвшөөрөл (F-548)">
+            <Field label="Төсөвт дүн (₮)" hint="Босгоос дээш → өмчлөгчийн зөвшөөрөл">
               <Input type="number" value={f.estimateAmount} onChange={(e) => setF({ ...f, estimateAmount: e.target.value })} />
             </Field>
           </div>
@@ -445,7 +446,7 @@ export function MaintenancePageShell({
       <Modal
         open={vendorOpen}
         onClose={() => setVendorOpen(false)}
-        title="Гүйцэтгэгч нэмэх (F-550)"
+        title="Гүйцэтгэгч нэмэх"
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setVendorOpen(false)}>

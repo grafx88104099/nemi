@@ -1,5 +1,6 @@
 "use client";
 
+import { fmtDateNum, fmtDateTime } from "@/lib/format";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -25,6 +26,7 @@ import { EvidencePanel } from "@/components/crm/EvidencePanel";
 import { AuditTrail } from "@/components/crm/AuditTrail";
 import type { AuditRow } from "@/lib/queries-crm-transactions";
 import {
+  addDisputeEvidence,
   approveClawback,
   createDispute,
   decideDispute,
@@ -95,6 +97,9 @@ export function CommissionDetailShell({
   const [disputeOpen, setDisputeOpen] = useState(false);
   const [disputeContent, setDisputeContent] = useState("");
   const [decideId, setDecideId] = useState<string | null>(null);
+  const [disputeEvidence, setDisputeEvidence] = useState("");
+  const [evidenceFor, setEvidenceFor] = useState<string | null>(null);
+  const [evidenceText, setEvidenceText] = useState("");
   const [decide, setDecide] = useState({ decision: "", rationale: "" });
 
   function run(fn: () => Promise<{ ok?: boolean; id?: string; error?: string }>, close?: () => void) {
@@ -134,7 +139,7 @@ export function CommissionDetailShell({
         </div>
         {isOffice && (
           <ButtonLink variant="outline" size="sm" href={`/office/crm/commissions/${detail.id}/print`}>
-            <Printer className="size-4" /> Тооцооны хуудас (F-472)
+            <Printer className="size-4" /> Тооцооны хуудас
           </ButtonLink>
         )}
       </div>
@@ -145,7 +150,7 @@ export function CommissionDetailShell({
         <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
           <Lock className="mt-0.5 size-4 shrink-0" />
           <div>
-            <p className="font-semibold">Түдгэлзүүлсэн (F-461)</p>
+            <p className="font-semibold">Түдгэлзүүлсэн</p>
             <p>{detail.hold_reason ?? "Шалтгаан бүртгэгдээгүй."}</p>
           </div>
         </div>
@@ -178,7 +183,7 @@ export function CommissionDetailShell({
       </div>
 
       {/* Задаргаа */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardBody>
             <p className="text-lg font-bold text-ink">{detail.applied_rate_pct}%</p>
@@ -188,7 +193,7 @@ export function CommissionDetailShell({
         <Card>
           <CardBody>
             <p className="text-lg font-bold text-ink">{Math.round(detail.base_amount).toLocaleString()}₮</p>
-            <p className="text-xs text-muted">Суурь (татварын дараах, F-455)</p>
+            <p className="text-xs text-muted">Суурь (татварын дараах)</p>
           </CardBody>
         </Card>
         <Card>
@@ -200,7 +205,7 @@ export function CommissionDetailShell({
         <Card>
           <CardBody>
             <p className="text-lg font-bold text-emerald-700">{Math.round(detail.paid_amount).toLocaleString()}₮</p>
-            <p className="text-xs text-muted">Олгосон (F-464)</p>
+            <p className="text-xs text-muted">Олгосон</p>
           </CardBody>
         </Card>
         <Card>
@@ -220,7 +225,7 @@ export function CommissionDetailShell({
               disabled={pending}
               onClick={() => run(() => setCommissionStatus({ id: detail.id, to: "reviewed" }))}
             >
-              <BadgeCheck className="size-4" /> Хянасан (SD/ЧМТ)
+              <BadgeCheck className="size-4" /> Хянасан
             </Button>
           )}
           {status === "reviewed" && isCeo && (
@@ -249,7 +254,7 @@ export function CommissionDetailShell({
               disabled={pending}
               onClick={() => run(() => releaseCommissionHold(detail.id))}
             >
-              <Unlock className="size-4" /> Hold нээх (удирдлага)
+              <Unlock className="size-4" /> Түдгэлзүүлэлт нээх
             </Button>
           )}
           {status !== "cancelled" && (isManager || isFinance) && (
@@ -259,36 +264,52 @@ export function CommissionDetailShell({
           )}
           {(isFinance || isSdOps) && (
             <Button size="sm" variant="outline" disabled={pending} onClick={() => { setClaw({ amount: "", category: "client_fault" }); setClawOpen(true); }}>
-              <Undo2 className="size-4" /> Clawback (F-462)
+              <Undo2 className="size-4" /> Буцаалт бүртгэх
             </Button>
           )}
         </div>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {/* Нотолгоо (F-451) */}
         <Card>
           <CardBody>
-            <EvidencePanel evidence={detail.evidence} />
+            <EvidencePanel
+              evidence={Object.fromEntries(
+                Object.entries(detail.evidence).filter(([k]) => k !== "crm_quality_pct" && k !== "crm_quality_min_pct")
+              )}
+            />
             {detail.config && (
               <p className="mt-3 text-xs text-muted">
                 Журам: <span className="font-medium text-ink">{detail.config.policy_code}</span> —{" "}
                 {COMMISSION_POLICY_LABEL[detail.config.policy_code as keyof typeof COMMISSION_POLICY_LABEL] ?? ""}
                 <br />
-                Тохиргооны хувилбар: {new Date(detail.config.valid_from).toLocaleDateString()} (F-453 — хэлцэлд
+                Тохиргооны хувилбар: {fmtDateNum(detail.config.valid_from)} (хэлцэлд
                 тухайн үед хүчинтэй байсан хувилбар үйлчилнэ)
               </p>
             )}
             {detail.source_type === "transaction" && detail.txn_detail && (
               <p className="mt-2 text-xs text-muted">
-                Хавтасны бүрэн байдал: {detail.txn_detail.file_completeness_pct}% (F-409 — 100% биш бол «Хянасан»
+                Хавтасны бүрэн байдал: {detail.txn_detail.file_completeness_pct}% (100% биш бол «Хянасан»
                 хориглоно)
+              </p>
+            )}
+            {detail.recipient_type === "agent" && (
+              <p className="mt-2 text-xs text-muted">
+                Агентын CRM-ийн бүртгэлийн чанар:{" "}
+                <span className="font-semibold text-ink">
+                  {detail.agent_quality_pct == null ? "тооцох бүртгэл алга" : `${detail.agent_quality_pct}%`}
+                </span>
+                {typeof detail.evidence.crm_quality_min_pct === "number" &&
+                  ` (тооцоо үүсэх үед босго ${detail.evidence.crm_quality_min_pct}%${
+                    typeof detail.evidence.crm_quality_pct === "number" ? `, агент ${detail.evidence.crm_quality_pct}%` : ""
+                  })`}
               </p>
             )}
             {detail.source_type === "lease_monthly" && detail.monthly_detail && (
               <p className="mt-2 text-xs text-muted">
                 Сарын бүртгэл: {detail.monthly_detail.completeness_pct}% бөглөгдсөн
-                {detail.monthly_detail.commission_hold ? " · чанарын босго хангаагүй (F-559)" : ""}
+                {detail.monthly_detail.commission_hold ? " · чанарын босго хангаагүй" : ""}
               </p>
             )}
           </CardBody>
@@ -310,7 +331,7 @@ export function CommissionDetailShell({
                       {h.from_status ? COMMISSION_STATUS_LABEL[h.from_status].label : "—"} →{" "}
                       {COMMISSION_STATUS_LABEL[h.to_status].label}
                     </span>
-                    <span className="text-xs text-muted">{new Date(h.created_at).toLocaleString()}</span>
+                    <span className="text-xs text-muted">{fmtDateTime(h.created_at)}</span>
                   </div>
                   <p className="text-xs text-muted">
                     {h.decided_name ?? "Систем"}
@@ -327,7 +348,7 @@ export function CommissionDetailShell({
       {detail.clawbacks.length > 0 && (
         <Card>
           <CardBody>
-            <p className="mb-2 text-sm font-semibold text-ink">Буцаалт — сөрөг гүйлгээ (F-462/463)</p>
+            <p className="mb-2 text-sm font-semibold text-ink">Буцаалт — сөрөг гүйлгээ</p>
             <ul className="space-y-2">
               {detail.clawbacks.map((cb) => (
                 <li key={cb.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line px-3 py-2 text-sm">
@@ -367,7 +388,7 @@ export function CommissionDetailShell({
             <div className="mb-2 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Scale className="size-4 text-muted" />
-                <span className="text-sm font-semibold text-ink">Үүрэг/эзэмшлийн маргаан (F-474)</span>
+                <span className="text-sm font-semibold text-ink">Үүрэг/эзэмшлийн маргаан</span>
               </div>
               <Button size="sm" variant="outline" disabled={pending} onClick={() => { setDisputeContent(""); setDisputeOpen(true); }}>
                 Маргаан бүртгэх
@@ -383,7 +404,7 @@ export function CommissionDetailShell({
                     <p className="text-ink">{d.content}</p>
                     {d.decision ? (
                       <Badge tone="green">Шийдвэрлэсэн</Badge>
-                    ) : isOffice && isManager ? (
+                    ) : isOffice && isManager && !d.my_conflict ? (
                       <Button size="sm" variant="secondary" disabled={pending} onClick={() => { setDecide({ decision: "", rationale: "" }); setDecideId(d.id); }}>
                         Шийдвэрлэх
                       </Button>
@@ -392,9 +413,43 @@ export function CommissionDetailShell({
                     )}
                   </div>
                   <p className="text-xs text-muted">
-                    {d.creator_name ?? ""} · {new Date(d.created_at).toLocaleDateString()}
+                    {d.creator_name ?? ""} · {fmtDateNum(d.created_at)}
                     {d.decision ? ` · Шийдвэр: ${d.decision} (${d.decider_name ?? ""}) — ${d.rationale ?? ""}` : ""}
                   </p>
+                  {!d.decision && isManager && d.my_conflict && (
+                    <p className="mt-1 text-xs text-amber-700">
+                      Та энэ маргааныг шийдэх боломжгүй ({d.my_conflict}) — өөр удирдлага шийдвэрлэнэ.
+                    </p>
+                  )}
+                  {(d.evidence_text || d.evidence.length > 0) && (
+                    <ul className="mt-2 space-y-1 border-l-2 border-line pl-3">
+                      {d.evidence_text && (
+                        <li className="text-xs text-ink">
+                          <span className="text-muted">{d.creator_name ?? "Гаргагч"}: </span>
+                          {d.evidence_text}
+                        </li>
+                      )}
+                      {d.evidence.map((e) => (
+                        <li key={e.id} className="text-xs text-ink">
+                          <span className="text-muted">
+                            {e.creator_name ?? "—"} · {fmtDateNum(e.created_at)}:{" "}
+                          </span>
+                          {e.content}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {!d.decision && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="mt-1"
+                      disabled={pending}
+                      onClick={() => { setEvidenceText(""); setEvidenceFor(d.id); }}
+                    >
+                      Нотолгоо нэмэх
+                    </Button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -406,14 +461,14 @@ export function CommissionDetailShell({
       {audit.length > 0 && (
         <Card>
           <CardBody>
-            <p className="mb-2 text-sm font-semibold text-ink">Аудит (F-473)</p>
+            <p className="mb-2 text-sm font-semibold text-ink">Аудит</p>
             <AuditTrail rows={audit} />
           </CardBody>
         </Card>
       )}
 
       {/* Модалууд */}
-      <Modal open={payoutOpen} onClose={() => setPayoutOpen(false)} title="Олголт бүртгэх (F-464)">
+      <Modal open={payoutOpen} onClose={() => setPayoutOpen(false)} title="Олголт бүртгэх">
         <div className="space-y-4">
           <p className="text-sm text-muted">
             Хүлээгдэж буй: {Math.round(remaining).toLocaleString()}₮. Хэсэгчилсэн дүнд «Хэсэгчлэн олгосон», бүрэн
@@ -436,7 +491,7 @@ export function CommissionDetailShell({
         </div>
       </Modal>
 
-      <Modal open={holdOpen} onClose={() => setHoldOpen(false)} title="Түдгэлзүүлэх (F-461)">
+      <Modal open={holdOpen} onClose={() => setHoldOpen(false)} title="Түдгэлзүүлэх">
         <div className="space-y-4">
           <Field label="Шалтгаан (заавал)">
             <Input
@@ -458,10 +513,10 @@ export function CommissionDetailShell({
         </div>
       </Modal>
 
-      <Modal open={cancelOpen} onClose={() => setCancelOpen(false)} title="Тооцоо цуцлах (F-462/463)">
+      <Modal open={cancelOpen} onClose={() => setCancelOpen(false)} title="Тооцоо цуцлах">
         <div className="space-y-4">
           <p className="text-sm text-muted">
-            Цуцлалт түүхэнд бүрэн хадгалагдана; олгосон дүнтэй бол clawback тусад нь бүртгэнэ.
+            Цуцлалт түүхэнд бүрэн хадгалагдана; олгосон дүнтэй бол буцаалтыг тусад нь бүртгэнэ.
           </p>
           <Field label="Үндэслэл (заавал)">
             <Input value={cancelNote} onChange={(e) => setCancelNote(e.target.value)} />
@@ -481,10 +536,10 @@ export function CommissionDetailShell({
         </div>
       </Modal>
 
-      <Modal open={clawOpen} onClose={() => setClawOpen(false)} title="Clawback — сөрөг гүйлгээ (F-462)">
+      <Modal open={clawOpen} onClose={() => setClawOpen(false)} title="Буцаалт — сөрөг гүйлгээ">
         <div className="space-y-4">
           <p className="text-sm text-muted">
-            Автоматаар хэрэгжихгүй: Санхүү/Борлуулалт/ЧМТ бүртгэж, эрх бүхий удирдлага (CEO/Борлуулалтын захирал)
+            Автоматаар хэрэгжихгүй: Санхүү, Борлуулалт хариуцсан захирал эсвэл Үйл ажиллагаа-ЧМТ бүртгэж, эрх бүхий удирдлага (CEO, Борлуулалт хариуцсан захирал)
             тусад нь батална.
           </p>
           <Field label="Буцаах дүн (₮, эерэгээр оруулна — сөрөг гүйлгээ болж хадгалагдана)">
@@ -519,7 +574,7 @@ export function CommissionDetailShell({
         </div>
       </Modal>
 
-      <Modal open={disputeOpen} onClose={() => setDisputeOpen(false)} title="Маргаан бүртгэх (F-474)">
+      <Modal open={disputeOpen} onClose={() => setDisputeOpen(false)} title="Маргаан бүртгэх">
         <div className="space-y-4">
           <Field label="Агуулга">
             <Input
@@ -528,14 +583,34 @@ export function CommissionDetailShell({
               placeholder="Үүрэг/сэжимийн эзэмшлийн маргааны агуулга…"
             />
           </Field>
+          <Field label="CRM-ийн нотолгоо">
+            <textarea
+              className="min-h-20 w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-ink"
+              value={disputeEvidence}
+              onChange={(e) => setDisputeEvidence(e.target.value)}
+              placeholder="Анх бүртгэсэн огноо, холболт, үзлэг, баримтын дугаар…"
+            />
+          </Field>
+          <p className="text-xs text-muted">
+            Хэлцлийн бусад оролцогч агентад мэдэгдэж, тэд нотолгоогоо нэмнэ. Маргааны оролцогч, тооцоог хянаж
+            баталсан эсвэл ашиг сонирхлын зөрчилтэй удирдлага шийдвэрлэхгүй.
+          </p>
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setDisputeOpen(false)}>Болих</Button>
             <Button
               disabled={pending || disputeContent.trim().length < 5 || !detail.transaction_id}
               onClick={() =>
                 run(
-                  () => createDispute({ transactionId: detail.transaction_id!, content: disputeContent.trim() }),
-                  () => setDisputeOpen(false)
+                  () =>
+                    createDispute({
+                      transactionId: detail.transaction_id!,
+                      content: disputeContent.trim(),
+                      evidence: disputeEvidence.trim() ? { text: disputeEvidence.trim() } : undefined,
+                    }),
+                  () => {
+                    setDisputeOpen(false);
+                    setDisputeEvidence("");
+                  }
                 )
               }
             >
@@ -545,12 +620,39 @@ export function CommissionDetailShell({
         </div>
       </Modal>
 
-      <Modal open={decideId != null} onClose={() => setDecideId(null)} title="Маргаан шийдвэрлэх (F-474)">
+      <Modal open={evidenceFor != null} onClose={() => setEvidenceFor(null)} title="Маргаанд нотолгоо нэмэх">
+        <div className="space-y-4">
+          <Field label="Нотолгоо">
+            <textarea
+              className="min-h-24 w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-ink"
+              value={evidenceText}
+              onChange={(e) => setEvidenceText(e.target.value)}
+              placeholder="CRM-ийн бүртгэл, огноо, үйл ажиллагааны нотолгоо…"
+            />
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setEvidenceFor(null)}>Болих</Button>
+            <Button
+              disabled={pending || evidenceText.trim().length < 5}
+              onClick={() =>
+                run(
+                  () => addDisputeEvidence({ disputeId: evidenceFor!, content: evidenceText.trim() }),
+                  () => setEvidenceFor(null)
+                )
+              }
+            >
+              Нэмэх
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={decideId != null} onClose={() => setDecideId(null)} title="Маргаан шийдвэрлэх">
         <div className="space-y-4">
           <Field label="Шийдвэр">
             <Input value={decide.decision} onChange={(e) => setDecide({ ...decide, decision: e.target.value })} />
           </Field>
-          <Field label="Үндэслэл (заавал — F-473)">
+          <Field label="Үндэслэл (заавал)">
             <Input value={decide.rationale} onChange={(e) => setDecide({ ...decide, rationale: e.target.value })} />
           </Field>
           <div className="flex justify-end gap-2">

@@ -1,5 +1,6 @@
 "use client";
 
+import { fmtDateNum } from "@/lib/format";
 import { Printer } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -80,7 +81,7 @@ export function StatementPrint({ statement }: { statement: StatementRow }) {
         )}
 
         {(detail.control_payments?.length ?? 0) > 0 && (
-          <Section title="Хяналтын бүртгэл — PMC-ээр дамжаагүй (мэдээллийн чанартай, F-526а)">
+          <Section title="Хяналтын бүртгэл — PMC-ээр дамжаагүй (мэдээллийн чанартай)">
             {detail.control_payments!.map((p, i) => (
               <Line key={i} left={`${p.paid_on} · ${p.lease ?? ""}`} right={`${Math.round(p.amount_mnt).toLocaleString()}₮`} />
             ))}
@@ -104,9 +105,9 @@ export function StatementPrint({ statement }: { statement: StatementRow }) {
         )}
 
         <div className="mt-6 grid grid-cols-2 gap-4 border-t border-line pt-4 text-xs text-subtle">
-          <p>Илгээсэн: {statement.sent_at ? new Date(statement.sent_at).toLocaleDateString() : "Илгээгдээгүй"}</p>
+          <p>Илгээсэн: {statement.sent_at ? fmtDateNum(statement.sent_at) : "Илгээгдээгүй"}</p>
           <p className="text-right">
-            Хүлээн авсан: {statement.acknowledged_at ? new Date(statement.acknowledged_at).toLocaleDateString() : "—"}
+            Хүлээн авсан: {statement.acknowledged_at ? fmtDateNum(statement.acknowledged_at) : "—"}
           </p>
         </div>
       </div>

@@ -1,7 +1,7 @@
 /**
- * Гейт шалгагч (G0–G6, F-354/F-416) — цэвэр функц, DB-гүй.
- * DB талын crm_check_gate() (000400-д, security definer) эцсийн үнэн;
- * энэ толь нь UI-д гейтийн checklist урьдчилан үзүүлэх + unit тестийн бай.
+ * Шилжих шалгуурын шалгагч (§6.13, §6.14, §6.17) — цэвэр функц, DB-гүй.
+ * DB талын crm_check_gate_rec() (security definer) эцсийн үнэн; энэ толь нь
+ * UI-д шалгуурын жагсаалтыг урьдчилан харуулах + unit тестийн бай.
  */
 
 import { GATE_CHECKER_LABEL, type GateCheckerKind } from "@/lib/constants-crm";
@@ -13,22 +13,33 @@ export type GateRequirement = {
 };
 
 /**
- * Шалгалтад орох объектын снапшот — дуудагч (query давхарга) бөглөнө.
+ * Шалгалтад орох боломжийн снапшот — дуудагч (query давхарга) бөглөнө.
  * Мэдэгдэхгүй (undefined) утгыг ДУТУУ гэж үзнэ (аюулгүй тал руу).
  */
 export type GateSnapshot = {
-  needProfileCompletePct?: number; // F-159 (0–100)
+  needProfileCompletePct?: number; // §6.7 (0–100)
   ownerSet?: boolean;
-  nextStepSet?: boolean; // next_step + next_step_date хоёул
+  nextStepSet?: boolean; // дараагийн үйлдэл + огноо хоёул
   kycStatus?: "pending" | "verified" | "edd" | "suspended";
-  docsCompletePct?: number; // F-409 (0–100)
-  roleEvidenceOk?: boolean; // F-402/451 үүргийн бүртгэл
+  docsCompletePct?: number; // хавтасны бүрдэл (0–100)
+  roleEvidenceOk?: boolean; // оролцогчдын үүрэг бүртгэгдсэн
   paymentProofOk?: boolean; // Санхүү баталгаажуулсан орлого
-  handoverDone?: boolean; // F-407 хүлээлцэх 100%
-  listingAgreementActive?: boolean; // F-205
-  offerRecorded?: boolean; // P-02 санал бүртгэгдсэн
-  amlHold?: boolean; // идэвхтэй hold байгаа бол true
-  postSaleTasksCreated?: boolean; // Д-09 багц үүссэн
+  handoverDone?: boolean; // хүлээлцэх 100%
+  listingAgreementActive?: boolean;
+  offerRecorded?: boolean; // үнийн санал бүртгэгдсэн
+  amlHold?: boolean; // идэвхтэй түгжээ байгаа бол true
+  postSaleTasksCreated?: boolean; // борлуулалтын дараах багц үүссэн
+  // PRO-001 v2.1 шатууд
+  meaningfulContact?: boolean; // утга бүхий холболт (хариу авсан бүртгэл)
+  matchSuggested?: boolean; // 1+ үл хөдлөх санал болгосон
+  showingLogged?: boolean; // үзлэг хийгдэж бүртгэгдсэн
+  interestConfirmed?: boolean; // харилцагч сонирхлоо баталгаажуулсан
+  counterRecorded?: boolean; // сөрөг санал бүртгэгдсэн
+  offerAccepted?: boolean; // харилцагч нөхцөлийг хүлээн зөвшөөрсөн (§6.16, §6.17)
+  meetingScheduled?: boolean; // өмчлөгчтэй уулзалт товлогдсон
+  priceAnalysisDone?: boolean; // зах зээлийн харьцуулалт, үнийн дүн шинжилгээ
+  propertyActive?: boolean; // листинг «Идэвхтэй»
+  showingOnProperty?: boolean; // шалгуур хангасан худалдан авагчийн үзлэг
 };
 
 export type GateCheckResult = {
@@ -39,6 +50,14 @@ export type GateCheckResult = {
 
 function num(v: unknown, fallback: number): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
+}
+
+/** Шаардлагын дэлгэцийн шошго (DB-ийн crm_check_gate_rec-тэй ижил). */
+export function gateRequirementLabel(kind: string, params?: Record<string, unknown> | null): string {
+  const base = GATE_CHECKER_LABEL[kind as GateCheckerKind];
+  if (!base) return "Тодорхойгүй шаардлага";
+  if (kind === "docs_complete") return `${base} ${num(params?.min_pct, 100)}%`;
+  return base;
 }
 
 /** Нэг шаардлага хангагдсан уу. */
@@ -69,20 +88,40 @@ export function checkRequirement(req: GateRequirement, s: GateSnapshot): boolean
       return s.amlHold !== true; // мэдэгдэхгүй бол DB тал (definer) эцэслэнэ
     case "post_sale_tasks":
       return s.postSaleTasksCreated === true;
+    case "meaningful_contact":
+      return s.meaningfulContact === true;
+    case "match_suggested":
+      return s.matchSuggested === true;
+    case "showing_logged":
+      return s.showingLogged === true;
+    case "interest_confirmed":
+      return s.interestConfirmed === true;
+    case "counter_recorded":
+      return s.counterRecorded === true;
+    case "offer_accepted":
+      return s.offerAccepted === true;
+    case "meeting_scheduled":
+      return s.meetingScheduled === true;
+    case "price_analysis":
+      return s.priceAnalysisDone === true;
+    case "property_active":
+      return s.propertyActive === true;
+    case "showing_on_property":
+      return s.showingOnProperty === true;
     default:
-      return false; // үл мэдэх checker — аюулгүй тал руу (дутуу)
+      return false; // үл мэдэх шаардлага — аюулгүй тал руу (дутуу)
   }
 }
 
 /**
- * Гейтийн бүх идэвхтэй шаардлагыг снапшоттой тулгана.
- * missing — дутуу шаардлага бүрийн монгол нэр (F-354: «дутуу жагсаалт»).
+ * Шалгуурын бүх идэвхтэй шаардлагыг снапшоттой тулгана.
+ * missing — дутуу шаардлага бүрийн монгол нэр.
  */
 export function checkGate(reqs: GateRequirement[], snapshot: GateSnapshot): GateCheckResult {
   const missing: string[] = [];
   for (const req of reqs) {
     if (!checkRequirement(req, snapshot)) {
-      missing.push(GATE_CHECKER_LABEL[req.checkerKind] ?? req.checkerKind);
+      missing.push(gateRequirementLabel(req.checkerKind, req.params));
     }
   }
   return { ok: missing.length === 0, missing };

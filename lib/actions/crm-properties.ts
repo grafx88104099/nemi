@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCrmStaffContext, type CrmStaffContext } from "@/lib/queries-crm-core";
 import { getZoneFor } from "@/lib/queries-crm-properties";
+import { recomputeMatchesCore, notifyMatchSignals } from "@/lib/queries-crm-matching";
 import {
   CRM_PROPERTY_ROLES,
   CRM_PROPERTY_STATUSES,
@@ -27,12 +28,13 @@ import type { Database, Json } from "@/types/database";
  *  • Үнэ өөрчлөх зөвхөн RPC (шалтгаан заавал, түүх trigger-ээр — F-208).
  *  • Эх сурвалжийн роль зөвхөн RPC-ээр шилжинэ (F-206).
  *  • Д-30: өөр салбарын бүсийн листингэд хамтран ажиллах даалгавар автомат.
- *  • Идэвхжүүлэлт → Д-07 урвуу тохируулга (runRule хэв: rule шалгаад цөм дуудна).
+ *  • Идэвхжүүлэлт → Д-07 урвуу тохируулга ШУУД тооцогдож, сегментийн дохио
+ *    очно (§6.10.3, §6.28.9); алдаа гарвал cron-ы дараалалд үлдэнэ.
  */
 
 const SAVE_ERR = "Хадгалахад алдаа гарлаа. Дахин оролдоно уу.";
 const NO_CRM_ERR = "Та CRM-д бүртгэгдээгүй байна.";
-const NOT_FOUND_ERR = "Объект олдсонгүй эсвэл танд эрх алга.";
+const NOT_FOUND_ERR = "Үл хөдлөх олдсонгүй эсвэл танд эрх алга.";
 
 function revalidatePropertyPaths(id?: string) {
   revalidatePath("/office/crm/properties");
@@ -118,16 +120,16 @@ function friendlyDbError(message: string): string {
   if (message.includes("идэвхжүүлэлтийн босго дутуу")) {
     return message.replace(/^.*идэвхжүүлэлтийн босго дутуу/, "Идэвхжүүлэлтийн босго дутуу");
   }
-  if (message.includes("шилжилт зөвшөөрөгдөөгүй")) return "Энэ статусын шилжилт зөвшөөрөгдөөгүй (F-202).";
+  if (message.includes("шилжилт зөвшөөрөгдөөгүй")) return "Энэ төлөвийн шилжилт зөвшөөрөгдөөгүй.";
   if (message.includes("шилжилтийн эрх алга")) return "Танд энэ статусын шилжилтийн эрх алга.";
   if (message.includes("шалтгаан заавал")) return "Энэ үйлдэлд шалтгаан заавал.";
   if (message.includes("бүсийн салбараас өөр салбар")) {
-    return "Бүсийн салбараас өөр салбар сонгоход шалтгаан заавал (F-207).";
+    return "Бүсийн салбараас өөр салбар сонгоход шалтгаан заавал.";
   }
   if (message.includes("эх сурвалжийн ролийг")) {
-    return "Эх сурвалжийн ролийг зөвхөн Борлуулалтын захирал/ЧМТ шалтгаантайгаар шилжүүлнэ (F-206).";
+    return "Эх сурвалжийн ролийг зөвхөн Борлуулалт хариуцсан захирал эсвэл Үйл ажиллагаа-ЧМТ шалтгаантайгаар шилжүүлнэ.";
   }
-  if (message.includes("crm_sequences")) return "Дугаарлалтын тохиргоо (property) хийгдээгүй байна.";
+  if (message.includes("crm_sequences")) return "Үл хөдлөхийн дугаарлалтын тохиргоо хийгдээгүй байна.";
   return SAVE_ERR;
 }
 
@@ -143,13 +145,17 @@ const addressSchema = z
   })
   .strict();
 
+// §6.10.2: бүс, үнэ, төрөл, хэмжээ, нөхцөл байдал, гол онцлог (+ зорилго).
+const tagList = z.array(z.string().trim().min(1).max(60)).max(20);
 const matchTagsSchema = z
   .object({
-    location: z.array(z.string().trim().min(1)).max(20),
-    type: z.array(z.string().trim().min(1)).max(20),
-    price: z.array(z.string().trim().min(1)).max(20),
-    goal: z.array(z.string().trim().min(1)).max(20),
-    special: z.array(z.string().trim().min(1)).max(20),
+    location: tagList,
+    type: tagList,
+    price: tagList,
+    size: tagList.optional(),
+    condition: tagList.optional(),
+    goal: tagList,
+    special: tagList,
   })
   .strict();
 
@@ -194,8 +200,8 @@ export async function createProperty(raw: PropertyInput): Promise<{ id?: string;
   const input = parsed.data;
 
   const isRental = input.serviceKind !== "sale";
-  if (!isRental && input.price == null) return { error: "Худалдах объектод үнэ заавал." };
-  if (isRental && input.rentPrice == null) return { error: "Түрээсийн объектод түрээсийн үнэ заавал." };
+  if (!isRental && input.price == null) return { error: "Худалдах үл хөдлөхөд үнэ заавал." };
+  if (isRental && input.rentPrice == null) return { error: "Түрээсийн үл хөдлөхөд түрээсийн үнэ заавал." };
 
   // Бүс автомат санал (F-207): zone lookup → branch; олдохгүй бол үүсгэгчийн салбар.
   const zone = await getZoneFor(input.address);
@@ -209,7 +215,7 @@ export async function createProperty(raw: PropertyInput): Promise<{ id?: string;
   });
   if (numErr || !number) {
     console.error("createProperty number:", numErr?.message);
-    return { error: "Объектын дугаар олгоход алдаа гарлаа. Дугаарлалтын тохиргоог шалгана уу." };
+    return { error: "Үл хөдлөхийн дугаар олгоход алдаа гарлаа. Дугаарлалтын тохиргоог шалгана уу." };
   }
 
   const { data: row, error } = await supabase
@@ -280,10 +286,10 @@ export async function createProperty(raw: PropertyInput): Promise<{ id?: string;
             office_id: ctx.officeId,
             created_by: ctx.profileId,
             responsible_id: responsible,
-            title: `Салбар хоорондын листингийн хамтын ажиллагаа (Д-30): ${input.name}`,
+            title: `Салбар хоорондын листингийн хамтын ажиллагаа: ${input.name}`,
             description:
               "Өөр салбарын бүсэд бүртгэгдсэн листинг — орон нутгийн агент үзлэг/гэрээнд хамтарна. " +
-              "Эх сурвалжийн роль бүртгэсэн агент дээр хадгалагдана (F-206).",
+              "Эх сурвалжийн роль бүртгэсэн агент дээр хадгалагдана.",
             priority: "normal",
           })
           .select("id")
@@ -377,7 +383,7 @@ export async function updatePropertyPrice(
   if ("error" in c) return { ok: false, error: c.error };
   const { ctx } = c;
 
-  if (!input.reason?.trim()) return { ok: false, error: "Үнийн өөрчлөлтөд шалтгаан заавал (F-208)." };
+  if (!input.reason?.trim()) return { ok: false, error: "Үнийн өөрчлөлтөд шалтгаан заавал." };
   if (input.price == null && input.rentPrice == null) return { ok: false, error: "Шинэ үнэ оруулна уу." };
   if ((input.price != null && input.price <= 0) || (input.rentPrice != null && input.rentPrice <= 0)) {
     return { ok: false, error: "Үнэ эерэг байх ёстой." };
@@ -433,7 +439,7 @@ export async function setPropertyStatus(
     if (m) {
       return {
         ok: false,
-        error: "Идэвхжүүлэлтийн босго дутуу байна (F-203).",
+        error: "Идэвхжүүлэх нөхцөл дутуу байна.",
         missing: m[1].split(";").map((s) => s.trim()).filter(Boolean),
       };
     }
@@ -448,8 +454,23 @@ export async function setPropertyStatus(
     } else if (rule.dryRun) {
       await logRuleRun(ctx.officeId, "D-07", "crm_properties", id, "dry_run", {});
     } else {
-      // Их тооцоолол арын горимд (F-259) — cron crm-matching pending мөрөөр гүйцэтгэнэ.
-      await logRuleRun(ctx.officeId, "D-07", "crm_properties", id, "pending", { reason: "activated" });
+      // §6.10.3: идэвхжмэгц тохирох харилцагчийн хайлт шууд; алдаа гарвал
+      // cron crm-matching-ийн дараалалд үлдэж дахин оролдоно.
+      try {
+        const admin = createAdminClient();
+        const summary = await recomputeMatchesCore(admin, ctx.officeId, { propertyId: id }, "property_to_profile");
+        const notified = await notifyMatchSignals(admin, ctx.officeId, id, summary.signalMatches);
+        await logRuleRun(ctx.officeId, "D-07", "crm_properties", id, "ok", {
+          reason: "activated",
+          written: summary.written,
+          strong: summary.strongMatches.length,
+          possible: summary.signalMatches.length - summary.strongMatches.length,
+          notified,
+        });
+      } catch (e) {
+        console.error("setPropertyStatus D-07:", e instanceof Error ? e.message : e);
+        await logRuleRun(ctx.officeId, "D-07", "crm_properties", id, "pending", { reason: "activated" });
+      }
     }
   }
 
@@ -492,7 +513,7 @@ export async function assignPropertyRole(
       ok: false,
       error:
         role === "sourcing"
-          ? "Эх сурвалжийн роль аль хэдийн оноогдсон — өөрчлөлт зөвхөн шилжүүлэлтээр (F-206)."
+          ? "Эх сурвалжийн роль аль хэдийн оноогдсон — өөрчлөлт зөвхөн шилжүүлэлтээр."
           : "Энэ роль аль хэдийн оноогдсон — «Шилжүүлэх» үйлдлээр солино уу.",
     };
   }
@@ -703,7 +724,7 @@ export async function publishToSite(propertyId: string): Promise<{ ok: boolean; 
   };
   const prop = (propRaw ?? null) as unknown as PropLite | null;
   if (!prop) return { ok: false, error: NOT_FOUND_ERR };
-  if (prop.status !== "active") return { ok: false, error: "Зөвхөн Идэвхтэй объектыг сайтад нийтэлнэ (F-202)." };
+  if (prop.status !== "active") return { ok: false, error: "Зөвхөн Идэвхтэй төлөвтэй үл хөдлөхийг сайтад нийтэлнэ." };
 
   const roles = prop.roles ?? [];
   const agentProfile =

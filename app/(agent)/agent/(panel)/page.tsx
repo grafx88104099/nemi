@@ -2,20 +2,15 @@ import Link from "next/link";
 import { Building2, Users, CalendarDays, Star, Clock, Plus, UserCircle, ArrowRight, AlertCircle } from "lucide-react";
 
 import { getMyAgent, getAgentOverview } from "@/lib/queries-agent";
+import { getCrmStaffContext } from "@/lib/queries-crm-core";
+import { getMyLeadSummary } from "@/lib/queries-crm-leads";
+import { LEAD_GRADE_LABEL, CRM_LIFECYCLE_LABEL } from "@/lib/constants-crm";
+import { fmtDate, fmtDayWithWeekday, fmtShortDateTime } from "@/lib/format";
 import { DashboardNav } from "@/components/dashboard/DashboardNav";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { PremierUpgrade } from "@/components/dashboard/PremierUpgrade";
-import { LEAD_PIPELINE, LEAD_STAGE_LABEL } from "@/lib/constants";
-
-const STAGE_COLOR: Record<string, string> = {
-  new: "bg-sky-500",
-  contacted: "bg-indigo-500",
-  viewing: "bg-amber-500",
-  offer: "bg-orange-500",
-  closed: "bg-emerald-500",
-};
 
 export default async function AgentOverview() {
   const agent = await getMyAgent();
@@ -30,15 +25,12 @@ export default async function AgentOverview() {
   }
 
   const isActive = agent.status === "active";
-  const { today, stats, byStage, recentLeads, upcoming } = await getAgentOverview(agent.id as string);
-
-  const pipeline = LEAD_PIPELINE.map((key) => ({
-    key,
-    label: LEAD_STAGE_LABEL[key],
-    color: STAGE_COLOR[key],
-    count: byStage[key] ?? 0,
-  }));
-  const pipelineTotal = pipeline.reduce((a, b) => a + b.count, 0) || 1;
+  const [{ today, stats, upcoming }, crmCtx] = await Promise.all([
+    getAgentOverview(agent.id as string),
+    getCrmStaffContext(),
+  ]);
+  // §6.1: агентын албан бүртгэл = CRM-ийн сэжим (хуучин лидийн хүснэгт биш).
+  const crm = crmCtx ? await getMyLeadSummary(crmCtx.profileId) : null;
 
   // Профайл гүйцэд байдал
   const checks = [
@@ -50,7 +42,13 @@ export default async function AgentOverview() {
 
   const kpis = [
     { icon: Building2, label: "Идэвхтэй зар", value: stats.active, tone: "text-brand-600" },
-    { icon: Users, label: "Шинэ лид", value: stats.newLeads, tone: "text-sky-600", hint: `нийт ${stats.leads}` },
+    {
+      icon: Users,
+      label: "Шинэ сэжим",
+      value: crm ? crm.newCount : "—",
+      tone: "text-sky-600",
+      hint: crm ? `идэвхтэй ${crm.activeCount}` : "CRM-д бүртгэгдээгүй",
+    },
     { icon: CalendarDays, label: "Өнөөдрийн үзлэг", value: stats.todayViewings, tone: "text-amber-600" },
     { icon: Star, label: "Үнэлгээ", value: agent.rating ?? "—", tone: "text-emerald-600", hint: `${agent.reviews_count ?? 0} сэтгэгдэл` },
   ];
@@ -63,7 +61,7 @@ export default async function AgentOverview() {
           <h1 className="text-2xl font-extrabold text-ink">Сайн байна уу, {agent.display_name as string}</h1>
           <p className="text-sm text-muted">
             {(agent.office?.name as string) ?? "Бие даасан агент"} ·{" "}
-            {new Date().toLocaleDateString("mn-MN", { weekday: "long", month: "long", day: "numeric" })}
+            {fmtDayWithWeekday(new Date())}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -73,7 +71,7 @@ export default async function AgentOverview() {
           {isActive && (
             <>
               <ButtonLink href="/agent/listings/new" size="sm"><Plus className="size-4" /> Шинэ зар</ButtonLink>
-              <ButtonLink href="/agent/leads" size="sm" variant="outline"><Users className="size-4" /> Лид</ButtonLink>
+              <ButtonLink href="/agent/crm" size="sm" variant="outline"><Users className="size-4" /> CRM</ButtonLink>
             </>
           )}
         </div>
@@ -119,28 +117,32 @@ export default async function AgentOverview() {
         </Link>
       )}
 
-      {/* Лидийн юүлүүр (pipeline) */}
+      {/* CRM — миний сэжим (§6.1) */}
       <Card className="mt-6">
         <CardBody>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-bold text-ink">Лидийн юүлүүр</h2>
-            <Link href="/agent/leads" className="text-sm text-brand-600 hover:underline">CRM →</Link>
+            <h2 className="font-bold text-ink">CRM — миний сэжим</h2>
+            <Link href="/agent/crm" className="text-sm text-brand-600 hover:underline">Өдрийн самбар →</Link>
           </div>
-          <div className="flex h-2.5 overflow-hidden rounded-full bg-surface-2">
-            {pipeline.map((s) => (
-              <div key={s.key} className={s.color} style={{ width: `${(s.count / pipelineTotal) * 100}%` }} title={`${s.label}: ${s.count}`} />
-            ))}
-          </div>
-          <div className="mt-3 grid grid-cols-5 gap-2 text-center">
-            {pipeline.map((s) => (
-              <div key={s.key}>
-                <div className="text-lg font-extrabold text-ink">{s.count}</div>
-                <div className="flex items-center justify-center gap-1 text-xs text-muted">
-                  <span className={`size-2 rounded-full ${s.color}`} /> {s.label}
-                </div>
-              </div>
-            ))}
-          </div>
+          {crm ? (
+            <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
+              {[
+                { label: "Шинэ", value: crm.newCount, href: "/agent/crm/leads?status=new" },
+                { label: "Идэвхтэй", value: crm.activeCount, href: "/agent/crm/leads?status=active" },
+                { label: "Үйлдэл хэтэрсэн", value: crm.overdueCount, href: "/agent/crm/leads?overdue=1" },
+                { label: "Холбогдоогүй", value: crm.noContactCount, href: "/agent/crm/leads?nocontact=1" },
+              ].map((k) => (
+                <Link key={k.label} href={k.href} className="rounded-xl bg-surface-2 px-3 py-3 hover:bg-surface">
+                  <div className="text-lg font-extrabold text-ink">{k.value}</div>
+                  <div className="text-xs text-muted">{k.label}</div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted">
+              Та CRM-д бүртгэгдээгүй байна — оффисын админ таныг CRM-ийн ажилтнаар нэмсний дараа сэжим энд харагдана.
+            </p>
+          )}
         </CardBody>
       </Card>
 
@@ -151,22 +153,31 @@ export default async function AgentOverview() {
         <Card>
           <CardBody>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-bold text-ink">Анхаарал шаардсан лид</h2>
-              <Link href="/agent/leads" className="text-sm text-brand-600 hover:underline">Бүгд →</Link>
+              <h2 className="font-bold text-ink">Анхаарал шаардсан сэжим</h2>
+              <Link href="/agent/crm/leads" className="text-sm text-brand-600 hover:underline">Бүгд →</Link>
             </div>
             <div className="space-y-2">
-              {recentLeads.map((l) => (
-                <div key={l.id} className="flex items-center justify-between rounded-lg bg-surface-2 px-3 py-2">
+              {(crm?.recent ?? []).map((l) => (
+                <Link
+                  key={l.id}
+                  href={`/agent/crm/leads/${l.id}`}
+                  className="flex items-center justify-between rounded-lg bg-surface-2 px-3 py-2 hover:bg-surface"
+                >
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium text-ink">{l.name}</div>
-                    <div className="truncate text-xs text-muted">{l.listing?.title ?? "—"} · {l.last_touch ?? ""}</div>
+                    <div className="truncate text-xs text-muted">
+                      {l.next_step ?? "Дараагийн үйлдэлгүй"}
+                      {l.next_step_date ? ` · ${fmtDate(l.next_step_date)}` : ""}
+                    </div>
                   </div>
-                  <Badge tone={l.stage === "new" ? "blue" : l.stage === "offer" ? "amber" : "neutral"}>
-                    {LEAD_STAGE_LABEL[l.stage as keyof typeof LEAD_STAGE_LABEL] ?? l.stage}
-                  </Badge>
-                </div>
+                  {l.grade ? (
+                    <Badge tone={LEAD_GRADE_LABEL[l.grade].tone}>{l.grade.toUpperCase()}</Badge>
+                  ) : (
+                    <Badge tone={CRM_LIFECYCLE_LABEL[l.status].tone}>{CRM_LIFECYCLE_LABEL[l.status].label}</Badge>
+                  )}
+                </Link>
               ))}
-              {recentLeads.length === 0 && <p className="text-sm text-muted">Лид алга.</p>}
+              {(crm?.recent ?? []).length === 0 && <p className="text-sm text-muted">Нээлттэй сэжим алга.</p>}
             </div>
           </CardBody>
         </Card>
@@ -186,7 +197,7 @@ export default async function AgentOverview() {
                       <span className="truncate text-sm font-medium text-ink">{v.listing?.title ?? "—"}</span>
                     </div>
                     <div className="shrink-0 text-xs text-muted">
-                      {v.scheduled_at ? new Date(v.scheduled_at).toLocaleString("mn-MN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}
+                      {v.scheduled_at ? fmtShortDateTime(v.scheduled_at) : "—"}
                     </div>
                   </div>
                 );

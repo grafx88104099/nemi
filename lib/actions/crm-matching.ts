@@ -1,21 +1,26 @@
 "use server";
 
+import { fmtDateNum } from "@/lib/format";
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCrmStaffContext, type CrmStaffContext } from "@/lib/queries-crm-core";
 import { recomputeMatchesCore } from "@/lib/queries-crm-matching";
-import { MATCH_RESPONSES, type MatchResponse } from "@/lib/constants-crm";
+import { MATCH_RESPONSES, MATCH_RESPONSE_LABEL, type MatchResponse } from "@/lib/constants-crm";
+import { buildMatchMessage } from "@/lib/crm/matching";
 import type { Json } from "@/types/database";
 
 /**
- * Тохируулгын бичилтүүд (U3 — F-250–261, P-04). Гол дүрмүүд:
- *  • Дахин тооцоолол — recomputeMatchesCore (admin client, оффисын хатуу хүрээтэй);
- *    их хэмжээний тооцоолол cron crm-matching-ийн pending дараалалд (F-259).
- *  • Deal breaker/сул тохироог гараар санал болгоход үндэслэл ЗААВАЛ (F-252/258).
- *  • Давхар санал болголтод өмнөх түүхийн анхааруулга (F-257).
- *  • Хариу 4 утгаар түүхчлэгдэнэ (F-256); Сонирхсон → үзлэгийн даалгавар (F-261/303).
+ * Тохируулгын бичилтүүд (§6.9, §6.10). Гол дүрмүүд:
+ *  • Дахин тооцоолол — recomputeMatchesCore (admin client, оффисын хатуу хүрээтэй).
+ *  • Хэлцэл таслах нөхцөл зөрчсөн / сул тохироог гараар санал болгоход
+ *    агентын үндэслэл ЗААВАЛ (§6.9 дүгнэлт).
+ *  • Давхар санал болголтод өмнөх түүхийн анхааруулга.
+ *  • Хувь хүнд чиглэсэн зурвас (§6.10.5): загвар → агент өөрөө илгээнэ →
+ *    илгээлт үйл ажиллагааны бүртгэлд (recordMatchMessage).
+ *  • Хариу 4 утгаар (§6.10.7); «Сонирхсон» → үзлэгийн даалгавар;
+ *    «Тохироогүй» → шалтгаан заавал, профайл шинэчлэх санал (§6.10.8).
  */
 
 const SAVE_ERR = "Хадгалахад алдаа гарлаа. Дахин оролдоно уу.";
@@ -98,7 +103,7 @@ export async function recomputeMatchesForProfile(
     .eq("office_id", ctx.officeId)
     .maybeSingle();
   if (!profile) return { ok: false, error: "Профайл олдсонгүй эсвэл танд эрх алга." };
-  if (profile.status !== "active") return { ok: false, error: "Зөвхөн идэвхтэй профайлд тохируулга тооцно (F-155)." };
+  if (profile.status !== "active") return { ok: false, error: "Зөвхөн идэвхтэй хэрэгцээний профайлд тохируулга тооцно." };
 
   try {
     const admin = createAdminClient();
@@ -132,9 +137,9 @@ export async function recomputeMatchesForProperty(
     .eq("id", propertyId)
     .eq("office_id", ctx.officeId)
     .maybeSingle();
-  if (!property) return { ok: false, error: "Объект олдсонгүй эсвэл танд эрх алга." };
+  if (!property) return { ok: false, error: "Үл хөдлөх олдсонгүй эсвэл танд эрх алга." };
   if (property.status !== "active") {
-    return { ok: false, error: "Зөвхөн Идэвхтэй объектод урвуу тохируулга тооцно (F-254)." };
+    return { ok: false, error: "Зөвхөн «Идэвхтэй» төлөвтэй үл хөдлөхөд тохирох харилцагч хайна." };
   }
 
   try {
@@ -179,12 +184,12 @@ export async function suggestMatch(
     return {
       ok: false,
       error: match.deal_breaker_hit
-        ? `Таслах нөхцөл зөрчсөн (${(match.deal_breaker_reasons ?? []).join(", ") || "—"}) — гараар санал болгоход агентын үндэслэл заавал (F-252).`
-        : "Сул тохироог зөвхөн агентын бичгэн тайлбартай санал болгоно (F-250).",
+        ? `Хэлцэл таслах нөхцөл зөрчсөн (${(match.deal_breaker_reasons ?? []).join(", ") || "—"}) — гараар санал болгоход агентын үндэслэл заавал.`
+        : "65-аас доош оноотой тохироог зөвхөн агентын тайлбартайгаар санал болгоно.",
     };
   }
 
-  // F-257: ижил хос өмнө нь санал болгогдсон бол анхааруулна.
+  // Ижил хос өмнө нь санал болгогдсон бол анхааруулна.
   if (!options.confirmDuplicate) {
     const { data: prior } = await supabase
       .from("crm_matches")
@@ -196,10 +201,12 @@ export async function suggestMatch(
       .limit(1)
       .maybeSingle();
     if (prior) {
-      const when = prior.suggested_at ? new Date(prior.suggested_at).toLocaleDateString("mn-MN") : "";
+      const when = prior.suggested_at ? fmtDateNum(prior.suggested_at) : "";
       return {
         ok: false,
-        duplicateWarning: `Энэ объект ${when} өмнө нь санал болгогдож байсан (хариу: ${prior.response ?? "бүртгэгдээгүй"}). Дахин санал болгох уу?`,
+        duplicateWarning: `Энэ үл хөдлөхийг ${when}-нд санал болгож байсан (хариу: ${
+          prior.response ? MATCH_RESPONSE_LABEL[prior.response as MatchResponse]?.label ?? "бүртгэгдээгүй" : "бүртгэгдээгүй"
+        }). Дахин санал болгох уу?`,
       };
     }
   }
@@ -254,7 +261,7 @@ export async function recordMatchResponse(
   const { ctx } = c;
   if (!MATCH_RESPONSES.includes(response)) return { ok: false, error: "Хариуны утга буруу байна." };
   if (response === "not_fit" && !reason?.trim()) {
-    return { ok: false, error: "«Тохироогүй» хариуд шалтгаан заавал (F-256)." };
+    return { ok: false, error: "«Тохироогүй» хариуд шалтгаан заавал." };
   }
 
   const { data: matchRaw } = await supabase
@@ -279,7 +286,7 @@ export async function recordMatchResponse(
   };
   const match = (matchRaw ?? null) as unknown as MatchLite | null;
   if (!match) return { ok: false, error: NOT_FOUND_ERR };
-  if (!match.suggested_at) return { ok: false, error: "Эхлээд санал болгосны дараа хариу бүртгэнэ (F-256)." };
+  if (!match.suggested_at) return { ok: false, error: "Эхлээд санал болгосны дараа хариу бүртгэнэ." };
 
   const { error, count } = await supabase
     .from("crm_matches")
@@ -300,7 +307,7 @@ export async function recordMatchResponse(
   if (!count) return { ok: false, error: NOT_FOUND_ERR };
 
   const contactName = match.profile?.contact?.display_name ?? "Харилцагч";
-  const propertyName = match.property ? `${match.property.name} (${match.property.number})` : "объект";
+  const propertyName = match.property ? `${match.property.name} (${match.property.number})` : "үл хөдлөх";
 
   // F-261/303: Сонирхсон → үзлэгийн даалгавар автомат; урсгалын Matched шат U4-ийн
   // stage guard-аар (боломж үүссэн үед) хэрэгжинэ.
@@ -314,7 +321,7 @@ export async function recordMatchResponse(
           responsible_id: ctx.profileId,
           title: `Үзлэг зохион байгуулах: ${contactName} — ${propertyName}`,
           description:
-            "Тохируулгад «Сонирхсон» хариу бүртгэгдсэн — үзлэгийн цаг товлож, болсны дараа 24 цагийн дотор санал бүртгэнэ (Д-05).",
+            "Тохируулгад «Сонирхсон» хариу бүртгэгдсэн — үзлэгийн цаг товлож, үзлэгийн дараа 24 цагийн дотор харилцагчийн саналыг бүртгэнэ.",
           priority: "high",
         })
         .select("id")
@@ -330,7 +337,7 @@ export async function recordMatchResponse(
       [ctx.profileId],
       "crm_match_interested",
       "Сонирхсон хариу",
-      `${contactName} «${propertyName}» объектыг сонирхож байна — үзлэгийн даалгавар үүслээ.`
+      `${contactName} «${propertyName}»-ийг сонирхож байна — үзлэгийн даалгавар үүслээ.`
     );
   } else {
     await logRuleRun(ctx.officeId, "F-256", "crm_matches", matchId, "ok", { response });
@@ -352,6 +359,186 @@ export async function recordMatchResponse(
   }
 
   revalidateMatchPaths();
-  // F-260: тохироогүй шалтгаанаас профайл шинэчлэх санал.
+  // §6.10.8: тохироогүй шалтгаанаас профайл шинэчлэх санал.
   return { ok: true, profileUpdateHint: response === "not_fit" };
+}
+
+// ── Хувь хүнд чиглэсэн зурвас (§6.10.5) ──────────────────
+
+export type MatchMessageDraft = {
+  matchId: string;
+  contactId: string | null;
+  contactName: string | null;
+  propertyName: string;
+  text: string;
+  /** Нээлттэй, идэвхтэй сэжимтэй бол дараагийн үйлдэл заавал. */
+  needsNextStep: boolean;
+};
+
+/** Зурвасын загвар бэлтгэнэ — агент засаад өөрөө илгээнэ. */
+export async function getMatchMessageDraft(
+  matchId: string
+): Promise<{ draft?: MatchMessageDraft; error?: string }> {
+  const supabase = await createClient();
+  const c = await ctxOrError();
+  if ("error" in c) return { error: c.error };
+  const { ctx } = c;
+
+  const { data: raw } = await supabase
+    .from("crm_matches")
+    .select(
+      "id, need_profile_id, " +
+        "profile:crm_need_profiles!crm_matches_need_profile_id_fkey(contact_id, " +
+        "contact:crm_contacts!crm_need_profiles_contact_id_fkey(display_name)), " +
+        "property:crm_properties!crm_matches_property_id_fkey(name, number, service_kind, property_type, price, rent_price, rooms, area_m2, address, listing_id)"
+    )
+    .eq("id", matchId)
+    .eq("office_id", ctx.officeId)
+    .maybeSingle();
+  type Raw = {
+    id: string;
+    profile: { contact_id: string; contact: { display_name: string } | null } | null;
+    property: {
+      name: string;
+      number: string;
+      service_kind: string;
+      property_type: string;
+      price: number | null;
+      rent_price: number | null;
+      rooms: number | null;
+      area_m2: number | null;
+      address: { district?: string } | null;
+      listing_id: string | null;
+    } | null;
+  };
+  const m = (raw ?? null) as unknown as Raw | null;
+  if (!m || !m.property) return { error: NOT_FOUND_ERR };
+
+  const contactId = m.profile?.contact_id ?? null;
+  let needsNextStep = false;
+  if (contactId) {
+    const { data: lead } = await supabase
+      .from("crm_leads")
+      .select("id, status")
+      .eq("contact_id", contactId)
+      .eq("status", "active")
+      .limit(1)
+      .maybeSingle();
+    needsNextStep = !!lead;
+  }
+  const { data: me } = await supabase.from("profiles").select("full_name").eq("id", ctx.profileId).maybeSingle();
+  const site = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.nemi.mn").replace(/\/$/, "");
+  const p = m.property;
+  return {
+    draft: {
+      matchId,
+      contactId,
+      contactName: m.profile?.contact?.display_name ?? null,
+      propertyName: `${p.name} (${p.number})`,
+      needsNextStep,
+      text: buildMatchMessage({
+        contactName: m.profile?.contact?.display_name ?? null,
+        propertyName: p.name,
+        serviceKind: p.service_kind,
+        propertyType: p.property_type,
+        price: p.price == null ? null : Number(p.price),
+        rentPrice: p.rent_price == null ? null : Number(p.rent_price),
+        rooms: p.rooms,
+        areaM2: p.area_m2 == null ? null : Number(p.area_m2),
+        district: p.address?.district ?? null,
+        url: p.listing_id ? `${site}/listings/${p.listing_id}` : null,
+        agentName: me?.full_name ?? null,
+      }),
+    },
+  };
+}
+
+const MESSAGE_CHANNELS = ["chat", "email", "call"] as const;
+export type MatchMessageChannel = (typeof MESSAGE_CHANNELS)[number];
+
+/**
+ * Илгээсэн зурвасыг бүртгэнэ: санал болгоогүй бол санал болгосон болгож,
+ * үйл ажиллагааны бүртгэлд (суваг, агуулга, дараагийн үйлдэл) хадгална.
+ * Нэг талын зурвас тул утга бүхий холболтод тооцогдохгүй (reached = false).
+ */
+export async function recordMatchMessage(
+  matchId: string,
+  input: { channel: MatchMessageChannel; text: string; nextStep?: string; nextStepDate?: string }
+): Promise<{ ok: boolean; error?: string; duplicateWarning?: string }> {
+  const supabase = await createClient();
+  const c = await ctxOrError();
+  if ("error" in c) return { ok: false, error: c.error };
+  const { ctx } = c;
+  if (!MESSAGE_CHANNELS.includes(input.channel)) return { ok: false, error: "Суваг буруу байна." };
+  const text = input.text.trim();
+  if (text.length < 10) return { ok: false, error: "Зурвасын агуулгыг бичнэ үү." };
+  if (input.nextStepDate && !/^\d{4}-\d{2}-\d{2}$/.test(input.nextStepDate)) {
+    return { ok: false, error: "Огноо буруу байна." };
+  }
+
+  const { data: raw } = await supabase
+    .from("crm_matches")
+    .select(
+      "id, property_id, suggested_at, strength, deal_breaker_hit, " +
+        "profile:crm_need_profiles!crm_matches_need_profile_id_fkey(contact_id), " +
+        "property:crm_properties!crm_matches_property_id_fkey(name, number)"
+    )
+    .eq("id", matchId)
+    .eq("office_id", ctx.officeId)
+    .maybeSingle();
+  type Raw = {
+    id: string;
+    property_id: string;
+    suggested_at: string | null;
+    strength: string;
+    deal_breaker_hit: boolean;
+    profile: { contact_id: string } | null;
+    property: { name: string; number: string } | null;
+  };
+  const m = (raw ?? null) as unknown as Raw | null;
+  if (!m || !m.profile) return { ok: false, error: NOT_FOUND_ERR };
+
+  if (!m.suggested_at) {
+    if (m.deal_breaker_hit || m.strength === "weak") {
+      return { ok: false, error: "Энэ тохироог эхлээд үндэслэлтэйгээр «Санал болгох» товчоор санал болгоно уу." };
+    }
+    const res = await suggestMatch(matchId, { confirmDuplicate: true });
+    if (!res.ok) return res;
+  }
+
+  const { data: lead } = await supabase
+    .from("crm_leads")
+    .select("id, status")
+    .eq("contact_id", m.profile.contact_id)
+    .in("status", ["new", "active"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (lead?.status === "active" && (!input.nextStep?.trim() || !input.nextStepDate)) {
+    return { ok: false, error: "Идэвхтэй сэжимд дараагийн үйлдэл, огноо заавал." };
+  }
+
+  const propertyLabel = m.property ? `${m.property.name} (${m.property.number})` : "үл хөдлөх";
+  const { error } = await supabase.from("crm_activities").insert({
+    office_id: ctx.officeId,
+    contact_id: m.profile.contact_id,
+    property_id: m.property_id,
+    lead_id: lead?.id ?? null,
+    channel: input.channel,
+    purpose: "follow_up",
+    summary: `Тохирох үл хөдлөх санал болгосон: ${propertyLabel}. ${text}`.slice(0, 2000),
+    outcome: "open",
+    next_step: input.nextStep?.trim() || null,
+    next_step_date: input.nextStepDate || null,
+    occurred_at: new Date().toISOString(),
+    owner_id: ctx.profileId,
+    reached: false,
+  });
+  if (error) {
+    console.error("recordMatchMessage:", error.message);
+    return { ok: false, error: SAVE_ERR };
+  }
+  await logRuleRun(ctx.officeId, "match_message", "crm_matches", matchId, "ok", { channel: input.channel });
+  revalidateMatchPaths();
+  return { ok: true };
 }

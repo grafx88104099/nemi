@@ -1,6 +1,17 @@
 import { describe, it, expect } from "vitest";
 
-import { daysSince, isFresh, relativeDate, fmtDate, fmtDateTime } from "@/lib/format";
+import {
+  daysSince,
+  isFresh,
+  relativeDate,
+  fmtDate,
+  fmtDateTime,
+  fmtDateNum,
+  fmtTime,
+  fmtDayMonth,
+  fmtShortDateTime,
+  fmtDayWithWeekday,
+} from "@/lib/format";
 
 const NOW = new Date("2026-06-06T12:00:00Z");
 const ago = (days: number, hours = 0) =>
@@ -45,14 +56,33 @@ describe("relativeDate", () => {
 });
 
 describe("fmtDate", () => {
-  it("монгол бүтэн огноо", () => {
-    expect(fmtDate("2026-06-06T00:00:00")).toBe("2026 оны 6-р сарын 6");
+  it("монгол бүтэн огноо (УБ цагаар)", () => {
+    expect(fmtDate("2026-06-05T16:00:00Z")).toBe("2026 оны 6-р сарын 6"); // УБ 00:00
+    expect(fmtDate("2026-06-06")).toBe("2026 оны 6-р сарын 6"); // зөвхөн огноо
   });
 });
 
 describe("fmtDateTime", () => {
-  it("огноо + цаг (орон нутгийн), тэглэлттэй", () => {
-    expect(fmtDateTime("2026-06-08T14:30:00")).toBe("2026.06.08 14:30");
-    expect(fmtDateTime("2026-01-05T09:05:00")).toBe("2026.01.05 09:05");
+  it("огноо + цаг УБ-аар, тэглэлттэй — server-ийн цагийн бүсээс үл хамаарна", () => {
+    expect(fmtDateTime("2026-06-08T06:30:00Z")).toBe("2026.06.08 14:30");
+    expect(fmtDateTime("2026-01-05T01:05:00Z")).toBe("2026.01.05 09:05");
+    expect(fmtDateTime(new Date("2026-01-05T01:05:00Z"))).toBe("2026.01.05 09:05");
+  });
+  it("UTC шөнө дунд УБ-д дараагийн өдөр болно", () => {
+    expect(fmtDateTime("2026-03-31T20:15:00Z")).toBe("2026.04.01 04:15");
+  });
+});
+
+describe("УБ-ын богино форматууд", () => {
+  const iso = "2026-09-24T07:06:00Z"; // УБ 15:06, пүрэв
+  it("тоон огноо, цаг, сар.өдөр", () => {
+    expect(fmtDateNum(iso)).toBe("2026.09.24");
+    expect(fmtTime(iso)).toBe("15:06");
+    expect(fmtDayMonth(iso)).toBe("09.24");
+    expect(fmtShortDateTime(iso)).toBe("09.24 15:06");
+  });
+  it("гарагтай огноо", () => {
+    expect(fmtDayWithWeekday(iso)).toBe("9-р сарын 24, пүрэв");
+    expect(fmtDayWithWeekday("2026-11-07T17:00:00Z")).toBe("11-р сарын 8, ням");
   });
 });

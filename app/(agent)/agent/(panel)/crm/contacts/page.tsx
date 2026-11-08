@@ -1,9 +1,8 @@
-import { redirect } from "next/navigation";
-
 import { getCrmStaffContext, getBranches, getLookups } from "@/lib/queries-crm-core";
-import { getContacts, type ContactFilters } from "@/lib/queries-crm-contacts";
+import { getContacts, getTagLookups, type ContactFilters } from "@/lib/queries-crm-contacts";
 import { CrmNav } from "@/components/crm/CrmNav";
 import { ContactsPageShell } from "@/components/crm/ContactsPageShell";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   CRM_LIFECYCLES,
   CONTACT_KINDS,
@@ -22,7 +21,17 @@ type SearchParams = Promise<Record<string, string | undefined>>;
 /** Агентын харилцагчийн сан — RLS эрхийн хүрээнд (crm_can_view_contact). */
 export default async function AgentContactsPage({ searchParams }: { searchParams: SearchParams }) {
   const ctx = await getCrmStaffContext();
-  if (!ctx) redirect("/agent");
+  if (!ctx) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-16">
+        <EmptyState
+          title="Та CRM-д бүртгэгдээгүй байна"
+          description="Оффисын админ таныг CRM-ийн ажилтнаар нэмсний дараа харилцагчийн бүртгэл харагдана."
+          action={{ label: "Агентын самбар", href: "/agent" }}
+        />
+      </div>
+    );
+  }
 
   const sp = await searchParams;
   const filters: ContactFilters = {
@@ -39,7 +48,7 @@ export default async function AgentContactsPage({ searchParams }: { searchParams
     getContacts(filters),
     getBranches(),
     getLookups("lead_source"),
-    getLookups("tag"),
+    getTagLookups(),
   ]);
 
   return (

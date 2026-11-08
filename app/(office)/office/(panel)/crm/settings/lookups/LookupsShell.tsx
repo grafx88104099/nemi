@@ -25,7 +25,14 @@ type Draft = {
   isActive: boolean;
 };
 
-export function LookupsShell({ lookups, canEdit }: { lookups: LookupRow[]; canEdit: boolean }) {
+export function LookupsShell({
+  lookups,
+  editableKinds,
+}: {
+  lookups: LookupRow[];
+  /** Засах эрхтэй лавлахын төрлүүд (Маркетинг — эх сурвалж). */
+  editableKinds: string[] | "all";
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const kinds = useMemo(() => {
@@ -38,6 +45,7 @@ export function LookupsShell({ lookups, canEdit }: { lookups: LookupRow[]; canEd
   const [error, setError] = useState<string | null>(null);
 
   const rows = lookups.filter((l) => l.kind === kind);
+  const canEdit = editableKinds === "all" || editableKinds.includes(kind);
 
   function submit() {
     if (!draft) return;
@@ -169,7 +177,7 @@ export function LookupsShell({ lookups, canEdit }: { lookups: LookupRow[]; canEd
                   onChange={(e) => setDraft({ ...draft, sortOrder: Number(e.target.value) })}
                 />
               </Field>
-              <Field label="Тайлбар заавал (F-104)">
+              <Field label="«Бусад» мэт тайлбар заавал">
                 <Select
                   value={draft.requiresNote ? "yes" : "no"}
                   onChange={(e) => setDraft({ ...draft, requiresNote: e.target.value === "yes" })}

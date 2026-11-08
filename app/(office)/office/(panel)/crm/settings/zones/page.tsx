@@ -12,7 +12,7 @@ export default async function ZoneSettingsPage() {
     <div className="p-8">
       <h1 className="text-2xl font-extrabold text-ink">Бүс, салбар, баг</h1>
       <p className="text-sm text-muted">
-        Бүсийн лавлах (F-207) объектын салбарыг автоматаар тогтооно; өөрчлөлт бүр аудитад бүртгэгдэнэ.
+        Бүсийн лавлах объектын салбарыг автоматаар тогтооно; өөрчлөлт бүр аудитад бүртгэгдэнэ.
       </p>
       <ZonesShell branches={branches} teams={teams} zones={zones} canEdit={ctx.canEdit} />
     </div>

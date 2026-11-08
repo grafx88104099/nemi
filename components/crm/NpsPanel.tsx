@@ -1,5 +1,6 @@
 "use client";
 
+import { fmtDateNum } from "@/lib/format";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { MessageSquareHeart, Send } from "lucide-react";
@@ -114,7 +115,7 @@ export function NpsPanel({
 
       {surveys.length === 0 ? (
         <p className="py-4 text-center text-sm text-muted">
-          NPS асуулга илгээгдээгүй — хаалтаас хойш тохиргоот хугацаанд автомат илгээгдэнэ (F-751).
+          NPS асуулга илгээгдээгүй — хаалтаас хойш тохиргоот хугацаанд автомат илгээгдэнэ.
         </p>
       ) : (
         <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
@@ -132,9 +133,9 @@ export function NpsPanel({
               {s.comment && <span className="w-full text-sm text-muted">«{s.comment}»</span>}
               <span className="ml-auto text-xs text-subtle">
                 {s.answered_at
-                  ? `Хариулсан: ${new Date(s.answered_at).toLocaleDateString("mn-MN")}`
+                  ? `Хариулсан: ${fmtDateNum(s.answered_at)}`
                   : s.sent_at
-                    ? `Илгээсэн: ${new Date(s.sent_at).toLocaleDateString("mn-MN")}`
+                    ? `Илгээсэн: ${fmtDateNum(s.sent_at)}`
                     : ""}
               </span>
               {s.score == null && (

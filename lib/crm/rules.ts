@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/types/database";
+import { leadSlaDeadline, type CalendarExceptions, type SlaPolicy } from "@/lib/crm/calendar";
 
 /**
  * Автоматжуулалтын дүрмийн хөдөлгүүр (F-600–603, §7) — Д-01…Д-30 бүх дүрмийн
@@ -329,4 +330,194 @@ export async function runRule(
     await logRuleRun(admin, { ...base, status: "error", error: msg });
     return { status: "error", error: msg };
   }
+}
+
+// ════════════════════════════════════════════════════════════
+// SLA гинж ба өдрийн автоматжуулалтын цэвэр шийдүүд (PRO-001 v2.1
+// §6.4, §6.15, §6.16, §6.26, §6.28) — босго бүр crm_settings-ээс
+// ('automation_thresholds'); эндхийн DEFAULT нь зөвхөн fallback.
+// ════════════════════════════════════════════════════════════
+
+export type AutomationThresholds = {
+  /** §6.26: холболтгүй шинэ сэжимийн эзэмшлийн хамгаалалт. */
+  lead_protection: { new_no_contact_days: number; warn_before_days: number };
+  /** §6.28.6: халуун (A) сэжим идэвхгүй гэж үзэх хоног. */
+  hot_lead_inactive_days: number;
+  /** §6.15/§6.28.3: үзлэгийн дараах эргэх холбооны хугацаа, ахлагчид шилжих хугацаа (цаг). */
+  showing_feedback_hours: number;
+  showing_feedback_escalate_hours: number;
+  /** §6.28.4: үнийн саналын шатны сануулгын давтамж (хоног). */
+  offer_followup_days: number;
+  /** §6.16: саналын хүчинтэй хугацаа дуусахаас өмнөх сануулга (хоног). */
+  offer_expiring_days: number;
+  /** §6.4: дараагийн үйлдэл хэтэрснээс хойш ахлагчид харагдах хоног. */
+  next_step_overdue_escalate_days: number;
+};
+
+export const DEFAULT_AUTOMATION_THRESHOLDS: AutomationThresholds = {
+  lead_protection: { new_no_contact_days: 3, warn_before_days: 1 },
+  hot_lead_inactive_days: 3,
+  showing_feedback_hours: 24,
+  showing_feedback_escalate_hours: 48,
+  offer_followup_days: 1,
+  offer_expiring_days: 2,
+  next_step_overdue_escalate_days: 3,
+};
+
+function posNum(v: unknown, fallback: number): number {
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : fallback;
+}
+
+function nonNeg(v: unknown, fallback: number): number {
+  return typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : fallback;
+}
+
+/** Тохиргооны хэсэгчилсэн/буруу утгыг анхдагчтай нийлүүлнэ. */
+export function normalizeAutomationThresholds(raw: unknown): AutomationThresholds {
+  const d = DEFAULT_AUTOMATION_THRESHOLDS;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return d;
+  const r = raw as Record<string, unknown>;
+  const lp = (r.lead_protection ?? {}) as Record<string, unknown>;
+  const newDays = posNum(lp.new_no_contact_days, d.lead_protection.new_no_contact_days);
+  const feedback = posNum(r.showing_feedback_hours, d.showing_feedback_hours);
+  return {
+    lead_protection: {
+      new_no_contact_days: newDays,
+      warn_before_days: Math.min(nonNeg(lp.warn_before_days, d.lead_protection.warn_before_days), newDays),
+    },
+    hot_lead_inactive_days: posNum(r.hot_lead_inactive_days, d.hot_lead_inactive_days),
+    showing_feedback_hours: feedback,
+    showing_feedback_escalate_hours: Math.max(
+      feedback,
+      posNum(r.showing_feedback_escalate_hours, d.showing_feedback_escalate_hours)
+    ),
+    offer_followup_days: posNum(r.offer_followup_days, d.offer_followup_days),
+    offer_expiring_days: nonNeg(r.offer_expiring_days, d.offer_expiring_days),
+    next_step_overdue_escalate_days: posNum(r.next_step_overdue_escalate_days, d.next_step_overdue_escalate_days),
+  };
+}
+
+const H_MS = 3600 * 1000;
+const D_MS = 24 * H_MS;
+
+export type LeadSlaInput = {
+  /** Мэдээлэл хүлээн авсан мөч (received_at ?? created_at). */
+  startedAt: Date;
+  /** Эхний холболтын хугацаа (first_contact_due_at). */
+  dueAt: Date | null;
+  /** Анхны утга бүхий холболт (first_contact_at). */
+  firstContactAt: Date | null;
+  /** «Холбогдож чадаагүй» бүртгэлийн тоо (reached = false). */
+  failedAttempts: number;
+};
+
+export type LeadSlaSteps = {
+  /** Д-02: эхний холболтын хугацаа хэтэрсэн. */
+  breach: boolean;
+  /** Д-03: хоёр дахь оролдлогын даалгавар хэрэгтэй (хэтэрсэн эсвэл холбогдож чадаагүй). */
+  retry: boolean;
+  /** Хоёр дахь оролдлогын эцсийн хугацаа — сэжим ирснээс retryHours дотор. */
+  retryDeadline: Date;
+  /** Д-04: escalateHours-т утга бүхий холболт болоогүй — ахлагчид харагдуулна. */
+  noContact: boolean;
+};
+
+/**
+ * §6.4 эхний холболтын гинж: 24/48 цагийг сэжим ИРСЭН мөчөөс тоолно
+ * (хугацаа хэтэрсэн мөчөөс биш). Утга бүхий холболт бүртгэгдсэн бол бүгд зогсоно.
+ */
+export function leadSlaSteps(
+  input: LeadSlaInput,
+  now: Date,
+  opts: { retryHours: number; escalateHours: number }
+): LeadSlaSteps {
+  const start = input.startedAt.getTime();
+  const retryDeadline = new Date(Math.max(start + opts.retryHours * H_MS, now.getTime()));
+  if (input.firstContactAt) return { breach: false, retry: false, retryDeadline, noContact: false };
+  const breach = !!input.dueAt && now.getTime() > input.dueAt.getTime();
+  return {
+    breach,
+    retry: breach || input.failedAttempts > 0,
+    retryDeadline,
+    noContact: now.getTime() >= start + opts.escalateHours * H_MS,
+  };
+}
+
+export type ProtectionState = "ok" | "warn" | "expire";
+
+/**
+ * §6.26: зөвхөн нэр, утастай (утга бүхий холболтгүй) шинэ сэжим хугацаагүй
+ * хамгаалагдахгүй — босгоос warn_before_days өмнө сануулж, босгонд хамгаалалтгүй.
+ */
+export function leadProtectionState(
+  lead: { status: string; createdAt: Date; firstContactAt: Date | null; unprotected: boolean },
+  now: Date,
+  cfg: AutomationThresholds["lead_protection"]
+): ProtectionState {
+  if (lead.status !== "new" || lead.firstContactAt || lead.unprotected) return "ok";
+  const ageDays = (now.getTime() - lead.createdAt.getTime()) / D_MS;
+  if (ageDays >= cfg.new_no_contact_days) return "expire";
+  if (cfg.warn_before_days > 0 && ageDays >= cfg.new_no_contact_days - cfg.warn_before_days) return "warn";
+  return "ok";
+}
+
+/** §6.28.6: халуун сэжим идэвхгүй (A ангилал, идэвхтэй, босгоос олон хоног холболтгүй). */
+export function isHotLeadInactive(
+  lead: { grade: string | null; status: string; inactivityDays: number },
+  cfg: Pick<AutomationThresholds, "hot_lead_inactive_days">
+): boolean {
+  return lead.grade === "a" && lead.status === "active" && lead.inactivityDays >= cfg.hot_lead_inactive_days;
+}
+
+export type FeedbackState = "none" | "overdue" | "escalate";
+
+/** §6.15/§6.28.3: үзлэгийн дараах эргэх холбооны төлөв. */
+export function showingFeedbackState(
+  occurredAt: Date,
+  hasFeedback: boolean,
+  now: Date,
+  cfg: Pick<AutomationThresholds, "showing_feedback_hours" | "showing_feedback_escalate_hours">
+): FeedbackState {
+  if (hasFeedback) return "none";
+  const hours = (now.getTime() - occurredAt.getTime()) / H_MS;
+  if (hours >= cfg.showing_feedback_escalate_hours) return "escalate";
+  if (hours >= cfg.showing_feedback_hours) return "overdue";
+  return "none";
+}
+
+/** 'YYYY-MM-DD' хоорондын хоног (to − from). */
+export function isoDaysBetween(fromIso: string, toIso: string): number {
+  return Math.round(
+    (new Date(`${toIso.slice(0, 10)}T00:00:00Z`).getTime() - new Date(`${fromIso.slice(0, 10)}T00:00:00Z`).getTime()) /
+      D_MS
+  );
+}
+
+/** §6.16: саналын хүчинтэй хугацаа дуусах гэж буй (0..offer_expiring_days хоног үлдсэн). */
+export function isOfferExpiring(validUntil: string | null, todayIso: string, days: number): boolean {
+  if (!validUntil) return false;
+  const left = isoDaysBetween(todayIso, validUntil);
+  return left >= 0 && left <= days;
+}
+
+/** §6.28.4: саналын шатанд сүүлийн холболтоос хойш давтамж хэтэрсэн. */
+export function isOfferFollowupDue(lastTouchIso: string | null, todayIso: string, days: number): boolean {
+  if (!lastTouchIso) return true;
+  return isoDaysBetween(lastTouchIso, todayIso) >= days;
+}
+
+/**
+ * Ажлын бус цагийн дарааллаас хуваарилах үеийн эхний холболтын хугацаа:
+ * мэдээлэл ирсэн мөчөөс эх сурвалжийн бодлогоор (жишээ нь Ням 22:00 → Даваа
+ * 09:15 УБ); систем хоцорч хуваарилсан бол (хугацаа аль хэдийн өнгөрсөн)
+ * хуваарилсан мөчөөс дахин тоолно — агентад шууд зөрчил үүсэхгүй.
+ */
+export function queueDrainDeadline(
+  receivedAt: Date,
+  now: Date,
+  sourceCode: string | null | undefined,
+  opts: { policy?: SlaPolicy | null; fallbackMinutes: number; exceptions?: CalendarExceptions }
+): Date {
+  const due = leadSlaDeadline(receivedAt, sourceCode, opts);
+  return due.getTime() > now.getTime() ? due : leadSlaDeadline(now, sourceCode, opts);
 }

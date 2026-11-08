@@ -1,4 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
+import { getLookups, getSettingValue } from "@/lib/queries-crm-core";
+import { getDocsForEntity } from "@/lib/queries-crm-docs";
+import { getAgentOptions } from "@/lib/queries-crm-leads";
+import { normalizeDealFlow, parseClosingChecks } from "@/lib/crm/deal-flow";
 import type { Json } from "@/types/database";
 import type {
   TxnType,
@@ -115,6 +119,35 @@ export type TxnContract = {
   valid_from: string | null;
   valid_to: string | null;
   doc_id: string | null;
+  template_code: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  reviewer_name: string | null;
+};
+
+export type TxnPayment = {
+  id: string;
+  kind: "income" | "control";
+  schedule_line_id: string | null;
+  invoice_id: string | null;
+  paid_on: string;
+  amount: number;
+  currency: string;
+  amount_mnt: number;
+  method: string;
+  doc_id: string | null;
+  finance_verified_at: string | null;
+  created_at: string;
+};
+
+export type TxnInvoice = {
+  id: string;
+  number: string;
+  type: string;
+  status: string;
+  amount: number;
+  due_on: string;
+  recipient_contact_id: string;
 };
 
 export type TxnScheduleLine = {
@@ -133,6 +166,7 @@ export type TxnHandoverItem = {
   done_on: string | null;
   responsible_id: string | null;
   sort_order: number;
+  due_on: string | null;
 };
 
 export type TxnApproval = {
@@ -187,13 +221,14 @@ export type TxnDetail = {
   schedule: TxnScheduleLine[];
   handover: TxnHandoverItem[];
   approvals: TxnApproval[];
+  payments: TxnPayment[];
+  invoices: TxnInvoice[];
 };
 
 const TXN_DETAIL_SELECT =
   "id, number, type, status, opportunity_id, property_id, amount, currency, fx_rate, fx_rate_source, " +
   "amount_mnt, opened_on, contracted_on, closed_on, aml_case_id, original_transaction_id, " +
   "file_completeness_pct, cancellation_reason, cancelled_at, zero_fee_note, created_by, created_at, " +
-  "original:crm_transactions!crm_transactions_original_transaction_id_fkey(number), " +
   "opportunity:crm_opportunities!crm_transactions_opportunity_id_fkey(owner_id, contact_id, " +
   "owner:profiles!crm_opportunities_owner_id_fkey(full_name), " +
   "contact:crm_contacts!crm_opportunities_contact_id_fkey(display_name), " +
@@ -203,9 +238,10 @@ const TXN_DETAIL_SELECT =
   "contact:crm_contacts!crm_transaction_parties_contact_id_fkey(display_name, kyc_public_status)), " +
   "agent_roles:crm_transaction_agent_roles(id, agent_profile_id, role, split_pct, " +
   "agent:profiles!crm_transaction_agent_roles_agent_profile_id_fkey(full_name)), " +
-  "contracts:crm_transaction_contracts(id, contract_type, number, signed_on, valid_from, valid_to, doc_id), " +
+  "contracts:crm_transaction_contracts(id, contract_type, number, signed_on, valid_from, valid_to, doc_id, " +
+  "template_code, reviewed_at, review_note, reviewer:profiles!crm_transaction_contracts_reviewed_by_fkey(full_name)), " +
   "schedule:crm_payment_schedule_lines(id, due_on, amount, kind, note, paid_amount), " +
-  "handover:crm_handover_items(id, label, done, done_on, responsible_id, sort_order), " +
+  "handover:crm_handover_items(id, label, done, done_on, responsible_id, sort_order, due_on), " +
   "approvals:crm_transaction_approvals(id, requested_by, rationale, fee_change, approved_amount, " +
   "approved_by, approved_at, doc_id, created_at, " +
   "requester:profiles!crm_transaction_approvals_requested_by_fkey(full_name), " +
@@ -238,8 +274,11 @@ export async function getTransaction(id: string): Promise<TxnDetail | null> {
     | "parties"
     | "agent_roles"
     | "approvals"
+    | "contracts"
+    | "payments"
+    | "invoices"
   > & {
-    original: { number: string } | null;
+    contracts: (Omit<TxnContract, "reviewer_name"> & { reviewer: { full_name: string | null } | null })[];
     opportunity: {
       owner_id: string;
       contact_id: string;
@@ -259,11 +298,46 @@ export async function getTransaction(id: string): Promise<TxnDetail | null> {
   };
   const raw = data as unknown as Raw;
 
-  const { data: onHold } = await supabase.rpc("crm_txn_on_hold", { t: id });
+  // Эх хэлцлийн дугаар тусдаа: PostgREST өөрийгөө заасан FK-г (original_transaction_id)
+  // нэрээр нь embed хийж чаддаггүй (PGRST200) — хавтас бүхэлдээ 404 болдог байв.
+  const [{ data: onHold }, paymentsRes, invoicesRes, originalRes] = await Promise.all([
+    supabase.rpc("crm_txn_on_hold", { t: id }),
+    supabase
+      .from("crm_payments")
+      .select(
+        "id, kind, schedule_line_id, invoice_id, paid_on, amount, currency, amount_mnt, method, doc_id, " +
+          "finance_verified_at, created_at"
+      )
+      .eq("transaction_id", id)
+      .order("paid_on", { ascending: false }),
+    supabase
+      .from("crm_invoices")
+      .select("id, number, type, status, amount, due_on, recipient_contact_id")
+      .eq("transaction_id", id)
+      .neq("status", "cancelled")
+      .order("created_at", { ascending: false }),
+    raw.original_transaction_id
+      ? supabase.from("crm_transactions").select("number").eq("id", raw.original_transaction_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+  const payments = ((paymentsRes.data ?? []) as unknown as TxnPayment[]).map((p) => ({
+    ...p,
+    amount: Number(p.amount),
+    amount_mnt: Number(p.amount_mnt),
+  }));
+  // Хуваарийн гүйцэтгэл = мөрөнд холбогдсон бүх төлбөр (хяналтын + орлогын).
+  const paidByLine = new Map<string, number>();
+  for (const p of payments) {
+    if (p.schedule_line_id) paidByLine.set(p.schedule_line_id, (paidByLine.get(p.schedule_line_id) ?? 0) + p.amount_mnt);
+  }
 
-  const { original, opportunity, property, parties, agent_roles, approvals, ...rest } = raw;
+  const original = (originalRes.data as { number: string } | null) ?? null;
+  const { opportunity, property, parties, agent_roles, approvals, contracts, ...rest } = raw;
   return {
     ...rest,
+    contracts: contracts.map(({ reviewer, ...ct }) => ({ ...ct, reviewer_name: reviewer?.full_name ?? null })),
+    payments,
+    invoices: (invoicesRes.data ?? []) as unknown as TxnInvoice[],
     on_hold: Boolean(onHold),
     original_number: original?.number ?? null,
     owner_id: opportunity?.owner_id ?? "",
@@ -289,7 +363,9 @@ export async function getTransaction(id: string): Promise<TxnDetail | null> {
         approver_name: approver?.full_name ?? null,
       }))
       .sort((a, b) => (a.created_at < b.created_at ? 1 : -1)),
-    schedule: [...rest.schedule].sort((a, b) => (a.due_on < b.due_on ? -1 : 1)),
+    schedule: [...rest.schedule]
+      .map((l) => ({ ...l, paid_amount: Math.max(Number(l.paid_amount), paidByLine.get(l.id) ?? 0) }))
+      .sort((a, b) => (a.due_on < b.due_on ? -1 : 1)),
     handover: [...rest.handover].sort((a, b) => a.sort_order - b.sort_order),
   };
 }
@@ -450,4 +526,166 @@ export async function getAuditTrail(entity: string, entityId: string, limit = 50
     return [];
   }
   return (data ?? []) as AuditRow[];
+}
+
+// ── Санхүүгийн баталгаажуулалт (§6.17 «Санхүү») ───────────
+
+export type FinanceQueueRow = {
+  id: string;
+  kind: "income" | "control";
+  paid_on: string;
+  amount: number;
+  currency: string;
+  amount_mnt: number;
+  method: string;
+  doc_id: string | null;
+  created_at: string;
+  created_by_name: string | null;
+  transaction_id: string | null;
+  transaction_number: string | null;
+  lease_id: string | null;
+  invoice_number: string | null;
+};
+
+/** Баталгаажуулаагүй төлбөрүүд (хэлцлийн болон орлогын) — хуучнаас нь. */
+export async function getPaymentsToVerify(limit = 200): Promise<FinanceQueueRow[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("crm_payments")
+    .select(
+      "id, kind, paid_on, amount, currency, amount_mnt, method, doc_id, created_at, transaction_id, lease_id, " +
+        "author:profiles!crm_payments_created_by_fkey(full_name), " +
+        "txn:crm_transactions!crm_payments_transaction_id_fkey(number), " +
+        "invoice:crm_invoices!crm_payments_invoice_id_fkey(number)"
+    )
+    .is("finance_verified_at", null)
+    .gt("amount", 0)
+    .order("created_at", { ascending: true })
+    .limit(limit);
+  if (error) {
+    console.error("getPaymentsToVerify:", error.message);
+    return [];
+  }
+  type Raw = Omit<FinanceQueueRow, "created_by_name" | "transaction_number" | "invoice_number"> & {
+    author: { full_name: string | null } | null;
+    txn: { number: string } | null;
+    invoice: { number: string } | null;
+  };
+  return ((data ?? []) as unknown as Raw[])
+    .filter((r) => r.kind === "income" || r.transaction_id)
+    .map(({ author, txn, invoice, ...r }) => ({
+      ...r,
+      amount: Number(r.amount),
+      amount_mnt: Number(r.amount_mnt),
+      created_by_name: author?.full_name ?? null,
+      transaction_number: txn?.number ?? null,
+      invoice_number: invoice?.number ?? null,
+    }));
+}
+
+export type FeePendingRow = {
+  id: string;
+  number: string;
+  type: TxnType;
+  status: TxnStatus;
+  amount: number;
+  currency: string;
+  contact_id: string;
+  contact_name: string;
+  owner_name: string | null;
+};
+
+/** Гэрээ/төлбөрийн шатанд байгаа, хөлсний нэхэмжлэхгүй хэлцлүүд. */
+export async function getDealsAwaitingFeeInvoice(): Promise<FeePendingRow[]> {
+  const supabase = await createClient();
+  const [{ data: txns, error }, { data: invoices }] = await Promise.all([
+    supabase
+      .from("crm_transactions")
+      .select(
+        "id, number, type, status, amount, currency, " +
+          "opportunity:crm_opportunities!crm_transactions_opportunity_id_fkey(contact_id, " +
+          "contact:crm_contacts!crm_opportunities_contact_id_fkey(display_name), " +
+          "owner:profiles!crm_opportunities_owner_id_fkey(full_name))"
+      )
+      .in("status", ["contract", "payment"])
+      .neq("type", "replacement")
+      .order("created_at", { ascending: true })
+      .limit(200),
+    supabase
+      .from("crm_invoices")
+      .select("transaction_id")
+      .eq("type", "brokerage_fee")
+      .neq("status", "cancelled")
+      .not("transaction_id", "is", null),
+  ]);
+  if (error) {
+    console.error("getDealsAwaitingFeeInvoice:", error.message);
+    return [];
+  }
+  const invoiced = new Set((invoices ?? []).map((i) => i.transaction_id));
+  type Raw = {
+    id: string;
+    number: string;
+    type: TxnType;
+    status: TxnStatus;
+    amount: number;
+    currency: string;
+    opportunity: {
+      contact_id: string;
+      contact: { display_name: string } | null;
+      owner: { full_name: string | null } | null;
+    } | null;
+  };
+  return ((txns ?? []) as unknown as Raw[])
+    .filter((t) => !invoiced.has(t.id))
+    .map((t) => ({
+      id: t.id,
+      number: t.number,
+      type: t.type,
+      status: t.status,
+      amount: Number(t.amount),
+      currency: t.currency,
+      contact_id: t.opportunity?.contact_id ?? "",
+      contact_name: t.opportunity?.contact?.display_name ?? "?",
+      owner_name: t.opportunity?.owner?.full_name ?? null,
+    }));
+}
+
+/** Хэлцлийн хаалтын босго (§6.17) — DB-ийн crm_txn_closing_checks. */
+export async function getTxnClosingChecks(id: string): Promise<unknown> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("crm_txn_closing_checks", { p_txn: id });
+  if (error) {
+    console.error("getTxnClosingChecks:", error.message);
+    return [];
+  }
+  return data;
+}
+
+// ── Хэлцлийн хавтасны хуудасны өгөгдөл (агент, оффис) ─────
+
+export async function getTransactionPageData(id: string) {
+  const txn = await getTransaction(id);
+  if (!txn) return null;
+  const [completeness, docs, audit, agents, contactOptions, checksRaw, templates, dealFlowRaw] = await Promise.all([
+    getCompleteness(id),
+    getDocsForEntity("transaction", id),
+    getAuditTrail("crm_transactions", id),
+    getAgentOptions(),
+    getContactOptions(),
+    getTxnClosingChecks(id),
+    getLookups("contract_template"),
+    getSettingValue("deal_flow"),
+  ]);
+  return {
+    txn,
+    completeness,
+    docs,
+    audit,
+    agents,
+    contactOptions,
+    closingChecks: parseClosingChecks(checksRaw),
+    contractTemplates: templates.map((t) => ({ code: t.code, label: t.label })),
+    dealFlow: normalizeDealFlow(dealFlowRaw),
+  };
 }

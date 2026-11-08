@@ -1,5 +1,6 @@
 "use client";
 
+import { fmtDateTime } from "@/lib/format";
 import { History } from "lucide-react";
 
 import type { AuditRow } from "@/lib/queries-crm-transactions";
@@ -14,7 +15,7 @@ const ACTION_LABEL: Record<string, string> = {
   update: "Зассан",
   status: "Төлөв солигдсон",
   stage: "Шат шилжсэн",
-  correction: "Залруулга (F-417)",
+  correction: "Залруулга",
   export: "Экспорт",
   view_restricted: "Хязгаарлагдмал баримт үзсэн",
   view_aml_case: "AML кейс үзсэн",
@@ -48,7 +49,7 @@ export function AuditTrail({ rows }: { rows: AuditRow[] }) {
               <span className="font-medium text-ink">{ACTION_LABEL[r.action] ?? r.action}</span>
               {r.field && <span className="text-xs text-muted">({r.field})</span>}
               <span className="ml-auto text-xs text-subtle">
-                {new Date(r.created_at).toLocaleString("mn-MN")}
+                {fmtDateTime(r.created_at)}
               </span>
             </div>
             {(r.old_value != null || r.new_value != null) && (

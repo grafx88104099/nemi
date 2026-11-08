@@ -7,7 +7,6 @@ import { shortMNT, fmtDate } from "@/lib/format";
 import { COMMISSION_STATUS_LABEL, type CommissionStatus } from "@/lib/constants-crm";
 import {
   getKpiMonthly,
-  getAgentScores,
   getSourceAttribution,
   getBranchKpi,
   getCommissionSummaryView,
@@ -16,26 +15,29 @@ import {
   getComplaints,
   getComplaintContactOptions,
   sumCommissionSummary,
-  weekStartIso,
 } from "@/lib/queries-crm-reports";
+import { getWeekBoard } from "@/lib/queries-crm-weekly";
+import { SCORE_COMPONENTS, SCORE_COMPONENT_LABEL } from "@/lib/constants-crm-weekly";
+import { addWeeks, normalizeWeekParam, weekLabel } from "@/lib/crm/week";
+import { ScoreBadge } from "@/components/crm/weekly/ScoreCard";
 import { ComplaintShell } from "@/components/crm/ComplaintShell";
 
 export const metadata = { title: "Тайлан — CRM" };
 
 const REPORTS = [
-  { key: "kpi", label: "R-14 · Сарын KPI" },
-  { key: "agents", label: "R-05 · Агентын үнэлгээ" },
-  { key: "sources", label: "R-11 · Эх сурвалж" },
-  { key: "branches", label: "R-12 · Салбарууд" },
-  { key: "payouts", label: "R-10 · Тайлагнал ба олголт" },
-  { key: "complaints", label: "Гомдол (P-09)" },
+  { key: "kpi", label: "Сарын KPI" },
+  { key: "agents", label: "Агентын долоо хоногийн үнэлгээ" },
+  { key: "sources", label: "Эх сурвалж" },
+  { key: "branches", label: "Салбарууд" },
+  { key: "payouts", label: "Тайлагнал ба олголт" },
+  { key: "complaints", label: "Гомдол" },
 ] as const;
 type ReportKey = (typeof REPORTS)[number]["key"];
 
 /**
- * R-05/R-10/R-11/R-12/R-14 тайлангийн цуглуулга (?r= сонголт — DESIGN §8.2).
- * Бүх тоо ЗӨВХӨН 000900-ийн view-үүд + RLS-тэй хүснэгтүүдээс (зарчим 9);
- * агент нээвэл RLS өөрийн хүрээнд л нэгтгэнэ (R-19).
+ * Тайлангийн цуглуулга (?r= сонголт — DESIGN §8.2). Бүх тоо view-үүд, DB
+ * функц, RLS-тэй хүснэгтээс; гараар оруулсан дүн харагдахгүй. Энэ хуудас
+ * зөвхөн оффисын панельд; агент өөрийн үнэлгээг «Долоо хоног» хэсгээс харна.
  */
 export default async function CrmReportsPage({
   searchParams,
@@ -49,7 +51,7 @@ export default async function CrmReportsPage({
     <div className="p-8">
       <h1 className="text-2xl font-extrabold text-ink">Тайлан</h1>
       <p className="text-sm text-muted">
-        KPI автомат тооцоологдоно — эх нь CRM бүртгэл, гар оруулсан дүн харагдахгүй (зарчим 9).
+        KPI автомат тооцоологдоно — эх нь CRM бүртгэл, гар оруулсан дүн харагдахгүй.
       </p>
 
       <div className="mt-4 flex flex-wrap items-center gap-1 rounded-xl bg-surface-2 p-1">
@@ -93,7 +95,7 @@ async function KpiReport() {
   return (
     <Card>
       <CardBody>
-        <h2 className="mb-3 text-sm font-semibold text-ink">Сарын KPI нэгтгэл (R-14)</h2>
+        <h2 className="mb-3 text-sm font-semibold text-ink">Сарын KPI нэгтгэл</h2>
         {rows.length === 0 ? (
           <p className="text-sm text-muted">Тайлант үеийн мэдээлэл алга.</p>
         ) : (
@@ -147,73 +149,72 @@ async function KpiReport() {
   );
 }
 
-// ── R-05: агентын 100 оноот үнэлгээ ────────────────────────
+// ── §6.25 Агентын долоо хоногийн үнэлгээ ───────────────────
+// Зорилт агентын картаас, гүйцэтгэл DB-ийн crm_agent_week_metrics-ээс; зөвхөн
+// борлуулалтын урсгалын агент. Түгжигдсэн долоо хоногт эцсийн оноо.
 
 async function AgentScoreReport({ week }: { week?: string }) {
-  const weekStart = week && /^\d{4}-\d{2}-\d{2}$/.test(week) ? week : weekStartIso();
-  const { rows, weights, targets } = await getAgentScores(weekStart);
-  const prevWeek = new Date(new Date(`${weekStart}T00:00:00Z`).getTime() - 7 * 86400000)
-    .toISOString()
-    .slice(0, 10);
-  const nextWeek = new Date(new Date(`${weekStart}T00:00:00Z`).getTime() + 7 * 86400000)
-    .toISOString()
-    .slice(0, 10);
+  const weekStart = normalizeWeekParam(week);
+  const board = await getWeekBoard(weekStart);
+  const w = board.settings.weights;
+  const link = (wk: string) => `/office/crm/reports?r=agents&week=${wk}`;
 
   return (
     <Card>
       <CardBody>
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          <h2 className="text-sm font-semibold text-ink">Агентын 100 оноот үнэлгээ (R-05)</h2>
-          <span className="text-xs text-muted">Долоо хоног: {fmtDate(weekStart)}-ээс</span>
-          <span className="ml-auto flex gap-2 text-xs">
-            <Link href={`/office/crm/reports?r=agents&week=${prevWeek}`} className="font-medium text-brand-700 hover:underline">
+          <h2 className="text-sm font-semibold text-ink">Агентын долоо хоногийн үнэлгээ</h2>
+          <span className="text-xs text-muted">{weekLabel(weekStart)}</span>
+          <span className="ml-auto flex gap-3 text-xs">
+            <Link href={link(addWeeks(weekStart, -1))} className="font-medium text-brand-700 hover:underline">
               ← Өмнөх
             </Link>
-            <Link href={`/office/crm/reports?r=agents&week=${nextWeek}`} className="font-medium text-brand-700 hover:underline">
+            <Link href={link(addWeeks(weekStart, 1))} className="font-medium text-brand-700 hover:underline">
               Дараах →
+            </Link>
+            <Link href={`/office/crm/week?tab=scores&week=${weekStart}`} className="font-medium text-brand-700 hover:underline">
+              Мөчлөгийн хуудас
             </Link>
           </span>
         </div>
         <p className="mb-3 text-xs text-subtle">
-          Жин: идэвх {weights.activity} · урсгал {weights.pipeline} · ахиц {weights.progress} · хаалт{" "}
-          {weights.closing} · мөрдөлт {weights.followup} · чанар {weights.quality} (тохиргоо
-          «agent_score_weights»); зорилт: бүртгэл {targets.material}, чанаржуулалт {targets.qualified},
-          ахиц {targets.progress}, хаалт {targets.closings}.
+          Жин: {SCORE_COMPONENTS.map((k) => `${SCORE_COMPONENT_LABEL[k]} ${w[k]}`).join(" · ")}. Алдсан хэлцэл оноо өгөхгүй;
+          хамааралгүй хэсгийн жинг бусад хэсэгт шилжүүлнэ.
         </p>
-        {rows.length === 0 ? (
-          <p className="text-sm text-muted">Энэ 7 хоногт үнэлэх бүртгэл алга.</p>
+        {board.unavailable ? (
+          <p className="text-sm text-muted">Долоо хоногийн мөчлөг хараахан идэвхжээгүй байна.</p>
+        ) : board.rows.length === 0 ? (
+          <p className="text-sm text-muted">Үнэлэх борлуулагч агент алга.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[760px] text-sm">
               <thead>
                 <tr className="border-b border-line text-left text-xs text-muted">
                   <th className="py-1.5 pr-2 font-medium">Агент</th>
-                  <th className="px-2 py-1.5 text-right font-medium">Идэвх</th>
-                  <th className="px-2 py-1.5 text-right font-medium">Урсгал</th>
-                  <th className="px-2 py-1.5 text-right font-medium">Ахиц</th>
-                  <th className="px-2 py-1.5 text-right font-medium">Хаалт</th>
-                  <th className="px-2 py-1.5 text-right font-medium">Мөрдөлт</th>
-                  <th className="px-2 py-1.5 text-right font-medium">Чанар</th>
+                  {SCORE_COMPONENTS.map((k) => (
+                    <th key={k} className="px-2 py-1.5 text-right font-medium">
+                      {SCORE_COMPONENT_LABEL[k]}
+                    </th>
+                  ))}
                   <th className="px-2 py-1.5 text-right font-medium">Нийт</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((a) => (
-                  <tr key={a.owner_id} className="border-b border-line/60 last:border-0">
-                    <td className="py-1.5 pr-2 font-medium text-ink">{a.full_name ?? "?"}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">{a.activity}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">{a.pipeline}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">{a.progress}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">{a.closing}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">{a.followup}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">{a.quality}</td>
-                    <td className="px-2 py-1.5 text-right">
-                      <Badge tone={a.total >= 80 ? "green" : a.total >= 50 ? "amber" : "rose"}>
-                        {a.total}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
+                {[...board.rows]
+                  .sort((a, b) => (b.storedTotal ?? b.score.total) - (a.storedTotal ?? a.score.total))
+                  .map((a) => (
+                    <tr key={a.agent.profile_id} className="border-b border-line/60 last:border-0">
+                      <td className="py-1.5 pr-2 font-medium text-ink">{a.agent.full_name}</td>
+                      {a.score.components.map((c) => (
+                        <td key={c.key} className="px-2 py-1.5 text-right tabular-nums">
+                          {c.points == null ? <span className="text-subtle">—</span> : c.points}
+                        </td>
+                      ))}
+                      <td className="px-2 py-1.5 text-right">
+                        <ScoreBadge total={a.storedTotal ?? a.score.total} scored={a.scored} />
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>
@@ -230,7 +231,7 @@ async function SourceReport() {
   return (
     <Card>
       <CardBody>
-        <h2 className="mb-3 text-sm font-semibold text-ink">Эх сурвалжийн хамаарал (R-11)</h2>
+        <h2 className="mb-3 text-sm font-semibold text-ink">Эх сурвалжийн хамаарал</h2>
         {rows.length === 0 ? (
           <p className="text-sm text-muted">Сэжимийн бүртгэл алга.</p>
         ) : (
@@ -272,7 +273,7 @@ async function SourceReport() {
           </div>
         )}
         <p className="mt-2 text-xs text-subtle">
-          Нэгж зардал тохиргооны «marketing_costs» түлхүүрээс (эх сурвалж бүрийн сарын зардал) —
+          Нэгж зардал тохиргооны маркетингийн зардлаас (эх сурвалж бүрийн сарын зардал) —
           тохируулаагүй бол хоосон.
         </p>
       </CardBody>
@@ -287,7 +288,7 @@ async function BranchReport() {
   return (
     <Card>
       <CardBody>
-        <h2 className="mb-3 text-sm font-semibold text-ink">Салбар хоорондын KPI (R-12)</h2>
+        <h2 className="mb-3 text-sm font-semibold text-ink">Салбар хоорондын KPI</h2>
         {rows.length === 0 ? (
           <p className="text-sm text-muted">Салбарын мэдээлэл алга.</p>
         ) : (
@@ -319,7 +320,7 @@ async function BranchReport() {
           </div>
         )}
         <p className="mt-2 text-xs text-subtle">
-          Салбар хоорондын хамтын ажиллагааны даалгавар (Д-30):{" "}
+          Салбар хоорондын хамтын ажиллагааны даалгавар:{" "}
           {rows.reduce((s, b) => s + b.cross_branch_tasks, 0)} удаа.
         </p>
       </CardBody>
@@ -345,7 +346,7 @@ async function PayoutReport() {
     <div className="space-y-4">
       <Card>
         <CardBody>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Шимтгэлийн олголтын хүлээлт (R-10)</h2>
+          <h2 className="mb-3 text-sm font-semibold text-ink">Шимтгэлийн олголтын хүлээлт</h2>
           {statuses.length === 0 ? (
             <p className="text-sm text-muted">Шимтгэлийн тооцоо алга.</p>
           ) : (
@@ -368,7 +369,7 @@ async function PayoutReport() {
 
       <Card>
         <CardBody>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Сарын бүртгэл ба тайлангийн сахилга (R-07/F-564)</h2>
+          <h2 className="mb-3 text-sm font-semibold text-ink">Сарын бүртгэл ба тайлангийн сахилга</h2>
           {compliance.length === 0 ? (
             <p className="text-sm text-muted">Сарын бүртгэл алга.</p>
           ) : (
@@ -379,7 +380,7 @@ async function PayoutReport() {
                     <th className="py-1.5 pr-2 font-medium">Сар</th>
                     <th className="px-2 py-1.5 text-right font-medium">Бүртгэл (бүрэн/нийт)</th>
                     <th className="px-2 py-1.5 text-right font-medium">Бөглөлт %</th>
-                    <th className="px-2 py-1.5 text-right font-medium">Hold</th>
+                    <th className="px-2 py-1.5 text-right font-medium">Хяналтад</th>
                     <th className="px-2 py-1.5 text-right font-medium">Тайлан (илгээсэн/нийт)</th>
                     <th className="px-2 py-1.5 text-right font-medium">Хугацаандаа %</th>
                   </tr>

@@ -91,7 +91,7 @@ export function InspectionShell({
     setError(null);
     const valid = items.filter((it) => it.item.trim() && it.condition.trim());
     if (!valid.length) {
-      setError("Дор хаяж нэг мөр (эд хөрөнгө + нөхцөл) бүртгэнэ (F-575).");
+      setError("Дор хаяж нэг мөр (эд хөрөнгө + нөхцөл) бүртгэнэ.");
       return;
     }
     startTransition(async () => {
@@ -123,7 +123,7 @@ export function InspectionShell({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted">
           Орох/гарах үзлэг талбар тус бүрээр зэрэгцүүлэн харьцуулагдана; зөрүү нь барьцааны суутгалын
-          үндэслэл болно (F-576/577).
+          үндэслэл болно.
         </p>
         {canWrite && (
           <div className="flex gap-2">
@@ -223,14 +223,14 @@ export function InspectionShell({
       {inspections.length === 0 && (
         <p className="py-8 text-center text-sm text-muted">
           Үзлэг бүртгэгдээгүй. Орох үзлэг + хүлээлцэх бүрэн болтол зураг/гэрээ хариуцсан агентын урамшууллын
-          эрх нээгдэхгүй (F-579).
+          эрх нээгдэхгүй.
         </p>
       )}
 
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title={`${INSPECTION_KIND_LABEL[kind]} бүртгэх (F-575)`}
+        title={`${INSPECTION_KIND_LABEL[kind]} бүртгэх`}
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setOpen(false)}>
@@ -309,8 +309,8 @@ export function InspectionShell({
           </Button>
           {kind === "move_out" && (
             <p className="text-xs text-muted">
-              Зөрүүтэй мөр бүрд засварын хүсэлт автомат үүсч (F-577), тэдгээр мөр суутгалын нотолгоо болно
-              (F-542).
+              Зөрүүтэй мөр бүрд засварын хүсэлт автомат үүсч, тэдгээр мөр суутгалын нотолгоо болно
+.
             </p>
           )}
           {error && <p className="text-sm text-danger">{error}</p>}

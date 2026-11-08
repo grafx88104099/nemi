@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Pencil, UserMinus, LogOut } from "lucide-react";
+import { Plus, Pencil, UserMinus, LogOut, Plane } from "lucide-react";
 
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/ui/modal";
+import { Input } from "@/components/ui/input";
+import { toast } from "@/components/ui/toast";
+import { handoverForLeave, returnFromLeave, setStaffLeave } from "@/lib/actions/crm-ownership";
+import { isOnLeave } from "@/lib/validation/crm-ownership";
 import { upsertStaff, startOffboarding, deactivateStaff, reactivateStaff } from "@/lib/actions/crm-staff";
 import { CRM_ROLES, CRM_ROLE_LABEL, type CrmRole } from "@/lib/constants-crm";
 import type { BranchRow, StaffRow, TeamRow } from "@/lib/queries-crm-core";
@@ -30,17 +34,24 @@ export function StaffShell({
   teams,
   candidates,
   canEdit,
+  canManageLeave,
+  today,
 }: {
   staff: StaffRow[];
   branches: BranchRow[];
   teams: TeamRow[];
   candidates: AssigneeOption[];
   canEdit: boolean;
+  /** Чөлөө, түр хүлээлцэх — Борлуулалт хариуцсан захирал. */
+  canManageLeave: boolean;
+  /** УБ-ын өнөөдөр (YYYY-MM-DD). */
+  today: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [leave, setLeave] = useState<{ staffId: string; name: string; from: string; to: string; substituteId: string; note: string } | null>(null);
 
   const registered = new Set(staff.map((s) => s.profile_id));
   const addable = candidates.filter((c) => !registered.has(c.profileId));
@@ -76,6 +87,42 @@ export function StaffShell({
       router.refresh();
     });
   }
+
+  function saveLeave() {
+    if (!leave) return;
+    setError(null);
+    startTransition(async () => {
+      const res = await setStaffLeave({
+        staffId: leave.staffId,
+        from: leave.from || null,
+        to: leave.to || null,
+        substituteId: leave.substituteId || null,
+        note: leave.note || undefined,
+      });
+      if (!res.ok) {
+        setError(res.error ?? "Алдаа гарлаа.");
+        return;
+      }
+      toast.success(leave.from ? "Чөлөө бүртгэгдлээ" : "Чөлөөг цуцаллаа");
+      setLeave(null);
+      router.refresh();
+    });
+  }
+
+  function leaveAction(fn: () => Promise<{ ok: boolean; done?: number; error?: string }>, label: string) {
+    setError(null);
+    startTransition(async () => {
+      const res = await fn();
+      if (!res.ok) {
+        setError(res.error ?? "Алдаа гарлаа.");
+        return;
+      }
+      toast.success(label, { description: `${res.done ?? 0} сэжим шилжлээ${res.error ? " (зарим нь алгасагдсан)" : ""}.` });
+      router.refresh();
+    });
+  }
+
+  const nameOf = (profileId: string | null) => staff.find((x) => x.profile_id === profileId)?.full_name ?? "—";
 
   return (
     <div className="mt-6 space-y-4">
@@ -144,9 +191,14 @@ export function StaffShell({
                         <Badge tone="neutral">Идэвхгүй</Badge>
                       ) : s.offboarding ? (
                         <Badge tone="amber">Гарах урсгалд</Badge>
+                      ) : isOnLeave(s.on_leave_from, s.on_leave_to, today) ? (
+                        <Badge tone="blue">Чөлөөтэй{s.on_leave_to ? ` · ${s.on_leave_to} хүртэл` : ""}</Badge>
                       ) : (
                         <Badge tone="green">Идэвхтэй</Badge>
                       )}
+                      {s.on_leave_from && s.leave_substitute_id ? (
+                        <p className="mt-1 text-xs text-subtle">Орлон: {nameOf(s.leave_substitute_id)}</p>
+                      ) : null}
                     </td>
                     {canEdit ? (
                       <td className="px-5 py-2.5 text-right">
@@ -168,6 +220,26 @@ export function StaffShell({
                           >
                             <Pencil className="size-4" />
                           </Button>
+                          {canManageLeave && s.is_active && !s.offboarding ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              aria-label="Чөлөө"
+                              title="Чөлөө, түр хүлээлцэх"
+                              onClick={() =>
+                                setLeave({
+                                  staffId: s.id,
+                                  name: s.full_name ?? s.email ?? "",
+                                  from: s.on_leave_from ?? "",
+                                  to: s.on_leave_to ?? "",
+                                  substituteId: s.leave_substitute_id ?? "",
+                                  note: s.leave_note ?? "",
+                                })
+                              }
+                            >
+                              <Plane className="size-4" />
+                            </Button>
+                          ) : null}
                           {s.is_active && !s.offboarding ? (
                             <Button
                               size="sm"
@@ -233,7 +305,7 @@ export function StaffShell({
                 </Select>
               </Field>
             ) : null}
-            <Field label="Дүрүүд" hint="Нэг хүн олон дүртэй байж болно (ж: Ерөнхий захирал + Системийн админ)">
+            <Field label="Дүрүүд" hint="Нэг хүн олон дүртэй байж болно (ж: CEO + Системийн админ)">
               <div className="flex flex-wrap gap-1.5">
                 {CRM_ROLES.map((r) => (
                   <button
@@ -284,7 +356,7 @@ export function StaffShell({
               </Field>
             </div>
             <Field
-              label="Панелийн админ (§1.1)"
+              label="Панелийн админ"
               hint="Тийм бол CRM-ээс гадуурх оффисын хуудсуудад бичих эрхтэй хэвээр үлдэнэ"
             >
               <Select
@@ -295,6 +367,75 @@ export function StaffShell({
                 <option value="yes">Тийм — оффисын бүрэн админ</option>
               </Select>
             </Field>
+            {error ? <p className="text-xs text-danger">{error}</p> : null}
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={leave !== null}
+        onClose={() => setLeave(null)}
+        title={leave ? `Чөлөө — ${leave.name}` : "Чөлөө"}
+        footer={
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="ghost" onClick={() => setLeave(null)}>
+              Болих
+            </Button>
+            <Button onClick={saveLeave} disabled={pending}>
+              Хадгалах
+            </Button>
+          </div>
+        }
+      >
+        {leave ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted">
+              Чөлөөний хугацаанд ажилтанд шинэ сэжим оноогдохгүй. «Түр хүлээлцэх» нь нээлттэй сэжмийг орлон ажиллагчид
+              түүхтэйгээр шилжүүлж, буцаж ирэхэд «Буцаан хүлээлцэх»-ээр анхны агентад нь буцаана. Огноог хоосон болговол
+              чөлөө цуцлагдана.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Эхлэх">
+                <Input type="date" value={leave.from} onChange={(e) => setLeave({ ...leave, from: e.target.value })} />
+              </Field>
+              <Field label="Дуусах">
+                <Input type="date" value={leave.to} onChange={(e) => setLeave({ ...leave, to: e.target.value })} />
+              </Field>
+            </div>
+            <Field label="Орлон ажиллагч">
+              <Select value={leave.substituteId} onChange={(e) => setLeave({ ...leave, substituteId: e.target.value })}>
+                <option value="">Сонгоогүй</option>
+                {staff
+                  .filter((x) => x.is_active && !x.offboarding && x.id !== leave.staffId)
+                  .map((x) => (
+                    <option key={x.profile_id} value={x.profile_id}>
+                      {x.full_name ?? x.email ?? "—"}
+                    </option>
+                  ))}
+              </Select>
+            </Field>
+            <Field label="Тайлбар">
+              <Input value={leave.note} onChange={(e) => setLeave({ ...leave, note: e.target.value })} />
+            </Field>
+            <div className="flex flex-wrap gap-2 border-t border-line pt-3">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={pending}
+                onClick={() => leaveAction(() => handoverForLeave(leave.staffId), "Түр хүлээлцлээ")}
+              >
+                Түр хүлээлцэх
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={pending}
+                onClick={() => leaveAction(() => returnFromLeave(leave.staffId), "Буцаан хүлээлцлээ")}
+              >
+                Буцаан хүлээлцэх
+              </Button>
+            </div>
+            <p className="text-xs text-subtle">Түр хүлээлцэхийн өмнө чөлөөний огноо, орлон ажиллагчийг хадгална уу.</p>
             {error ? <p className="text-xs text-danger">{error}</p> : null}
           </div>
         ) : null}

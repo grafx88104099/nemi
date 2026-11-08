@@ -58,7 +58,7 @@ export function AgentRoleEditor({
       const sum = list.reduce((s, r) => s + (Number(r.splitPct) || 0), 0);
       if (Math.abs(sum - 100) > 0.01) {
         splitWarnings.push(
-          `«${COMMISSION_ROLE_LABEL[role as CommissionRole]}» үүргийн нийлбэр ${sum}% — 100% байх ёстой (F-458).`
+          `«${COMMISSION_ROLE_LABEL[role as CommissionRole]}» үүргийн нийлбэр ${sum}% — 100% байх ёстой.`
         );
       }
     }
@@ -74,7 +74,7 @@ export function AgentRoleEditor({
         splitPct: r.splitPct ? Number(r.splitPct) : null,
       }));
     if (!payload.length) {
-      setError("Дор хаяж нэг үүрэг бүртгэнэ (F-402).");
+      setError("Дор хаяж нэг үүрэг бүртгэнэ.");
       return;
     }
     startTransition(async () => {
@@ -170,8 +170,8 @@ export function AgentRoleEditor({
       ))}
       {error && <p className="text-sm text-danger">{error}</p>}
       <p className="text-xs text-subtle">
-        Үүргийн бүртгэл = урамшууллын нотолгооны эх (F-451). Хамтарсан үүргийн хуваарилалт хаалтын
-        ӨМНӨ тохирсон байх ёстой (F-458); мөр хасах зөвхөн ноорог төлөвт.
+        Үүргийн бүртгэл = урамшууллын нотолгооны эх. Хамтарсан үүргийн хуваарилалт хаалтын
+        ӨМНӨ тохирсон байх ёстой; мөр хасах зөвхөн ноорог төлөвт.
       </p>
     </div>
   );

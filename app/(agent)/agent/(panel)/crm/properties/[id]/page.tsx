@@ -1,14 +1,14 @@
 import { notFound, redirect } from "next/navigation";
 
-import { getCrmStaffContext } from "@/lib/queries-crm-core";
+import { getCrmStaffContext, getLookups } from "@/lib/queries-crm-core";
 import { getProperty, getActivationMissing } from "@/lib/queries-crm-properties";
 import { getMatchesForProperty } from "@/lib/queries-crm-matching";
-import { getAgentOptions } from "@/lib/queries-crm-leads";
+import { getActivities, getAgentOptions } from "@/lib/queries-crm-leads";
 import { getDocsForEntity } from "@/lib/queries-crm-docs";
 import { CrmNav } from "@/components/crm/CrmNav";
 import { PropertyDetailShell } from "@/components/crm/PropertyDetailShell";
 
-export const metadata = { title: "Объектын карт — CRM" };
+export const metadata = { title: "Үл хөдлөхийн карт — CRM" };
 
 type Params = Promise<{ id: string }>;
 
@@ -20,11 +20,13 @@ export default async function AgentPropertyDetailPage({ params }: { params: Para
   const property = await getProperty(id);
   if (!property) notFound();
 
-  const [matches, missing, agents, docs] = await Promise.all([
+  const [matches, missing, agents, docs, activities, objections] = await Promise.all([
     getMatchesForProperty(id),
     property.status === "draft" || property.status === "withdrawn" ? getActivationMissing(id) : Promise.resolve([]),
     getAgentOptions(),
     getDocsForEntity("property", id),
+    getActivities({ propertyId: id }),
+    getLookups("objection"),
   ]);
 
   return (
@@ -40,6 +42,9 @@ export default async function AgentPropertyDetailPage({ params }: { params: Para
         roles={ctx.roles}
         basePath="/agent/crm"
         docs={docs}
+        activities={activities}
+        objections={objections.map((o) => ({ id: o.id, label: o.label }))}
+        me={ctx.profileId}
       />
     </div>
   );

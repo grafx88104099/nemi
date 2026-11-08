@@ -1,8 +1,9 @@
 "use client";
 
+import { fmtDateNum } from "@/lib/format";
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Download, FileText, Lock, Trash2, Upload } from "lucide-react";
+import { Camera, Download, FileText, Lock, Trash2, Upload } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,24 +36,27 @@ export function EntityDocs({
   docs,
   roles,
   canUpload = true,
+  defaultCategory = "contract",
 }: {
   entity: string;
   entityId: string;
   docs: DocRow[];
   roles: CrmRole[];
   canUpload?: boolean;
+  defaultCategory?: DocCategory;
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [category, setCategory] = useState<string>("contract");
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const [category, setCategory] = useState<string>(defaultCategory);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const isOfficer = roles.includes("aml_officer");
   const categories = DOC_CATEGORIES.filter((c) => c !== "aml" || isOfficer);
 
-  function upload() {
-    const file = fileRef.current?.files?.[0];
+  function upload(fromCamera = false) {
+    const file = (fromCamera ? cameraRef.current : fileRef.current)?.files?.[0];
     if (!file) {
       setError("Файл сонгоно уу.");
       return;
@@ -70,6 +74,7 @@ export function EntityDocs({
         return;
       }
       if (fileRef.current) fileRef.current.value = "";
+      if (cameraRef.current) cameraRef.current.value = "";
       router.refresh();
     });
   }
@@ -86,7 +91,7 @@ export function EntityDocs({
   }
 
   function remove(docId: string) {
-    if (!window.confirm("Баримтыг устгах уу? (Хадгалалтын хугацаатай баримт устгагдахгүй — F-707)")) return;
+    if (!window.confirm("Баримтыг устгах уу? Хадгалалтын хугацаатай баримт устгагдахгүй.")) return;
     startTransition(async () => {
       const res = await deleteDocument(docId);
       if (!res.ok) {
@@ -119,16 +124,31 @@ export function EntityDocs({
               className="block w-full text-sm text-ink file:mr-3 file:h-9 file:cursor-pointer file:rounded-xl file:border-0 file:bg-brand-50 file:px-3 file:text-sm file:font-semibold file:text-brand-700"
             />
           </div>
-          <Button size="sm" onClick={upload} disabled={pending}>
+          <Button size="sm" onClick={() => upload()} disabled={pending}>
             <Upload className="size-4" />
             {pending ? "Байршуулж байна…" : "Байршуулах"}
+          </Button>
+          {/* Утсан дээр: камераар шууд зураг авч хавсаргана (сонгосон ангиллаар). */}
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={() => upload(true)}
+            aria-hidden
+            tabIndex={-1}
+          />
+          <Button size="sm" variant="outline" onClick={() => cameraRef.current?.click()} disabled={pending}>
+            <Camera className="size-4" />
+            Камераар
           </Button>
         </div>
       )}
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {docs.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted">Хавсаргасан баримт алга.</p>
+        <p className="py-6 text-center text-sm text-muted">Хавсаргасан баримт алга. Дээрх хэсгээс ангилал сонгож байршуулна уу.</p>
       ) : (
         <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
           {docs.map((d) => {
@@ -142,7 +162,7 @@ export function EntityDocs({
                     {d.version > 1 && <span className="ml-1 text-xs text-muted">v{d.version}</span>}
                   </p>
                   <p className="text-xs text-muted">
-                    {d.uploader_name ?? "?"} · {new Date(d.created_at).toLocaleDateString("mn-MN")}
+                    {d.uploader_name ?? "?"} · {fmtDateNum(d.created_at)}
                     {d.size_bytes ? ` · ${fmtSize(d.size_bytes)}` : ""}
                     {d.retention_until ? ` · ${d.retention_until} хүртэл хадгална` : ""}
                   </p>
@@ -165,7 +185,7 @@ export function EntityDocs({
         </ul>
       )}
       <p className="text-xs text-subtle">
-        Хязгаарлагдмал ангиллын (МУТСТ/өмчлөл/иргэний) баримтын үзэлт бүр аудитад бүртгэгдэнэ (F-709).
+        Хязгаарлагдмал ангиллын (МУТСТ, өмчлөл, иргэний үнэмлэх) баримтын үзэлт бүр аудитад бүртгэгдэнэ.
       </p>
     </div>
   );

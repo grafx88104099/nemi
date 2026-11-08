@@ -69,7 +69,7 @@ export function UserMenu({
               <MenuLink href="/agent" icon={<LayoutDashboard className="size-4" />}>
                 Агентын самбар
               </MenuLink>
-              <MenuLink href="/agent/leads" icon={<Users className="size-4" />}>
+              <MenuLink href="/agent/crm" icon={<Users className="size-4" />}>
                 CRM
               </MenuLink>
             </>

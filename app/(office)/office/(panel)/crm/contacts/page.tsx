@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { getCrmStaffContext, getBranches, getLookups } from "@/lib/queries-crm-core";
-import { getContacts, type ContactFilters } from "@/lib/queries-crm-contacts";
+import { getContacts, getTagLookups, type ContactFilters } from "@/lib/queries-crm-contacts";
 import { ContactsPageShell } from "@/components/crm/ContactsPageShell";
 import {
   CRM_LIFECYCLES,
@@ -37,11 +37,11 @@ export default async function ContactsPage({ searchParams }: { searchParams: Sea
     getContacts(filters),
     getBranches(),
     getLookups("lead_source"),
-    getLookups("tag"),
+    getTagLookups(),
   ]);
 
   return (
-    <div className="p-8">
+    <div className="p-4 md:p-8">
       <ContactsPageShell
         rows={rows}
         sources={sources}

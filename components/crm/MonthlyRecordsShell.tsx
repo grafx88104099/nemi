@@ -38,7 +38,7 @@ export function MonthlyRecordsShell({
         <div>
           <h1 className="text-2xl font-bold text-ink">Сарын менежментийн бүртгэл</h1>
           <p className="text-sm text-muted">
-            Журмын 9.2 маягт — «Сарын хяналтын гүйцэтгэл 100%» KPI бөглөлтөөс автомат (F-558).
+            Журмын 9.2 маягт — «Сарын хяналтын гүйцэтгэл 100%» KPI бөглөлтөөс автомат.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -62,7 +62,7 @@ export function MonthlyRecordsShell({
               <th className="px-4 py-3 font-medium">Гэрээ</th>
               <th className="px-4 py-3 font-medium">Бөглөлт</th>
               <th className="px-4 py-3 font-medium">Цэвэр орлого</th>
-              <th className="px-4 py-3 font-medium">Урамшууллын hold (F-559)</th>
+              <th className="px-4 py-3 font-medium">Урамшууллын hold</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
@@ -105,7 +105,7 @@ export function MonthlyRecordsShell({
             {records.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-10 text-center text-muted">
-                  Энэ сард бүртгэл алга — сар эхлэхэд идэвхтэй менежментийн гэрээ бүрд автомат үүснэ (Д-14).
+                  Энэ сард бүртгэл алга — сар эхлэхэд идэвхтэй менежментийн гэрээ бүрд автомат үүснэ.
                 </td>
               </tr>
             )}

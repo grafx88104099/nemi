@@ -1,21 +1,21 @@
 import { getAllLookups } from "@/lib/queries-crm-core";
-import { requireSettingsAccess } from "../_lib/guard";
+import { requireLookupsAccess } from "../_lib/guard";
 import { LookupsShell } from "./LookupsShell";
 
 export const metadata = { title: "Лавлах жагсаалтууд — CRM тохиргоо" };
 
 export default async function LookupSettingsPage() {
-  const ctx = await requireSettingsAccess();
+  const ctx = await requireLookupsAccess();
   const lookups = await getAllLookups();
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-8">
       <h1 className="text-2xl font-extrabold text-ink">Лавлах жагсаалтууд</h1>
       <p className="text-sm text-muted">
-        «Админ өргөтгөнө» ангиллын утгууд — эх сурвалж, алдсан шалтгаан, шошго, засварын ангилал гэх мэт.
-        «Бусад» маягийн утгад тайлбар заавал шаардах тохиргоотой (F-104).
+        Эх сурвалж, алдсан шалтгаан, шошго, засварын ангилал гэх мэт сонголтын утгууд. «Бусад» маягийн утгад тайлбар
+        заавал шаардаж болно. Сэжимийн эх сурвалжийн лавлахыг Маркетингийн мэргэжилтэн тодорхойлно.
       </p>
-      <LookupsShell lookups={lookups} canEdit={ctx.canEdit} />
+      <LookupsShell lookups={lookups} editableKinds={ctx.editableKinds} />
     </div>
   );
 }

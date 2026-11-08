@@ -45,13 +45,19 @@ async function ctxOrError(): Promise<{ ctx: CrmStaffContext } | { error: string 
 }
 
 function revalidateForEntity(entity: string, entityId: string) {
-  if (entity === "transaction") revalidatePath(`/office/crm/transactions/${entityId}`);
+  if (entity === "transaction") {
+    revalidatePath(`/office/crm/transactions/${entityId}`);
+    revalidatePath(`/agent/crm/transactions/${entityId}`);
+  }
   if (entity === "property") {
     revalidatePath(`/office/crm/properties/${entityId}`);
     revalidatePath(`/agent/crm/properties/${entityId}`);
   }
   if (entity === "contact") revalidatePath(`/office/crm/contacts/${entityId}`);
-  if (entity === "opportunity") revalidatePath(`/office/crm/deals/${entityId}`);
+  if (entity === "opportunity") {
+    revalidatePath(`/office/crm/deals/${entityId}`);
+    revalidatePath(`/agent/crm/pipeline/${entityId}`);
+  }
   if (entity === "aml_case") revalidatePath(`/office/crm/aml/${entityId}`);
 }
 

@@ -10,6 +10,7 @@ import { createLead } from "@/lib/actions/crm-leads";
 import { runRule, logRuleRun } from "@/lib/crm/rules";
 import { notifyCrm } from "@/lib/crm/notify";
 import type { Json } from "@/types/database";
+import { CRM_PROPERTY_ROLE_LABEL, type CrmPropertyRole } from "@/lib/constants-crm";
 
 /**
  * Борлуулалтын дараах үйлчилгээ (P-09, F-750–756) + гарах ажилтны хүлээлцэх
@@ -529,7 +530,7 @@ async function collectOpenItems(officeId: string, profileId: string): Promise<Ha
     .select("id, contact:crm_contacts!crm_leads_contact_id_fkey(display_name)")
     .eq("office_id", officeId)
     .eq("owner_id", profileId)
-    .in("status", ["new", "active"]);
+    .in("status", ["new", "active", "recycled"]);
   for (const l of (leads ?? []) as unknown as { id: string; contact: { display_name: string } | null }[]) {
     items.push({ entity: "lead", entity_id: l.id, title: `Сэжим: ${l.contact?.display_name ?? l.id}` });
   }
@@ -559,7 +560,7 @@ async function collectOpenItems(officeId: string, profileId: string): Promise<Ha
       entity: "property_role",
       entity_id: r.property_id,
       role: r.role,
-      title: `Объект (${r.role}): ${r.property?.number ?? ""} ${r.property?.name ?? ""}`.trim(),
+      title: `Үл хөдлөх (${CRM_PROPERTY_ROLE_LABEL[r.role as CrmPropertyRole] ?? "үүрэг"}): ${r.property?.number ?? ""} ${r.property?.name ?? ""}`.trim(),
     });
   }
 
@@ -584,19 +585,23 @@ export async function createHandoverAct(staffId: string): Promise<{ id?: string;
   const c = await ctxOrError();
   if ("error" in c) return { error: c.error };
   const { ctx } = c;
-  if (!ctx.roles.includes("sales_director") && !ctx.roles.includes("sysadmin")) {
-    return { error: "Хүлээлцэх акт үүсгэх эрх зөвхөн Борлуулалтын захирал/сисадминд бий." };
+  const isDirector = ctx.roles.includes("sales_director") || ctx.roles.includes("sysadmin");
+  if (!isDirector && !ctx.roles.includes("team_lead")) {
+    return { error: "Хүлээлцэх актыг Багийн ахлагч бэлтгэж, Борлуулалт хариуцсан захирал батална." };
   }
   const supabase = await createClient();
 
   const { data: staff } = await supabase
     .from("crm_staff")
-    .select("id, profile_id, offboarding, is_active")
+    .select("id, profile_id, offboarding, is_active, team_id")
     .eq("id", staffId)
     .eq("office_id", ctx.officeId)
     .maybeSingle();
   if (!staff) return { error: "Ажилтан олдсонгүй." };
-  if (!staff.offboarding) return { error: "Эхлээд гарах урсгал эхлүүлнэ (P-10) — offboarding төлөвгүй байна." };
+  if (!isDirector && (!staff.team_id || staff.team_id !== ctx.teamId)) {
+    return { error: "Багийн ахлагч зөвхөн өөрийн багийн ажилтны актыг бэлтгэнэ." };
+  }
+  if (!staff.offboarding) return { error: "Эхлээд гарах урсгал эхлүүлнэ үү." };
 
   const { data: existing } = await supabase
     .from("crm_handover_acts")
@@ -631,8 +636,8 @@ export async function createHandoverAct(staffId: string): Promise<{ id?: string;
     dryRunResult: { would_create_items: items.length },
   });
   if (res.status === "error") return { error: SAVE_ERR };
-  if (res.status === "skipped") return { error: "Д-11 дүрэм идэвхгүй байна (тохиргоо)." };
-  if (res.status === "dry_run") return { error: "Д-11 туршилтын горимд — акт үүсгээгүй, лог бичигдлээ." };
+  if (res.status === "skipped") return { error: "Хүлээлцэх актын автомат дүрэм идэвхгүй байна (тохиргоо)." };
+  if (res.status === "dry_run") return { error: "Хүлээлцэх актын дүрэм туршилтын горимд — акт үүсгээгүй." };
 
   const actId = res.result?.act_id as string;
   await notifyCrm({
@@ -675,8 +680,8 @@ export async function transferHandoverItem(
   const c = await ctxOrError();
   if ("error" in c) return { ok: false, error: c.error };
   const { ctx } = c;
-  if (!ctx.roles.includes("sales_director") && !ctx.roles.includes("sysadmin")) {
-    return { ok: false, error: "Шилжүүлэлт батлах эрх зөвхөн Борлуулалтын захирал/сисадминд бий." };
+  if (!ctx.roles.includes("sales_director") && !ctx.roles.includes("team_lead")) {
+    return { ok: false, error: "Шилжүүлэлтийг Борлуулалт хариуцсан захирал эсвэл Багийн ахлагч хийнэ." };
   }
   const parsed = transferSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: firstZodError(parsed.error) };
@@ -699,7 +704,7 @@ export async function transferHandoverItem(
         p_lead: input.entityId,
         p_new_owner: input.toProfileId,
         p_reason: "offboarding",
-        p_note: "Гарах ажилтны хүлээлцэх (Д-11)",
+        p_note: "Гарах ажилтны хүлээлцэх акт",
       });
       if (error) throw new Error(error.message);
     } else if (input.entity === "opportunity") {
@@ -707,16 +712,16 @@ export async function transferHandoverItem(
         p_opp: input.entityId,
         p_new_owner: input.toProfileId,
         p_reason: "offboarding",
-        p_note: "Гарах ажилтны хүлээлцэх (Д-11)",
+        p_note: "Гарах ажилтны хүлээлцэх акт",
       });
       if (error) throw new Error(error.message);
     } else if (input.entity === "property_role") {
-      if (!input.role) return { ok: false, error: "Объектын аль ролийг шилжүүлэхээ сонгоно уу." };
+      if (!input.role) return { ok: false, error: "Үл хөдлөхийн аль үүргийг шилжүүлэхээ сонгоно уу." };
       const { error } = await supabase.rpc("crm_reassign_property_role", {
         p_property: input.entityId,
         p_role: input.role,
         p_new_agent: input.toProfileId,
-        p_reason: "Гарах ажилтны хүлээлцэх (Д-11)",
+        p_reason: "Гарах ажилтны хүлээлцэх акт",
       });
       if (error) throw new Error(error.message);
     } else {
@@ -758,7 +763,7 @@ export async function transferHandoverItem(
           office_id: ctx.officeId,
           created_by: ctx.profileId,
           responsible_id: input.toProfileId,
-          title: "Шилжүүлсэн бичлэгтэй танилцаж эхний холболт хийх (Д-11)",
+          title: "Шилжүүлсэн бичлэгтэй танилцаж эхний холболт хийх",
           description: "Гарах ажилтнаас шилжсэн бичлэг — түүх, нотолгоотой танилцаад харилцагчтай холбогдоно.",
           priority: "high",
           deadline: new Date(Date.now() + 2 * 86400000).toISOString(),
@@ -808,8 +813,8 @@ export async function approveHandoverAct(raw: ApproveHandoverInput): Promise<{ o
   const c = await ctxOrError();
   if ("error" in c) return { ok: false, error: c.error };
   const { ctx } = c;
-  if (!ctx.roles.includes("sales_director") && !ctx.roles.includes("sysadmin")) {
-    return { ok: false, error: "Акт батлах эрх зөвхөн Борлуулалтын захирал/сисадминд бий." };
+  if (!ctx.roles.includes("sales_director")) {
+    return { ok: false, error: "Хүлээлцэх актыг Борлуулалт хариуцсан захирал батална." };
   }
   const parsed = approveActSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: firstZodError(parsed.error) };

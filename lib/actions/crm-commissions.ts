@@ -5,7 +5,13 @@ import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getCrmStaffContext, type CrmStaffContext } from "@/lib/queries-crm-core";
+import { getCrmStaffContext, getSettingValue, type CrmStaffContext } from "@/lib/queries-crm-core";
+import {
+  PREVIEW_GAP_LABEL,
+  commissionQualityHold,
+  normalizeQualitySettings,
+  previewBase,
+} from "@/lib/crm/quality";
 import type { Json } from "@/types/database";
 import {
   COMMISSION_STATUSES,
@@ -253,7 +259,7 @@ export async function saveCommissionConfig(
   const { ctx } = c;
 
   if (!ctx.roles.some((r) => r === "sysadmin" || r === "ops_qc")) {
-    return { error: "Журмын тохиргоог зөвхөн Сисадмин/ЧМТ өөрчилнө (§1.2)." };
+    return { error: "Журмын тохиргоог зөвхөн Системийн админ эсвэл Үйл ажиллагаа-ЧМТ өөрчилнө." };
   }
   const parsed = saveConfigSchema.safeParse(raw);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Оролт буруу." };
@@ -319,7 +325,7 @@ export async function generateCommissions(
   const { ctx } = c;
 
   if (!ctx.roles.some((r) => (MANAGER_ROLES as readonly string[]).includes(r))) {
-    return { ok: false, error: "Тооцоо үүсгэх эрх: Санхүү / Борлуулалтын захирал / ЧМТ / Ерөнхий захирал." };
+    return { ok: false, error: "Тооцоо үүсгэх эрх: Санхүү, Борлуулалт хариуцсан захирал, Үйл ажиллагаа-ЧМТ, CEO." };
   }
   const parsed = generateSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Оролт буруу." };
@@ -334,7 +340,7 @@ export async function generateCommissions(
     .maybeSingle();
   if (!txn) return { ok: false, error: "Хэлцэл олдсонгүй эсвэл танд эрх алга." };
   if (txn.status !== "closed") {
-    return { ok: false, error: "Тооцоо зөвхөн амжилттай хаагдсан хэлцлээс үүснэ (F-454)." };
+    return { ok: false, error: "Тооцоо зөвхөн амжилттай хаагдсан хэлцлээс үүснэ." };
   }
 
   // МУТСТ түгжээ №4 (§7.5).
@@ -354,7 +360,7 @@ export async function generateCommissions(
     .not("finance_verified_at", "is", null);
   const gross = (payments ?? []).reduce((s, p) => s + Number(p.amount_mnt), 0);
   if (txn.type !== "replacement" && gross <= 0) {
-    return { ok: false, error: "Санхүү баталгаажуулсан орлогын төлбөр алга — тооцоо үүсэх нөхцөл хангагдаагүй (F-454/455)." };
+    return { ok: false, error: "Санхүү баталгаажуулсан орлогын төлбөр алга — тооцоо үүсэх нөхцөл хангагдаагүй." };
   }
 
   // Үүргийн бүртгэл = нотолгооны эх (F-451).
@@ -363,7 +369,7 @@ export async function generateCommissions(
     .select("id, agent_profile_id, role, split_pct")
     .eq("transaction_id", txnId);
   if (!roleRows?.length) {
-    return { ok: false, error: "Агентын үүргийн бүртгэл алга — тооцоолох боломжгүй (F-451)." };
+    return { ok: false, error: "Агентын үүргийн бүртгэл алга — тооцоолох боломжгүй." };
   }
   const assignments: RoleAssignment[] = roleRows.map((r) => ({
     agentProfileId: r.agent_profile_id,
@@ -379,7 +385,7 @@ export async function generateCommissions(
   if (!config) {
     return {
       ok: false,
-      error: `«${policyCode}» журмын хүчинтэй тохиргооны хувилбар алга — Тохиргоо → Шимтгэлд үүсгэнэ үү (F-452/453).`,
+      error: `«${policyCode}» журмын хүчинтэй тохиргооны хувилбар алга — Тохиргоо → Шимтгэлд үүсгэнэ үү.`,
     };
   }
 
@@ -420,7 +426,7 @@ export async function generateCommissions(
     return {
       ok: true,
       created: 0,
-      notes: [...result.notes, "Шинээр тооцох дүн алга — баталгаажсан орлого бүрэн тооцогдсон байна (F-464)."],
+      notes: [...result.notes, "Шинээр тооцох дүн алга — баталгаажсан орлого бүрэн тооцогдсон байна."],
     };
   }
   const rowsToInsert: CalcRow[] = txn.type === "replacement" && !existing.length ? result.rows : deltaRows;
@@ -433,8 +439,8 @@ export async function generateCommissions(
     .eq("transaction_id", txnId)
     .eq("done", false)
     .limit(1);
-  if (undone?.length) holdReasons.push("Хүлээлцэх шалгах хуудас бүрэн бус (F-461).");
-  if (result.errors.length) holdReasons.push("Нотолгоо/хуваарилалт дутуу (F-458/461).");
+  if (undone?.length) holdReasons.push("Хүлээлцэх шалгах хуудас бүрэн бус.");
+  if (result.errors.length) holdReasons.push("Нотолгоо/хуваарилалт дутуу.");
   try {
     const { data: complaints } = await admin
       .from("crm_complaints")
@@ -443,14 +449,39 @@ export async function generateCommissions(
       .eq("severity", "serious")
       .is("resolved_at", null)
       .limit(1);
-    if (complaints?.length) holdReasons.push("Шийдэгдээгүй ноцтой гомдол (F-461).");
+    if (complaints?.length) holdReasons.push("Шийдэгдээгүй ноцтой гомдол.");
   } catch {
     // crm_complaints (000800, U8) хараахан суугаагүй — нөхцөл идэвхгүй.
   }
   const autoHold = holdReasons.length > 0;
 
+  // §6.31: CRM-ийн бүрэн байдал, чанарын босго хангаагүй агентын урамшууллыг
+  // хяналтад (зөвхөн түдгэлзүүлэлт; эрхийг бодлого, гэрээгээр шийднэ).
+  const qualityMin = normalizeQualitySettings(await getSettingValue("quality_audit")).commission_quality_min_pct;
+  const qualityByAgent = new Map<string, number | null>();
+  try {
+    const agentIds = [...new Set(rowsToInsert.map((r) => r.agentProfileId))];
+    if (agentIds.length) {
+      const { data: q, error: qErr } = await admin
+        .from("crm_v_agent_data_quality")
+        .select("agent_id, quality_pct")
+        .eq("office_id", ctx.officeId)
+        .in("agent_id", agentIds);
+      if (qErr) console.error("generateCommissions quality:", qErr.message);
+      for (const row of q ?? []) qualityByAgent.set(row.agent_id, row.quality_pct == null ? null : Number(row.quality_pct));
+    }
+  } catch (e) {
+    console.error("generateCommissions quality:", e instanceof Error ? e.message : e);
+  }
+
   let created = 0;
+  let qualityHeld = 0;
   for (const row of rowsToInsert) {
+    const qualityPct = qualityByAgent.get(row.agentProfileId) ?? null;
+    const qualityReason = commissionQualityHold(qualityPct, qualityMin);
+    const rowReasons = qualityReason ? [...holdReasons, qualityReason] : holdReasons;
+    const rowHold = rowReasons.length > 0;
+    if (qualityReason) qualityHeld += 1;
     const { error } = await admin.from("crm_commission_records").insert({
       office_id: ctx.officeId,
       source_type: "transaction",
@@ -461,8 +492,8 @@ export async function generateCommissions(
       applied_rate_pct: row.appliedRatePct,
       base_amount: row.baseAmount,
       amount: row.amount,
-      status: autoHold ? "hold" : "calculated",
-      hold_reason: autoHold ? holdReasons.join(" ") : null,
+      status: rowHold ? "hold" : "calculated",
+      hold_reason: rowHold ? rowReasons.join(" ") : null,
       config_version_id: config.id,
       evidence: {
         ...row.evidence,
@@ -471,6 +502,8 @@ export async function generateCommissions(
         verified_income_mnt: round2(gross),
         tax_pct: tax,
         verified_payment_ids: (payments ?? []).map((p) => p.id),
+        crm_quality_pct: qualityPct,
+        crm_quality_min_pct: qualityMin,
       } as Json,
     });
     if (error) {
@@ -488,6 +521,7 @@ export async function generateCommissions(
     tax_pct: tax,
     policy: policyCode,
     hold: autoHold,
+    quality_held: qualityHeld,
   });
   await writeAudit(ctx.officeId, "crm_transactions", txnId, "commissions_generated", {
     newValue: { created, policy: policyCode, base },
@@ -495,11 +529,18 @@ export async function generateCommissions(
   await notify(
     rowsToInsert.map((r) => r.agentProfileId),
     "Шимтгэлийн тооцоо үүслээ",
-    `${txn.number} хэлцлийн шимтгэлийн тооцоо ${autoHold ? "түдгэлзүүлсэн төлөвтэй" : "«Тооцоолсон» төлөвтэй"} үүслээ.`,
+    `${txn.number} хэлцлийн шимтгэлийн тооцоо ${autoHold || qualityHeld > 0 ? "түдгэлзүүлсэн төлөвтэй" : "«Тооцоолсон» төлөвтэй"} үүслээ.`,
     "/agent/crm/commissions"
   );
   revalidateCommissionPaths();
-  return { ok: true, created, held: autoHold, notes: result.notes };
+  return {
+    ok: true,
+    created,
+    held: autoHold || qualityHeld > 0,
+    notes: qualityHeld > 0
+      ? [...result.notes, `${qualityHeld} мөр CRM-ийн бүртгэлийн чанарын босго хангаагүй тул хяналтад орлоо.`]
+      : result.notes,
+  };
 }
 
 // ── F-466: Сарын PM тооцоо (pending дараалал) ─────────────
@@ -594,7 +635,7 @@ export async function generateMonthlyPmCommissions(): Promise<{
     const config = await configAtOrBootstrap(ctx.officeId, "PMC-PM-POL-001", monthEndIso, user.id);
     if (!config) {
       await logRuleRun(ctx.officeId, "F-466", "crm_monthly_records", rec.id, "error", undefined,
-        "PMC-PM-POL-001 тохиргооны хувилбар алга (F-452)");
+        "PMC-PM-POL-001 тохиргооны хувилбар алга");
       skipped += 1;
       continue;
     }
@@ -618,7 +659,7 @@ export async function generateMonthlyPmCommissions(): Promise<{
       base_amount: Number(rec.net_income ?? 0),
       amount,
       status: hold ? "hold" : "calculated",
-      hold_reason: hold ? "Сарын бүртгэлийн чанарын босго хангаагүй (F-559/461)." : null,
+      hold_reason: hold ? "Сарын бүртгэлийн чанарын босго хангаагүй." : null,
       config_version_id: config.id,
       evidence: {
         policy: "PMC-PM-POL-001",
@@ -674,7 +715,7 @@ export async function generateMonthlyPmCommissions(): Promise<{
     await notify(
       (pmStaff ?? []).map((s) => s.profile_id),
       "Сарын PM тооцоо үүслээ",
-      `${created} сарын менежментийн шимтгэлийн тооцоо үүслээ (F-466).`,
+      `${created} сарын менежментийн шимтгэлийн тооцоо үүслээ.`,
       "/office/crm/commissions?source=lease_monthly"
     );
   }
@@ -708,10 +749,10 @@ export async function setCommissionStatus(
   const { id, to, note } = parsed.data;
 
   if (to === "cancelled" && !note?.trim()) {
-    return { ok: false, error: "Цуцлалтад үндэслэл заавал (F-463/473)." };
+    return { ok: false, error: "Цуцлалтад үндэслэл заавал." };
   }
   if (to === "hold" && !note?.trim()) {
-    return { ok: false, error: "Түдгэлзүүлэх шалтгаан заавал (F-461)." };
+    return { ok: false, error: "Түдгэлзүүлэх шалтгаан заавал." };
   }
 
   const { error } = await supabase.rpc("crm_commission_set_status", {
@@ -742,7 +783,7 @@ export async function setCommissionStatus(
 }
 
 export async function holdCommission(id: string, reason: string): Promise<{ ok: boolean; error?: string }> {
-  if (!reason?.trim()) return { ok: false, error: "Түдгэлзүүлэх шалтгаан заавал (F-461)." };
+  if (!reason?.trim()) return { ok: false, error: "Түдгэлзүүлэх шалтгаан заавал." };
   return setCommissionStatus({ id, to: "hold", note: reason.trim() });
 }
 
@@ -775,7 +816,7 @@ export async function releaseCommissionHold(
   await notify(
     [rec?.recipient_profile_id ?? null],
     "Шимтгэлийн түдгэлзүүлэлт нээгдлээ",
-    "Таны шимтгэлийн тооцооны түдгэлзүүлэлтийг удирдлага нээлээ (F-461).",
+    "Таны шимтгэлийн тооцооны түдгэлзүүлэлтийг удирдлага нээлээ.",
     `/agent/crm/commissions/${id}`
   );
   revalidateCommissionPaths(id);
@@ -805,7 +846,7 @@ export async function recordPayout(
   const { ctx } = c;
 
   if (!ctx.roles.includes("finance")) {
-    return { ok: false, error: "Олголтыг зөвхөн Санхүү бүртгэнэ (F-460)." };
+    return { ok: false, error: "Олголтыг зөвхөн Санхүү бүртгэнэ." };
   }
   const parsed = payoutSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Оролт буруу." };
@@ -843,7 +884,7 @@ const clawbackSchema = z
   .object({
     recordId: z.uuid(),
     amount: z.number().positive("Буцаалтын дүн 0-ээс их байна (сөрөг гүйлгээ болж хадгалагдана)"),
-    reasonCategory: z.string().min(1, "Шалтгааны ангилал заавал (F-462)"),
+    reasonCategory: z.string().min(1, "Шалтгааны ангилал заавал"),
   })
   .strict();
 
@@ -860,7 +901,7 @@ export async function recordClawback(
   const { ctx } = c;
 
   if (!ctx.roles.some((r) => ["finance", "sales_director", "ops_qc"].includes(r))) {
-    return { error: "Буцаалтыг Санхүү/Борлуулалт/ЧМТ-ийн хяналтын дараа бүртгэнэ (F-462)." };
+    return { error: "Буцаалтыг Санхүү, Борлуулалт хариуцсан захирал эсвэл Үйл ажиллагаа-ЧМТ бүртгэнэ." };
   }
   const parsed = clawbackSchema.safeParse(raw);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Оролт буруу." };
@@ -924,7 +965,7 @@ export async function rollbackTransactionCommissions(
   if (!ctx.roles.some((r) => (MANAGER_ROLES as readonly string[]).includes(r))) {
     return { ok: false, error: NO_ROLE_ERR };
   }
-  if (!note?.trim()) return { ok: false, error: "Rollback-д үндэслэл заавал (F-463/473)." };
+  if (!note?.trim()) return { ok: false, error: "Rollback-д үндэслэл заавал." };
 
   const admin = createAdminClient();
   const { data: records } = await admin
@@ -968,7 +1009,7 @@ export async function rollbackTransactionCommissions(
     const { error } = await supabase.rpc("crm_commission_set_status", {
       p_id: rec.id,
       p_to: "cancelled",
-      p_note: `Хэлцлийн буцаалт/залруулга: ${note.trim()} (F-463)`,
+      p_note: `Хэлцлийн буцаалт/залруулга: ${note.trim()}`,
     });
     if (error) {
       console.error("rollback cancel:", error.message);
@@ -1039,6 +1080,18 @@ export async function createDispute(
     console.error("createDispute:", error.message);
     return { error: friendlyCommError(error.message) };
   }
+  // Нөгөө тал (хэлцлийн урамшууллын үүрэгт оролцогчид) маргааныг мэдэж, нотолгоогоо нэмнэ.
+  const admin = createAdminClient();
+  const { data: parties } = await admin
+    .from("crm_transaction_agent_roles")
+    .select("agent_profile_id")
+    .eq("transaction_id", transactionId);
+  await notify(
+    (parties ?? []).map((p) => p.agent_profile_id).filter((id) => id !== user.id),
+    "Урамшууллын маргаан нээгдлээ",
+    "Таны оролцсон хэлцлийн урамшууллын үүргийн талаар маргаан бүртгэгдлээ. Нотолгоогоо нэмнэ үү.",
+    "/agent/crm/commissions"
+  );
   revalidateCommissionPaths();
   return { id: data.id };
 }
@@ -1047,7 +1100,7 @@ const decideDisputeSchema = z
   .object({
     id: z.uuid(),
     decision: z.string().min(2, "Шийдвэр заавал"),
-    rationale: z.string().min(5, "Үндэслэл заавал (F-474/473)"),
+    rationale: z.string().min(5, "Үндэслэл заавал"),
   })
   .strict();
 
@@ -1076,4 +1129,147 @@ export async function decideDispute(
   }
   revalidateCommissionPaths();
   return { ok: true };
+}
+
+// ── Маргааны нотолгоо (§6.31, §7 — хоёр тал CRM-ийн нотолгоогоо ил болгоно) ──
+
+const evidenceSchema = z
+  .object({
+    disputeId: z.uuid(),
+    content: z.string().trim().min(5, "Нотолгоог 5-аас дээш тэмдэгтээр бичнэ үү").max(2000),
+  })
+  .strict();
+
+export async function addDisputeEvidence(
+  raw: z.infer<typeof evidenceSchema>
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: AUTH_ERR };
+  const c = await ctxOrError();
+  if ("error" in c) return { ok: false, error: c.error };
+  const parsed = evidenceSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Оролт буруу." };
+  const { error } = await supabase.from("crm_commission_dispute_evidence").insert({
+    office_id: c.ctx.officeId,
+    dispute_id: parsed.data.disputeId,
+    content: parsed.data.content,
+    created_by: user.id,
+  });
+  if (error) {
+    console.error("addDisputeEvidence:", error.message);
+    if (error.message.includes("row-level security")) {
+      return { ok: false, error: "Нотолгоог маргаан гаргагч, хэлцлийн оролцогч эсвэл удирдлага нэмнэ; шийдвэрлэгдсэн маргаанд нэмэхгүй." };
+    }
+    return { ok: false, error: friendlyCommError(error.message) };
+  }
+  revalidateCommissionPaths();
+  return { ok: true };
+}
+
+// ── R26: Агентын урамшууллын урьдчилсан тооцоо (албан бус, зөвхөн унших) ──
+
+export type CommissionPreviewRow = {
+  transactionId: string;
+  number: string;
+  status: string;
+  roles: { role: CommissionRole; ratePct: number; amount: number }[];
+  base: number;
+  total: number;
+  gaps: string[];
+};
+
+/**
+ * Нээлттэй (гэрээ, төлбөрийн шаттай) хэлцлүүдийн урамшууллын урьдчилсан
+ * тооцоо: хүчинтэй журмын тохиргоо, үүргийн бүртгэл, баталгаажсан орлого
+ * (байхгүй бол хүлээгдэж буй хөлс)-оор. Юу ч бичихгүй; албан тооцоо биш.
+ */
+export async function previewMyCommissions(): Promise<{ rows: CommissionPreviewRow[]; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { rows: [], error: AUTH_ERR };
+  const c = await ctxOrError();
+  if ("error" in c) return { rows: [], error: c.error };
+  const { ctx } = c;
+  const admin = createAdminClient();
+
+  const { data: myRoles, error: rErr } = await admin
+    .from("crm_transaction_agent_roles")
+    .select("transaction_id")
+    .eq("office_id", ctx.officeId)
+    .eq("agent_profile_id", user.id);
+  if (rErr) {
+    console.error("previewMyCommissions roles:", rErr.message);
+    return { rows: [], error: SAVE_ERR };
+  }
+  const txnIds = [...new Set((myRoles ?? []).map((r) => r.transaction_id))];
+  if (!txnIds.length) return { rows: [] };
+
+  const { data: txns } = await admin
+    .from("crm_transactions")
+    .select("id, number, type, status, amount_mnt, opportunity_id")
+    .in("id", txnIds)
+    .in("status", ["contract", "payment"])
+    .limit(30);
+  if (!txns?.length) return { rows: [] };
+
+  const tax = await taxPct(ctx.officeId);
+  const nowIso = new Date().toISOString();
+  const out: CommissionPreviewRow[] = [];
+  for (const t of txns) {
+    const [{ data: roleRows }, { data: payments }, { data: opp }] = await Promise.all([
+      admin.from("crm_transaction_agent_roles").select("id, agent_profile_id, role, split_pct").eq("transaction_id", t.id),
+      admin
+        .from("crm_payments")
+        .select("amount_mnt")
+        .eq("transaction_id", t.id)
+        .eq("kind", "income")
+        .not("finance_verified_at", "is", null),
+      t.opportunity_id
+        ? admin.from("crm_opportunities").select("expected_fee_mnt").eq("id", t.opportunity_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+    const gaps: string[] = [];
+    const verified = (payments ?? []).reduce((s, p) => s + Number(p.amount_mnt), 0);
+    const expected = opp?.expected_fee_mnt == null ? null : Number(opp.expected_fee_mnt);
+    const pb = previewBase(verified, expected);
+    for (const g of pb.gaps) gaps.push(PREVIEW_GAP_LABEL[g]);
+    const assignments: RoleAssignment[] = (roleRows ?? []).map((r) => ({
+      agentProfileId: r.agent_profile_id,
+      role: r.role as CommissionRole,
+      splitPct: r.split_pct == null ? null : Number(r.split_pct),
+      refId: r.id,
+    }));
+    const coBrokerage = assignments.some((a) => a.role === "seller_side" || a.role === "buyer_side");
+    const policyCode = policyCodeForTxnType(t.type, { coBrokerage });
+    const config = await configAt(ctx.officeId, policyCode, nowIso);
+    if (!config) gaps.push("Хүчинтэй журмын тохиргоо алга — Санхүүд хандана уу");
+    const base = t.type === "replacement" ? 0 : netBaseAmount(pb.base, tax);
+    const result = config
+      ? calcCommission({
+          policyCode,
+          payload: config.payload,
+          assignments,
+          baseAmount: base,
+          price: Number(t.amount_mnt ?? 0),
+          flags: { replacement: t.type === "replacement", coBrokerage },
+        })
+      : null;
+    if (result?.errors.length) gaps.push(...result.errors);
+    const mine = (result?.rows ?? []).filter((r) => r.agentProfileId === user.id);
+    out.push({
+      transactionId: t.id,
+      number: t.number,
+      status: t.status,
+      roles: mine.map((r) => ({ role: r.role, ratePct: r.appliedRatePct, amount: r.amount })),
+      base: round2(base),
+      total: round2(mine.reduce((s, r) => s + r.amount, 0)),
+      gaps,
+    });
+  }
+  return { rows: out };
 }

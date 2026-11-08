@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
 
-import { getCrmStaffContext, getLookups } from "@/lib/queries-crm-core";
+import { getCrmStaffContext, getLookups, getSettingValue } from "@/lib/queries-crm-core";
+import { normalizeDealFlow } from "@/lib/crm/deal-flow";
 import { getBoard, getVisiblePipelines } from "@/lib/queries-crm-pipeline";
 import { PipelineBoardShell } from "@/components/crm/PipelineBoardShell";
+import { toIsoDate } from "@/lib/crm/calendar";
 
 export const metadata = { title: "Урсгал — CRM" };
 
@@ -14,12 +16,16 @@ export default async function PipelinePage({ searchParams }: { searchParams: Sea
   if (!ctx) redirect("/office");
 
   const sp = await searchParams;
-  const [pipelines, lostReasons] = await Promise.all([getVisiblePipelines(), getLookups("lost_reason")]);
+  const [pipelines, lostReasons, dealFlowRaw] = await Promise.all([
+    getVisiblePipelines(),
+    getLookups("lost_reason"),
+    getSettingValue("deal_flow"),
+  ]);
   const code = sp.pl && pipelines.some((p) => p.code === sp.pl) ? sp.pl : (pipelines[0]?.code ?? "PL-1");
   const board = await getBoard(code);
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-8">
       <PipelineBoardShell
         pipelines={pipelines}
         board={board}
@@ -28,6 +34,8 @@ export default async function PipelinePage({ searchParams }: { searchParams: Sea
         roles={ctx.roles}
         basePath="/office/crm"
         dealPath="/office/crm/deals"
+        dealFlow={normalizeDealFlow(dealFlowRaw)}
+        today={toIsoDate(new Date())}
       />
     </div>
   );

@@ -200,7 +200,7 @@ export function NotificationsShell({ matrix, canEdit }: { matrix: NotificationMa
               </div>
             </Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Заавал ангилал (F-652)">
+              <Field label="Заавал ангилал">
                 <Select
                   value={draft.mandatory ? "yes" : "no"}
                   onChange={(e) => setDraft({ ...draft, mandatory: e.target.value === "yes" })}

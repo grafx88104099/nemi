@@ -95,17 +95,17 @@ export function InvoicesPageShell({
         {canWrite && (
           <div className="flex gap-2">
             <Button size="sm" variant="secondary" onClick={() => { setBrSuggested(null); setBrokOpen(true); }}>
-              <Plus className="size-4" /> Зуучлалын хөлс (F-516б)
+              <Plus className="size-4" /> Зуучлалын хөлс
             </Button>
             <Button size="sm" onClick={() => setExtraOpen(true)}>
-              <Plus className="size-4" /> Нэмэлт үйлчилгээ (F-523)
+              <Plus className="size-4" /> Нэмэлт үйлчилгээ
             </Button>
           </div>
         )}
       </div>
 
       {/* Насжилт (F-524) */}
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
         {(["current", "d1_3", "d4_7", "d8_plus"] as const).map((b) => (
           <Card key={b}>
             <CardBody>
@@ -206,7 +206,7 @@ export function InvoicesPageShell({
                       <Link
                         href={`/office/crm/rentals/invoices/${r.id}/print`}
                         className="rounded-lg p-1.5 text-muted hover:bg-surface-2 hover:text-ink"
-                        title="Хэвлэх / PDF (F-521)"
+                        title="Хэвлэх / PDF"
                       >
                         <Printer className="size-4" />
                       </Link>
@@ -248,7 +248,7 @@ export function InvoicesPageShell({
               <tr>
                 <td colSpan={9} className="px-4 py-10 text-center text-muted">
                   Нэхэмжлэх олдсонгүй. Менежменттэй идэвхтэй гэрээнд сарын нэхэмжлэх сар бүрийн 1-нд автомат
-                  үүснэ (Д-13); сул объектод үүсэхгүй (Д-14).
+                  үүснэ; сул объектод үүсэхгүй.
                 </td>
               </tr>
             )}
@@ -260,7 +260,7 @@ export function InvoicesPageShell({
       <Modal
         open={extraOpen}
         onClose={() => setExtraOpen(false)}
-        title="Нэмэлт үйлчилгээний нэхэмжлэх (F-523)"
+        title="Нэмэлт үйлчилгээний нэхэмжлэх"
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setExtraOpen(false)}>
@@ -316,7 +316,7 @@ export function InvoicesPageShell({
               <Input type="date" value={ex.dueOn} onChange={(e) => setEx({ ...ex, dueOn: e.target.value })} />
             </Field>
           </div>
-          <Field label="Бичгэн зөвшөөрлийн баримтын ID (F-523 — заавал)">
+          <Field label="Бичгэн зөвшөөрлийн баримтын ID (заавал)">
             <Input value={ex.approvalDocId} onChange={(e) => setEx({ ...ex, approvalDocId: e.target.value })} placeholder="UUID" />
           </Field>
           {error && <p className="text-sm text-danger">{error}</p>}
@@ -327,7 +327,7 @@ export function InvoicesPageShell({
       <Modal
         open={brokOpen}
         onClose={() => setBrokOpen(false)}
-        title="Энгийн түрээсийн зуучлалын хөлс (F-516б)"
+        title="Энгийн түрээсийн зуучлалын хөлс"
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setBrokOpen(false)}>
@@ -354,8 +354,8 @@ export function InvoicesPageShell({
       >
         <div className="space-y-3">
           <p className="text-sm text-muted">
-            Дүнг хугацааны шатлалаар (rental_fee_tiers) автомат санал болгоно (F-465); зөрүүтэй дүнд
-            батлагдсан зөвшөөрөл шаардлагатай (F-411).
+            Дүнг хугацааны шатлалаар (rental_fee_tiers) автомат санал болгоно; зөрүүтэй дүнд
+            батлагдсан зөвшөөрөл шаардлагатай.
           </p>
           <Field label="Гэрээ (энгийн түрээс)">
             <Select value={br.leaseId} onChange={(e) => setBr({ ...br, leaseId: e.target.value })}>
@@ -385,7 +385,7 @@ export function InvoicesPageShell({
       <Modal
         open={cancelId != null}
         onClose={() => setCancelId(null)}
-        title="Нэхэмжлэх хүчингүй болгох (F-522)"
+        title="Нэхэмжлэх хүчингүй болгох"
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setCancelId(null)}>
@@ -404,7 +404,7 @@ export function InvoicesPageShell({
         <Field label="Үндэслэлийн тэмдэглэл (заавал)">
           <Input value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} />
         </Field>
-        <p className="mt-2 text-xs text-muted">Төлөгдсөн нэхэмжлэхийг хүчингүй болгохгүй — залруулгын нэхэмжлэхээр (F-522).</p>
+        <p className="mt-2 text-xs text-muted">Төлөгдсөн нэхэмжлэхийг хүчингүй болгохгүй — залруулгын нэхэмжлэхээр.</p>
         {error && <p className="mt-2 text-sm text-danger">{error}</p>}
       </Modal>
 
@@ -412,7 +412,7 @@ export function InvoicesPageShell({
       <Modal
         open={corrId != null}
         onClose={() => setCorrId(null)}
-        title="Залруулгын нэхэмжлэх (F-522)"
+        title="Залруулгын нэхэмжлэх"
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setCorrId(null)}>

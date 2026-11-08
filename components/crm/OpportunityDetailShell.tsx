@@ -7,66 +7,126 @@ import {
   ArrowLeftRight,
   ArrowRight,
   Building2,
+  CalendarClock,
+  ChevronDown,
   ChevronRight,
+  ClipboardList,
   Flame,
-  HandCoins,
   History,
+  Lightbulb,
   Pencil,
+  Ruler,
+  Search,
   ShieldAlert,
   User,
+  X,
   XCircle,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input, Field } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
+import { toast } from "@/components/ui/toast";
 import { GateChecklist } from "@/components/crm/GateChecklist";
 import { GateErrorDialog } from "@/components/crm/GateErrorDialog";
 import { ActivityComposer } from "@/components/crm/ActivityComposer";
 import { ActivityTimeline } from "@/components/crm/ActivityTimeline";
+import { OfferPanel } from "@/components/crm/OfferPanel";
+import { ShowingPanel } from "@/components/crm/ShowingPanel";
 import {
   moveStage,
   closeLost,
   transferPipeline,
   updateOpportunity,
   reassignOpportunity,
-  recordOffer,
+  setOpportunityNextStep,
+  scheduleOwnerMeeting,
+  recordPriceAnalysis,
+  searchOpportunityProperties,
+  listContactNeedProfiles,
 } from "@/lib/actions/crm-opportunities";
+import { createTransaction } from "@/lib/actions/crm-transactions";
 import { fmtMNT, fmtDate, fmtDateTime, daysSince } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import {
+  avgPricePerM2,
+  priceAnalysisError,
+  stageHealth,
+  type Comparable,
+  type DealFlowConfig,
+} from "@/lib/crm/deal-flow";
 import {
   OPP_STATE_LABEL,
   KYC_STATUS_LABEL,
   PL_CODES,
   PL_LABEL,
+  GATE_CHECKER_LABEL,
+  TXN_STATUS_LABEL,
+  TXN_TYPES,
+  TXN_TYPE_LABEL,
   type CrmRole,
   type GateCode,
+  type GateCheckerKind,
+  type PlCode,
+  type TxnType,
+  type TxnStatus,
 } from "@/lib/constants-crm";
 import type {
   OpportunityDetail,
   TransitionOption,
   ActivityRow,
+  PropertyOption,
+  NeedProfileOption,
 } from "@/lib/queries-crm-pipeline";
+import { toIsoDate } from "@/lib/crm/calendar";
 
 /**
- * Боломжийн карт (F-350–362): шатны stepper + GateChecklist, шилжилтийн
- * товчнууд (DB guard «ижил босго»), санал/хэлэлцээр (P-02 §2.4, Д-06),
- * үйл ажиллагааны гурвалсан холбоост түүх (F-309), шатны түүх (F-357),
- * урсгал шилжүүлэлт (F-361), эзэмшигч шилжүүлэлт (зарчим 6).
+ * Боломжийн карт (§6.13, §6.14): шатны зам + зөвлөмж, дараагийн шатны
+ * шилжих шалгуур (дутуу мөр бүрээс шууд үйлдэл), дараагийн үйлдэл, үнийн
+ * санал, үзлэг, листингийн уулзалт ба үнийн дүн шинжилгээ, хэлцлийн хавтас,
+ * үйл ажиллагаа, шатны түүх. Амжилттай хаагдсан шат зөвхөн хэлцэл
+ * хаагдахад автоматаар.
  */
 
 type LookupLite = { id: string; label: string; requires_note: boolean };
 
 const REASSIGN_REASONS: { code: string; label: string }[] = [
   { code: "client_request", label: "Харилцагчийн хүсэлт" },
-  { code: "sla_breach", label: "SLA зөрчил" },
+  { code: "sla_breach", label: "Хариу өгөх хугацаа хэтэрсэн" },
   { code: "inactivity", label: "Идэвхгүй байдал" },
   { code: "zoning", label: "Бүсчлэл" },
   { code: "offboarding", label: "Ажилтан гарч байгаа" },
 ];
+
+const DEFAULT_TXN_TYPE: Partial<Record<PlCode, TxnType>> = {
+  "PL-1": "sale",
+  "PL-2": "sale",
+  "PL-3": "standard_rental",
+  "PL-4": "managed_rental",
+  "PL-5": "international_sale",
+};
+
+/** Дэлгэцийн шошго → шалгагчийн төрөл (DB-ийн дутуу жагсаалттай ижил шошго). */
+const LABEL_TO_KIND: Record<string, GateCheckerKind> = Object.fromEntries(
+  (Object.entries(GATE_CHECKER_LABEL) as [GateCheckerKind, string][]).map(([k, v]) => [v, k])
+);
+function kindOfLabel(label: string): GateCheckerKind | null {
+  if (LABEL_TO_KIND[label]) return LABEL_TO_KIND[label];
+  if (label.startsWith(GATE_CHECKER_LABEL.docs_complete)) return "docs_complete";
+  return null;
+}
+
+function todayIso(): string {
+  return toIsoDate(new Date());
+}
+
+function scrollToId(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
 
 export function OpportunityDetailShell({
   opp,
@@ -78,10 +138,12 @@ export function OpportunityDetailShell({
   roles,
   currentProfileId,
   basePath,
+  dealFlow,
+  feedbackHours,
 }: {
   opp: OpportunityDetail;
   activities: ActivityRow[];
-  /** Гейт код → идэвхтэй шаардлагуудын монгол нэрс (crm_gate_requirements-ээс). */
+  /** Шилжих шалгуурын код → идэвхтэй шаардлагуудын шошго (crm_gate_requirements-ээс). */
   gateLabels: Partial<Record<GateCode, string[]>>;
   lostReasons: LookupLite[];
   objections: LookupLite[];
@@ -89,9 +151,12 @@ export function OpportunityDetailShell({
   roles: CrmRole[];
   currentProfileId: string;
   basePath: string;
+  dealFlow: DealFlowConfig;
+  feedbackHours: number;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [, startSearch] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [gateError, setGateError] = useState<{ missing: string[]; stageName: string } | null>(null);
   const [reasonFor, setReasonFor] = useState<TransitionOption | null>(null);
@@ -99,17 +164,49 @@ export function OpportunityDetailShell({
   const [lostOpen, setLostOpen] = useState(false);
   const [lostReasonId, setLostReasonId] = useState("");
   const [lostNote, setLostNote] = useState("");
+  const [guidanceOpen, setGuidanceOpen] = useState(false);
+  const [offerSignal, setOfferSignal] = useState(0);
+
+  // Засах
   const [editOpen, setEditOpen] = useState(false);
   const [amount, setAmount] = useState(opp.amount != null ? String(opp.amount) : "");
+  const [fee, setFee] = useState(opp.expected_fee_mnt != null ? String(opp.expected_fee_mnt) : "");
   const [expectedCloseOn, setExpectedCloseOn] = useState(opp.expected_close_on ?? "");
-  const [offerOpen, setOfferOpen] = useState(false);
-  const [offerDirection, setOfferDirection] = useState<"offer" | "counter">("offer");
-  const [offerAmount, setOfferAmount] = useState("");
-  const [offerTerms, setOfferTerms] = useState("");
-  const [offerValidUntil, setOfferValidUntil] = useState("");
-  const [offerPosition, setOfferPosition] = useState("");
-  const [offerObstacle, setOfferObstacle] = useState("");
-  const [offerNextStep, setOfferNextStep] = useState("");
+  const [editProperty, setEditProperty] = useState<{ id: string; label: string } | null>(
+    opp.property ? { id: opp.property.id, label: `${opp.property.name} ${opp.property.number}` } : null
+  );
+  const [propertyQ, setPropertyQ] = useState("");
+  const [propertyResults, setPropertyResults] = useState<PropertyOption[]>([]);
+  const [profiles, setProfiles] = useState<NeedProfileOption[] | null>(null);
+  const [needProfileId, setNeedProfileId] = useState(opp.need_profile_id ?? "");
+
+  // Дараагийн үйлдэл
+  const [nextOpen, setNextOpen] = useState(false);
+  const [nextStep, setNextStep] = useState(opp.next_step ?? "");
+  const [nextStepDate, setNextStepDate] = useState(opp.next_step_date ?? todayIso());
+
+  // Уулзалт (листинг)
+  const [meetingOpen, setMeetingOpen] = useState(false);
+  const [meetingAt, setMeetingAt] = useState("");
+  const [meetingPlace, setMeetingPlace] = useState(opp.meeting_place ?? "");
+
+  // Үнийн дүн шинжилгээ
+  const [analysisOpen, setAnalysisOpen] = useState(false);
+  const blankComp = (): Comparable => ({ address: "", price: 0, area_m2: null, note: null });
+  const [comps, setComps] = useState<Comparable[]>(() =>
+    Array.from({ length: Math.max(dealFlow.priceAnalysisMinComparables, 1) }, blankComp)
+  );
+  const [recommended, setRecommended] = useState("");
+  const [priceMin, setPriceMin] = useState("");
+  const [priceMax, setPriceMax] = useState("");
+  const [analysisNote, setAnalysisNote] = useState("");
+
+  // Хэлцэл үүсгэх
+  const [txnOpen, setTxnOpen] = useState(false);
+  const [txnType, setTxnType] = useState<TxnType>(DEFAULT_TXN_TYPE[opp.pipeline.code as PlCode] ?? "sale");
+  const [txnAmount, setTxnAmount] = useState(opp.amount != null ? String(opp.amount) : "");
+
+  // Урсгал, эзэмшигч
   const [transferOpen, setTransferOpen] = useState(false);
   const [transferCode, setTransferCode] = useState("");
   const [transferReason, setTransferReason] = useState("");
@@ -119,6 +216,7 @@ export function OpportunityDetailShell({
   const [reassignNote, setReassignNote] = useState("");
 
   const isOpen = opp.state === "open";
+  const isListing = opp.pipeline.code === "PL-2";
   const canManage = roles.some((r) => ["team_lead", "sales_director", "ops_qc", "sysadmin"].includes(r));
   const stateBadge = OPP_STATE_LABEL[opp.state];
   const kycBadge = KYC_STATUS_LABEL[opp.contact.kyc_public_status];
@@ -126,9 +224,29 @@ export function OpportunityDetailShell({
   const linearStages = opp.stages.filter((s) => s.terminal_state !== "lost");
   const currentIdx = linearStages.findIndex((s) => s.id === opp.stage_id);
   const selectedLostReason = lostReasons.find((r) => r.id === lostReasonId);
+  const today = todayIso();
+  const health = stageHealth(
+    {
+      stageCode: currentStage?.code ?? "",
+      stageEnteredAt: opp.stage_entered_at,
+      nextStepDate: opp.next_step_date,
+      open: isOpen,
+    },
+    today,
+    dealFlow
+  );
+  const askingPrice = opp.property
+    ? opp.property.service_kind === "sale"
+      ? opp.property.price
+      : opp.property.rent_price
+    : null;
+  const nextIsClosing =
+    opp.transitions.find((t) => t.kind === "forward" && !t.is_terminal)?.to_stage_code === "contract" ||
+    currentStage?.code === "contract" ||
+    currentStage?.is_closing_direction;
 
-  // Дараагийн урагш шилжилт — гейт checklist-ийг түүн дээр үзүүлнэ.
-  const nextForward = opp.transitions.find((t) => t.kind === "forward");
+  // Дараагийн урагш шилжилт — шалгуурын жагсаалтыг түүн дээр үзүүлнэ.
+  const nextForward = opp.transitions.find((t) => t.kind === "forward" && t.terminal_state !== "lost");
   const gatedPreview = nextForward?.gate_code
     ? {
         gateCode: nextForward.gate_code,
@@ -139,6 +257,9 @@ export function OpportunityDetailShell({
         stageName: nextForward.to_stage_name,
       }
     : null;
+  const missingItems = gatedPreview?.items.filter((i) => !i.ok) ?? [];
+
+  // ── Шилжилт ─────────────────────────────────────────────
 
   function doMove(tr: TransitionOption, moveReason?: string) {
     setError(null);
@@ -149,6 +270,7 @@ export function OpportunityDetailShell({
         else setError(res.error ?? "Алдаа гарлаа.");
         return;
       }
+      toast.success(`«${tr.to_stage_name}» шат руу шилжлээ`);
       setReasonFor(null);
       setReason("");
       router.refresh();
@@ -172,7 +294,7 @@ export function OpportunityDetailShell({
     startTransition(async () => {
       const res = await closeLost(opp.id, lostReasonId, lostNote.trim() || undefined);
       if (!res.ok) {
-        if (res.missing?.length) setGateError({ missing: res.missing, stageName: "Алдсан" });
+        if (res.missing?.length) setGateError({ missing: res.missing, stageName: "Амжилтгүй хаагдсан" });
         else setError(res.error ?? "Алдаа гарлаа.");
         return;
       }
@@ -181,10 +303,25 @@ export function OpportunityDetailShell({
     });
   }
 
+  // ── Засах ────────────────────────────────────────────────
+
+  function openEdit() {
+    setEditOpen(true);
+    if (!isListing && profiles === null) {
+      startSearch(async () => setProfiles(await listContactNeedProfiles(opp.contact.id)));
+    }
+  }
+
+  function onPropertyQuery(q: string) {
+    setPropertyQ(q);
+    startSearch(async () => setPropertyResults(await searchOpportunityProperties(q)));
+  }
+
   function submitEdit() {
     setError(null);
     const amt = amount.trim() === "" ? null : Number(amount);
-    if (amt != null && (Number.isNaN(amt) || amt < 0)) {
+    const feeAmt = fee.trim() === "" ? null : Number(fee);
+    if ((amt != null && (Number.isNaN(amt) || amt < 0)) || (feeAmt != null && (Number.isNaN(feeAmt) || feeAmt < 0))) {
       setError("Дүн буруу байна.");
       return;
     }
@@ -192,47 +329,108 @@ export function OpportunityDetailShell({
       const res = await updateOpportunity({
         id: opp.id,
         amount: amt,
+        expectedFeeMnt: feeAmt,
         expectedCloseOn: expectedCloseOn || null,
+        propertyId: editProperty?.id ?? null,
+        ...(isListing ? {} : { needProfileId: needProfileId || null }),
       });
       if (!res.ok) {
         setError(res.error ?? "Алдаа гарлаа.");
         return;
       }
+      toast.success("Боломж шинэчлэгдлээ");
       setEditOpen(false);
       router.refresh();
     });
   }
 
-  function submitOffer() {
+  function submitNextStep() {
     setError(null);
-    const amt = Number(offerAmount);
-    if (!offerAmount.trim() || Number.isNaN(amt) || amt <= 0) {
-      setError("Саналын дүнг зөв оруулна уу.");
+    startTransition(async () => {
+      const res = await setOpportunityNextStep({ id: opp.id, nextStep: nextStep.trim(), nextStepDate });
+      if (!res.ok) {
+        setError(res.error ?? "Алдаа гарлаа.");
+        return;
+      }
+      toast.success("Дараагийн үйлдэл хадгалагдлаа");
+      setNextOpen(false);
+      router.refresh();
+    });
+  }
+
+  function submitMeeting() {
+    setError(null);
+    if (!meetingAt) {
+      setError("Уулзалтын огноо, цагийг сонгоно уу.");
       return;
     }
     startTransition(async () => {
-      const res = await recordOffer({
+      const res = await scheduleOwnerMeeting({
+        id: opp.id,
+        meetingAt: new Date(meetingAt).toISOString(),
+        place: meetingPlace.trim(),
+      });
+      if (!res.ok) {
+        setError(res.error ?? "Алдаа гарлаа.");
+        return;
+      }
+      toast.success("Уулзалт товлогдлоо");
+      setMeetingOpen(false);
+      router.refresh();
+    });
+  }
+
+  function submitAnalysis() {
+    setError(null);
+    const rec = Number(recommended);
+    const min = priceMin ? Number(priceMin) : null;
+    const max = priceMax ? Number(priceMax) : null;
+    const clean = comps.filter((c) => c.address.trim() || c.price > 0);
+    const err = priceAnalysisError(clean, rec, min, max, dealFlow);
+    if (err) {
+      setError(err);
+      return;
+    }
+    startTransition(async () => {
+      const res = await recordPriceAnalysis({
         opportunityId: opp.id,
-        direction: offerDirection,
-        amount: amt,
-        terms: offerTerms.trim() || null,
-        validUntil: offerValidUntil || null,
-        position: offerPosition.trim() || null,
-        obstacle: offerObstacle.trim() || null,
-        nextStep: offerNextStep.trim() || null,
+        comparables: clean.map((c) => ({
+          address: c.address.trim(),
+          price: c.price,
+          area_m2: c.area_m2 || null,
+          note: c.note?.trim() || null,
+        })),
+        priceMin: min,
+        priceMax: max,
+        recommendedPrice: rec,
+        note: analysisNote.trim() || null,
       });
       if (res.error) {
         setError(res.error);
         return;
       }
-      setOfferOpen(false);
-      setOfferAmount("");
-      setOfferTerms("");
-      setOfferValidUntil("");
-      setOfferPosition("");
-      setOfferObstacle("");
-      setOfferNextStep("");
+      toast.success("Үнийн дүн шинжилгээ бүртгэгдлээ");
+      setAnalysisOpen(false);
       router.refresh();
+    });
+  }
+
+  function submitTxn() {
+    setError(null);
+    const amt = Number(txnAmount);
+    if (!(amt > 0)) {
+      setError("Хэлцлийн дүнг оруулна уу.");
+      return;
+    }
+    startTransition(async () => {
+      const res = await createTransaction({ opportunityId: opp.id, type: txnType, amount: amt, currency: "MNT" });
+      if (res.error || !res.id) {
+        setError(res.error ?? "Алдаа гарлаа.");
+        return;
+      }
+      toast.success("Хэлцлийн хавтас нээгдлээ");
+      setTxnOpen(false);
+      router.push(`${basePath}/transactions/${res.id}`);
     });
   }
 
@@ -262,13 +460,65 @@ export function OpportunityDetailShell({
     });
   }
 
+  // ── Дутуу шаардлагаас шууд үйлдэл ────────────────────────
+
+  function actionFor(label: string): { text: string; run?: () => void; href?: string } | null {
+    const kind = kindOfLabel(label);
+    if (!kind || !isOpen) return null;
+    switch (kind) {
+      case "next_step_set":
+        return { text: "Дараагийн үйлдэл товлох", run: () => setNextOpen(true) };
+      case "meaningful_contact":
+        return { text: "Холболтын үр дүн бүртгэх", run: () => scrollToId("opp-activity") };
+      case "need_profile_complete":
+        return { text: "Профайл бөглөх", href: `${basePath}/contacts/${opp.contact.id}` };
+      case "match_suggested":
+        return { text: "Үл хөдлөх холбох", run: openEdit };
+      case "showing_logged":
+      case "interest_confirmed":
+      case "showing_on_property":
+        return { text: "Үзлэг рүү", run: () => scrollToId("opp-showings") };
+      case "offer_recorded":
+      case "counter_recorded":
+        return { text: "Санал бүртгэх", run: () => setOfferSignal((n) => n + 1) };
+      case "offer_accepted":
+        return { text: "Саналын шийдвэр", run: () => scrollToId("opp-offers") };
+      case "meeting_scheduled":
+        return { text: "Уулзалт товлох", run: () => setMeetingOpen(true) };
+      case "price_analysis":
+        return { text: "Дүн шинжилгээ бүртгэх", run: () => setAnalysisOpen(true) };
+      case "listing_agreement":
+      case "property_active":
+        return opp.property
+          ? { text: "Үл хөдлөхийн карт", href: `${basePath}/properties/${opp.property.id}` }
+          : { text: "Үл хөдлөх холбох", run: openEdit };
+      case "kyc_verified":
+        return { text: "Харилцагчийн карт", href: `${basePath}/contacts/${opp.contact.id}` };
+      case "docs_complete":
+      case "role_evidence":
+      case "payment_proof":
+      case "handover_done":
+        return opp.transaction
+          ? { text: "Хэлцлийн хавтас", href: `${basePath}/transactions/${opp.transaction.id}` }
+          : { text: "Хэлцлийн хавтас нээх", run: () => setTxnOpen(true) };
+      default:
+        return null;
+    }
+  }
+
+  const MISSING_HINT: Partial<Record<GateCheckerKind, string>> = {
+    kyc_verified: "Харилцагчийн KYC-г МУТСТ ажилтан баталгаажуулна.",
+    aml_not_held: "МУТСТ түгжээг зөвхөн МУТСТ ажилтан суллана.",
+    docs_complete: "Хэлцлийн хавтсанд шаардлагатай баримтыг хавсаргана.",
+  };
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-20 sm:pb-0">
       {/* Толгой */}
       <Card>
         <CardBody>
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
+            <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <Link
                   href={`${basePath}/contacts/${opp.contact.id}`}
@@ -286,10 +536,12 @@ export function OpportunityDetailShell({
                 ) : null}
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
-                <span>
-                  {opp.pipeline.code} · {opp.pipeline.name}
-                </span>
-                {opp.contact.phone ? <span>{opp.contact.phone}</span> : null}
+                <span>{PL_LABEL[opp.pipeline.code as PlCode] ?? opp.pipeline.name}</span>
+                {opp.contact.phone ? (
+                  <a href={`tel:${opp.contact.phone}`} className="hover:text-brand-700">
+                    {opp.contact.phone}
+                  </a>
+                ) : null}
                 <span className="inline-flex items-center gap-1">
                   <User className="size-3.5" /> {opp.owner_name ?? "—"}
                 </span>
@@ -301,12 +553,13 @@ export function OpportunityDetailShell({
                     <Building2 className="size-3.5" /> {opp.property.name}{" "}
                     <span className="font-mono text-xs">{opp.property.number}</span>
                   </Link>
+                ) : isOpen ? (
+                  <button type="button" onClick={openEdit} className="inline-flex items-center gap-1 text-amber-700">
+                    <Building2 className="size-3.5" /> Үл хөдлөх холбоогүй
+                  </button>
                 ) : null}
                 {opp.lead_id ? (
-                  <Link
-                    href={`${basePath}/leads/${opp.lead_id}`}
-                    className="inline-flex items-center gap-1 hover:text-brand-700"
-                  >
+                  <Link href={`${basePath}/leads/${opp.lead_id}`} className="inline-flex items-center gap-1 hover:text-brand-700">
                     <Flame className="size-3.5" /> Сэжим
                   </Link>
                 ) : null}
@@ -314,29 +567,30 @@ export function OpportunityDetailShell({
             </div>
             <div className="text-right">
               <p className="text-lg font-bold text-ink">{opp.amount != null ? fmtMNT(opp.amount) : "Дүн —"}</p>
+              {opp.expected_fee_mnt != null ? (
+                <p className="text-xs text-muted">Хүлээгдэж буй хөлс: {fmtMNT(opp.expected_fee_mnt)}</p>
+              ) : null}
               <p className="text-xs text-muted">
-                Хаагдах төлөв: {opp.expected_close_on ? fmtDate(opp.expected_close_on) : "—"}
-                {isOpen &&
-                opp.expected_close_on &&
-                opp.expected_close_on < new Date().toISOString().slice(0, 10) ? (
-                  <span className="ml-1 font-medium text-rose-600">(хэтэрсэн — F-359)</span>
+                Хаагдах төлөвлөгөө: {opp.expected_close_on ? fmtDate(opp.expected_close_on) : "—"}
+                {isOpen && opp.expected_close_on && opp.expected_close_on < today ? (
+                  <span className="ml-1 font-medium text-rose-600">(хэтэрсэн)</span>
                 ) : null}
               </p>
               {isOpen ? (
-                <Button variant="ghost" size="sm" className="mt-1" onClick={() => setEditOpen(true)}>
+                <Button variant="ghost" size="sm" className="mt-1" onClick={openEdit}>
                   <Pencil className="size-4" /> Засах
                 </Button>
               ) : null}
             </div>
           </div>
 
-          {/* Шатны stepper */}
-          <div className="mt-4 flex items-center gap-1 overflow-x-auto pb-1">
+          {/* Шатны зам */}
+          <div className="mt-4 flex items-center gap-1 overflow-x-auto pb-1" role="list" aria-label="Шатууд">
             {linearStages.map((s, i) => {
               const isCurrent = s.id === opp.stage_id;
               const done = currentIdx >= 0 && i < currentIdx;
               return (
-                <div key={s.id} className="flex shrink-0 items-center gap-1">
+                <div key={s.id} className="flex shrink-0 items-center gap-1" role="listitem">
                   {i > 0 ? <ChevronRight className="size-3.5 text-subtle" /> : null}
                   <span
                     className={cn(
@@ -347,7 +601,8 @@ export function OpportunityDetailShell({
                           ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                           : "border-line bg-surface text-muted"
                     )}
-                    title={`${s.probability}%${s.gate_code ? ` · гейт ${s.gate_code.toUpperCase()}` : ""}`}
+                    title={`Магадлал ${s.probability}%`}
+                    aria-current={isCurrent ? "step" : undefined}
                   >
                     {s.name}
                   </span>
@@ -356,34 +611,52 @@ export function OpportunityDetailShell({
             })}
             {opp.state === "lost" ? (
               <span className="ml-1 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700">
-                Алдсан{opp.lost_reason_label ? `: ${opp.lost_reason_label}` : ""}
+                Амжилтгүй хаагдсан{opp.lost_reason_label ? `: ${opp.lost_reason_label}` : ""}
               </span>
             ) : null}
           </div>
 
           {currentStage ? (
-            <p className="mt-2 text-xs text-muted">
-              Одоогийн шатанд {daysSince(opp.stage_entered_at)} хоног ({fmtDateTime(opp.stage_entered_at)}-с хойш).
-            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
+              <span>
+                Одоогийн шатанд {daysSince(opp.stage_entered_at)} хоног ({fmtDateTime(opp.stage_entered_at)}-с хойш)
+              </span>
+              {health.stale ? <Badge tone="amber">Шатанд удсан ({health.staleLimit}+ хоног)</Badge> : null}
+              {currentStage.guidance ? (
+                <button
+                  type="button"
+                  onClick={() => setGuidanceOpen((v) => !v)}
+                  className="inline-flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-brand-700 hover:bg-brand-50"
+                  aria-expanded={guidanceOpen}
+                >
+                  <Lightbulb className="size-3.5" /> Энэ шатанд юу хийх вэ
+                  <ChevronDown className={cn("size-3.5 transition", guidanceOpen && "rotate-180")} />
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {guidanceOpen && currentStage?.guidance ? (
+            <p className="mt-2 rounded-xl border border-brand-100 bg-brand-50 p-3 text-sm text-ink">{currentStage.guidance}</p>
           ) : null}
 
-          {/* Шилжилтийн товчнууд + үйлдлүүд */}
+          {/* Шилжилтийн товчнууд */}
           {isOpen ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {opp.transitions
                 .filter((t) => t.allowed_roles.some((r) => roles.includes(r)))
+                .filter((t) => t.terminal_state !== "lost")
                 .map((t) => (
                   <Button
                     key={t.to_stage_id}
                     size="sm"
-                    variant={t.kind === "forward" ? (t.terminal_state === "lost" ? "danger" : "primary") : "outline"}
+                    variant={t.kind === "forward" ? "primary" : "outline"}
                     disabled={pending}
                     onClick={() => initiate(t)}
                     title={
                       t.kind === "backward"
-                        ? "Буцаах шилжилт — шалтгаантай (F-355)"
+                        ? "Буцаах шилжилт — шалтгаантай"
                         : t.kind === "skip"
-                          ? "Алгасалт — зөвхөн Борлуулалтын захирал"
+                          ? "Алгасалт — зөвхөн Борлуулалт хариуцсан захирал"
                           : undefined
                     }
                   >
@@ -395,10 +668,19 @@ export function OpportunityDetailShell({
                     ) : null}
                   </Button>
                 ))}
-              <span className="mx-1 h-5 w-px bg-line" aria-hidden />
-              <Button size="sm" variant="outline" disabled={pending} onClick={() => setOfferOpen(true)}>
-                <HandCoins className="size-4" /> Санал бүртгэх
-              </Button>
+              {nextIsClosing ? (
+                opp.transaction ? (
+                  <Link
+                    href={`${basePath}/transactions/${opp.transaction.id}`}
+                    className="text-xs font-medium text-brand-700 hover:underline"
+                  >
+                    Хэлцлийн хавтас хаагдахад боломж автоматаар амжилттай хаагдана →
+                  </Link>
+                ) : (
+                  <span className="text-xs text-muted">Амжилттай хаагдах нь хэлцлийн хавтас хаагдахад автоматаар.</span>
+                )
+              ) : null}
+              <span className="mx-1 hidden h-5 w-px bg-line sm:block" aria-hidden />
               <Button size="sm" variant="outline" disabled={pending} onClick={() => setTransferOpen(true)}>
                 <ArrowLeftRight className="size-4" /> Урсгал шилжүүлэх
               </Button>
@@ -408,7 +690,7 @@ export function OpportunityDetailShell({
                 </Button>
               ) : null}
               <Button size="sm" variant="ghost" disabled={pending} onClick={() => setLostOpen(true)}>
-                <XCircle className="size-4" /> Алдсанаар хаах
+                <XCircle className="size-4" /> Амжилтгүй хаах
               </Button>
             </div>
           ) : null}
@@ -417,46 +699,197 @@ export function OpportunityDetailShell({
         </CardBody>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="space-y-4">
-          {/* Гейт checklist (дараагийн урагш шилжилт) */}
-          {isOpen && gatedPreview ? (
-            <GateChecklist gateCode={gatedPreview.gateCode} items={gatedPreview.items} />
+          {/* Дараагийн үйлдэл */}
+          {isOpen ? (
+            <Card>
+              <CardBody className="flex flex-wrap items-center gap-3">
+                <CalendarClock
+                  className={cn(
+                    "size-5 shrink-0",
+                    health.nextStepOverdueDays > 0 || health.nextStepMissing ? "text-rose-600" : "text-brand-600"
+                  )}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-muted">Дараагийн үйлдэл</p>
+                  {opp.next_step ? (
+                    <p className="text-sm font-medium text-ink">
+                      {opp.next_step}
+                      {opp.next_step_date ? <span className="text-muted"> · {fmtDate(opp.next_step_date)}</span> : null}
+                      {health.nextStepOverdueDays > 0 ? (
+                        <span className="ml-1 text-rose-600">({health.nextStepOverdueDays} хоног хэтэрсэн)</span>
+                      ) : null}
+                    </p>
+                  ) : (
+                    <p className="text-sm font-medium text-rose-600">Товлогдоогүй</p>
+                  )}
+                </div>
+                <Button size="sm" variant="outline" onClick={() => setNextOpen(true)}>
+                  Товлох
+                </Button>
+              </CardBody>
+            </Card>
           ) : null}
 
-          {/* Санал / хэлэлцээр */}
+          {/* Дараагийн шатны шилжих шалгуур + шууд үйлдэл */}
+          {isOpen && gatedPreview ? (
+            <div className="space-y-2">
+              <GateChecklist gateCode={gatedPreview.gateCode} items={gatedPreview.items} />
+              {missingItems.length > 0 ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+                  <p className="mb-2 text-xs font-medium text-amber-800">
+                    «{gatedPreview.stageName}» шат руу шилжихийн тулд:
+                  </p>
+                  <ul className="space-y-1.5">
+                    {missingItems.map((m) => {
+                      const a = actionFor(m.label);
+                      const hint = MISSING_HINT[kindOfLabel(m.label) ?? ("" as GateCheckerKind)];
+                      return (
+                        <li key={m.label} className="flex flex-wrap items-center gap-2 text-sm">
+                          <span className="min-w-0 flex-1 text-ink">{m.label}</span>
+                          {a?.href ? (
+                            <ButtonLink href={a.href} size="sm" variant="outline">
+                              {a.text}
+                            </ButtonLink>
+                          ) : a?.run ? (
+                            <Button size="sm" variant="outline" onClick={a.run}>
+                              {a.text}
+                            </Button>
+                          ) : null}
+                          {hint ? <span className="w-full text-xs text-muted">{hint}</span> : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* Листинг: уулзалт, үнийн дүн шинжилгээ */}
+          {isListing ? (
+            <Card>
+              <CardBody className="space-y-3">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
+                  <Ruler className="size-4 text-brand-600" /> Уулзалт, үнэлгээ
+                </h3>
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="text-muted">Өмчлөгчтэй уулзалт:</span>
+                  {opp.meeting_at ? (
+                    <span className="font-medium text-ink">
+                      {fmtDateTime(opp.meeting_at)}
+                      {opp.meeting_place ? ` · ${opp.meeting_place}` : ""}
+                    </span>
+                  ) : (
+                    <span className="text-amber-700">товлогдоогүй</span>
+                  )}
+                  {isOpen ? (
+                    <Button size="sm" variant="ghost" onClick={() => setMeetingOpen(true)}>
+                      {opp.meeting_at ? "Өөрчлөх" : "Товлох"}
+                    </Button>
+                  ) : null}
+                </div>
+                {opp.priceAnalyses.length === 0 ? (
+                  <EmptyState
+                    compact
+                    icon={Ruler}
+                    title="Үнийн дүн шинжилгээ хийгдээгүй"
+                    description={`Зах зээлийн ${dealFlow.priceAnalysisMinComparables}+ жишигтэй харьцуулж санал болгох үнээ бүртгэнэ.`}
+                    action={isOpen ? { label: "Дүн шинжилгээ бүртгэх", onClick: () => setAnalysisOpen(true) } : undefined}
+                  />
+                ) : (
+                  <ul className="space-y-2">
+                    {opp.priceAnalyses.map((a) => (
+                      <li key={a.id} className="rounded-xl border border-line p-3 text-sm">
+                        <p className="font-semibold text-ink">
+                          Санал болгох үнэ: {fmtMNT(a.recommended_price)}
+                          {a.price_min && a.price_max ? (
+                            <span className="font-normal text-muted">
+                              {" "}
+                              ({fmtMNT(a.price_min)} – {fmtMNT(a.price_max)})
+                            </span>
+                          ) : null}
+                        </p>
+                        <p className="text-xs text-muted">
+                          {a.comparables.length} жишиг
+                          {avgPricePerM2(a.comparables) ? ` · м² дундаж ${fmtMNT(avgPricePerM2(a.comparables)!)}` : ""} ·{" "}
+                          {fmtDateTime(a.created_at)} · {a.created_by_name ?? "—"}
+                        </p>
+                        {a.note ? <p className="mt-1 text-xs text-ink">{a.note}</p> : null}
+                      </li>
+                    ))}
+                    {isOpen ? (
+                      <Button size="sm" variant="ghost" onClick={() => setAnalysisOpen(true)}>
+                        Шинэ дүн шинжилгээ
+                      </Button>
+                    ) : null}
+                  </ul>
+                )}
+              </CardBody>
+            </Card>
+          ) : null}
+
+          <ShowingPanel
+            id="opp-showings"
+            opportunityId={opp.id}
+            contactId={opp.contact.id}
+            contactName={opp.contact.display_name}
+            listing={isListing}
+            property={opp.property ? { id: opp.property.id, name: opp.property.name, number: opp.property.number } : null}
+            showings={opp.showings}
+            matchOptions={opp.matchOptions}
+            isOpen={isOpen}
+            feedbackHours={feedbackHours}
+            basePath={basePath}
+          />
+
+          <OfferPanel
+            id="opp-offers"
+            opportunityId={opp.id}
+            listing={isListing}
+            offers={opp.offers}
+            askingPrice={askingPrice}
+            cfg={dealFlow}
+            roles={roles}
+            isOpen={isOpen}
+            openFormSignal={offerSignal}
+          />
+
+          {/* Хэлцлийн хавтас */}
           <Card>
             <CardBody>
               <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
-                <HandCoins className="size-4 text-brand-600" /> Санал, хэлэлцээр ({opp.offers.length})
+                <ClipboardList className="size-4 text-brand-600" /> Хэлцлийн хавтас
               </h3>
-              {opp.offers.length === 0 ? (
-                <p className="text-sm text-muted">Санал бүртгэгдээгүй — G2 гейт саналын бүртгэл шаардана.</p>
+              {opp.transaction ? (
+                <Link
+                  href={`${basePath}/transactions/${opp.transaction.id}`}
+                  className="flex flex-wrap items-center gap-2 rounded-xl border border-line p-3 hover:bg-surface-2"
+                >
+                  <span className="font-semibold text-ink">{opp.transaction.number}</span>
+                  <Badge tone={TXN_STATUS_LABEL[opp.transaction.status as TxnStatus]?.tone ?? "neutral"}>
+                    {TXN_STATUS_LABEL[opp.transaction.status as TxnStatus]?.label ?? ""}
+                  </Badge>
+                  <span className="text-xs text-muted">
+                    Баримтын бүрдэл {Math.round(Number(opp.transaction.file_completeness_pct))}%
+                  </span>
+                  <ChevronRight className="ml-auto size-4 text-subtle" />
+                </Link>
               ) : (
-                <div className="space-y-2">
-                  {opp.offers.map((o) => (
-                    <div key={o.id} className="rounded-xl border border-line p-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge tone={o.direction === "offer" ? "blue" : "amber"}>
-                          {o.direction === "offer" ? "Санал" : "Сөрөг санал"}
-                        </Badge>
-                        <span className="text-sm font-semibold text-ink">{fmtMNT(o.amount)}</span>
-                        {o.valid_until ? (
-                          <span className="text-xs text-muted">Хүчинтэй: {fmtDate(o.valid_until)}</span>
-                        ) : null}
-                        <span className="ml-auto text-xs text-subtle">
-                          Дамжуулсан: {o.relayed_at ? fmtDateTime(o.relayed_at) : "—"}
-                        </span>
-                      </div>
-                      <div className="mt-1.5 space-y-0.5 text-xs text-muted">
-                        {o.position ? <p>Байр суурь: {o.position}</p> : null}
-                        {o.obstacle ? <p>Саад: {o.obstacle}</p> : null}
-                        {o.next_step ? <p>Дараагийн алхам: {o.next_step}</p> : null}
-                        {o.created_by_name ? <p className="text-subtle">Бүртгэсэн: {o.created_by_name}</p> : null}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <EmptyState
+                  compact
+                  icon={ClipboardList}
+                  title="Хэлцлийн хавтас нээгдээгүй"
+                  description="Нөхцөл тохирмогц хавтас нээж оролцогч, гэрээ, төлбөр, хүлээлцэхийг бүрдүүлнэ. Гэрээ шатанд орохын өмнө баримтын бүрдэл шаардлагатай."
+                  action={
+                    isOpen && opp.property
+                      ? { label: "Хэлцлийн хавтас нээх", onClick: () => setTxnOpen(true) }
+                      : isOpen
+                        ? { label: "Эхлээд үл хөдлөх холбох", onClick: openEdit }
+                        : undefined
+                  }
+                />
               )}
             </CardBody>
           </Card>
@@ -465,7 +898,7 @@ export function OpportunityDetailShell({
           <Card>
             <CardBody>
               <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
-                <History className="size-4 text-brand-600" /> Шатны түүх (F-357)
+                <History className="size-4 text-brand-600" /> Шатны түүх
               </h3>
               <div className="space-y-2">
                 {opp.history.map((h) => (
@@ -486,7 +919,7 @@ export function OpportunityDetailShell({
         </div>
 
         {/* Үйл ажиллагаа */}
-        <div className="space-y-4">
+        <div className="space-y-4" id="opp-activity">
           {isOpen ? (
             <ActivityComposer
               contactId={opp.contact.id}
@@ -500,6 +933,22 @@ export function OpportunityDetailShell({
           <ActivityTimeline rows={activities} currentProfileId={currentProfileId} />
         </div>
       </div>
+
+      {/* Утсан дээр: доод хурдан үйлдэл */}
+      {isOpen && nextForward ? (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 px-4 py-2 backdrop-blur sm:hidden"
+          style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
+          <div className="flex items-center gap-2">
+            <Button size="md" variant="outline" className="flex-1" onClick={() => setNextOpen(true)}>
+              Дараагийн үйлдэл
+            </Button>
+            <Button size="md" className="flex-1" disabled={pending} onClick={() => initiate(nextForward)}>
+              {nextForward.to_stage_name}
+              {nextForward.gate_missing.length ? ` (${nextForward.gate_missing.length})` : ""}
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       <GateErrorDialog
         open={gateError !== null}
@@ -524,16 +973,16 @@ export function OpportunityDetailShell({
           </>
         }
       >
-        <Field label="Шалтгаан" htmlFor="opp-move-reason" hint="Аудит логт бүртгэгдэнэ (F-355)">
+        <Field label="Шалтгаан" htmlFor="opp-move-reason" hint="Аудитын бүртгэлд хадгалагдана">
           <Input id="opp-move-reason" value={reason} onChange={(e) => setReason(e.target.value)} />
         </Field>
       </Modal>
 
-      {/* Алдсанаар хаах */}
+      {/* Амжилтгүй хаах */}
       <Modal
         open={lostOpen}
         onClose={() => setLostOpen(false)}
-        title="Алдсанаар хаах — шалтгаан заавал (F-356)"
+        title="Амжилтгүй хаах — шалтгаан заавал"
         footer={
           <>
             <Button variant="outline" onClick={() => setLostOpen(false)}>
@@ -544,13 +993,13 @@ export function OpportunityDetailShell({
               disabled={pending || !lostReasonId || Boolean(selectedLostReason?.requires_note && !lostNote.trim())}
               onClick={submitLost}
             >
-              Алдсанаар хаах
+              Амжилтгүй хаах
             </Button>
           </>
         }
       >
         <div className="space-y-3">
-          <Field label="Алдсан шалтгаан" htmlFor="opp-lost-reason">
+          <Field label="Шалтгааны ангилал" htmlFor="opp-lost-reason">
             <Select id="opp-lost-reason" value={lostReasonId} onChange={(e) => setLostReasonId(e.target.value)}>
               <option value="">— Сонгоно уу —</option>
               {lostReasons.map((r) => (
@@ -566,7 +1015,7 @@ export function OpportunityDetailShell({
         </div>
       </Modal>
 
-      {/* Дүн/огноо засах */}
+      {/* Засах */}
       <Modal
         open={editOpen}
         onClose={() => setEditOpen(false)}
@@ -583,91 +1032,264 @@ export function OpportunityDetailShell({
         }
       >
         <div className="space-y-3">
-          <Field label="Дүн (₮)" htmlFor="opp-amount">
-            <Input
-              id="opp-amount"
-              type="number"
-              min="0"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-            />
+          <div>
+            <p className="mb-1.5 text-sm font-medium text-ink">Үл хөдлөх</p>
+            {editProperty ? (
+              <div className="flex items-center justify-between rounded-xl border border-line bg-surface-2 px-3 py-2 text-sm">
+                <span className="truncate font-medium text-ink">{editProperty.label}</span>
+                <button
+                  type="button"
+                  onClick={() => setEditProperty(null)}
+                  className="rounded-lg p-1 text-muted hover:text-ink"
+                  aria-label="Үл хөдлөхийг арилгах"
+                  disabled={Boolean(opp.transaction)}
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
+                  <Input
+                    className="pl-9"
+                    value={propertyQ}
+                    onChange={(e) => onPropertyQuery(e.target.value)}
+                    placeholder="Листингийн дугаар эсвэл нэрээр…"
+                    aria-label="Үл хөдлөх хайх"
+                  />
+                </div>
+                {!isListing && opp.matchOptions.length > 0 && !propertyQ ? (
+                  <ul className="mt-1 max-h-40 overflow-y-auto rounded-xl border border-line bg-surface">
+                    {opp.matchOptions.map((m) => (
+                      <li key={m.property_id}>
+                        <button
+                          type="button"
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-surface-2"
+                          onClick={() => setEditProperty({ id: m.property_id, label: `${m.property_name} ${m.property_number}` })}
+                        >
+                          {m.property_name} <span className="font-mono text-xs text-subtle">{m.property_number}</span>{" "}
+                          <span className="text-xs text-muted">· тохирол {Math.round(m.score)}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {propertyResults.length > 0 ? (
+                  <ul className="mt-1 max-h-40 overflow-y-auto rounded-xl border border-line bg-surface">
+                    {propertyResults.map((p) => (
+                      <li key={p.id}>
+                        <button
+                          type="button"
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-surface-2"
+                          onClick={() => {
+                            setEditProperty({ id: p.id, label: `${p.name} ${p.number}` });
+                            setPropertyResults([]);
+                            setPropertyQ("");
+                          }}
+                        >
+                          <span className="font-mono text-xs text-subtle">{p.number}</span> {p.name}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </>
+            )}
+          </div>
+          {!isListing ? (
+            <Field label="Хэрэгцээний профайл" htmlFor="opp-edit-profile">
+              <Select id="opp-edit-profile" value={needProfileId} onChange={(e) => setNeedProfileId(e.target.value)}>
+                <option value="">— Харилцагчийн идэвхтэй профайл —</option>
+                {(profiles ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.budget_max ? `${fmtMNT(p.budget_max)} хүртэл` : "Профайл"}
+                    {p.completeness_pct != null ? ` · бүрэн ${Math.round(p.completeness_pct)}%` : ""}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : null}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Хэлцлийн дүн (₮)" htmlFor="opp-amount">
+              <Input
+                id="opp-amount"
+                type="number"
+                inputMode="numeric"
+                min="0"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+            </Field>
+            <Field label="Хүлээгдэж буй цэвэр хөлс (₮)" htmlFor="opp-fee">
+              <Input id="opp-fee" type="number" inputMode="numeric" min="0" value={fee} onChange={(e) => setFee(e.target.value)} />
+            </Field>
+          </div>
+          <Field label="Хаагдах төлөвлөсөн огноо" htmlFor="opp-close-on">
+            <Input id="opp-close-on" type="date" value={expectedCloseOn} onChange={(e) => setExpectedCloseOn(e.target.value)} />
           </Field>
-          <Field label="Хаагдах төлөв огноо (F-359)" htmlFor="opp-close-on">
-            <Input
-              id="opp-close-on"
-              type="date"
-              value={expectedCloseOn}
-              onChange={(e) => setExpectedCloseOn(e.target.value)}
-            />
-          </Field>
+          {error ? <p className="text-sm text-danger">{error}</p> : null}
         </div>
       </Modal>
 
-      {/* Санал бүртгэх */}
+      {/* Дараагийн үйлдэл */}
       <Modal
-        open={offerOpen}
-        onClose={() => setOfferOpen(false)}
-        title="Санал / сөрөг санал бүртгэх (P-02)"
+        open={nextOpen}
+        onClose={() => setNextOpen(false)}
+        title="Дараагийн үйлдэл"
         footer={
           <>
-            <Button variant="outline" onClick={() => setOfferOpen(false)}>
+            <Button variant="outline" onClick={() => setNextOpen(false)}>
               Болих
             </Button>
-            <Button disabled={pending} onClick={submitOffer}>
+            <Button disabled={pending || nextStep.trim().length < 2 || !nextStepDate} onClick={submitNextStep}>
+              Хадгалах
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <Field label="Юу хийх" htmlFor="opp-next-step">
+            <Input id="opp-next-step" value={nextStep} onChange={(e) => setNextStep(e.target.value)} />
+          </Field>
+          <Field label="Огноо" htmlFor="opp-next-date">
+            <Input id="opp-next-date" type="date" min={today} value={nextStepDate} onChange={(e) => setNextStepDate(e.target.value)} />
+          </Field>
+          {error ? <p className="text-sm text-danger">{error}</p> : null}
+        </div>
+      </Modal>
+
+      {/* Уулзалт */}
+      <Modal
+        open={meetingOpen}
+        onClose={() => setMeetingOpen(false)}
+        title="Өмчлөгчтэй уулзалт товлох"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setMeetingOpen(false)}>
+              Болих
+            </Button>
+            <Button disabled={pending || !meetingAt || meetingPlace.trim().length < 2} onClick={submitMeeting}>
+              Товлох
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <Field label="Огноо, цаг" htmlFor="opp-meeting-at">
+            <Input id="opp-meeting-at" type="datetime-local" value={meetingAt} onChange={(e) => setMeetingAt(e.target.value)} />
+          </Field>
+          <Field label="Газар" htmlFor="opp-meeting-place" hint="Оффис эсвэл үл хөдлөх дээр нь">
+            <Input id="opp-meeting-place" value={meetingPlace} onChange={(e) => setMeetingPlace(e.target.value)} />
+          </Field>
+          {error ? <p className="text-sm text-danger">{error}</p> : null}
+        </div>
+      </Modal>
+
+      {/* Үнийн дүн шинжилгээ */}
+      <Modal
+        open={analysisOpen}
+        onClose={() => setAnalysisOpen(false)}
+        title="Зах зээлийн харьцуулалт, үнийн дүн шинжилгээ"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setAnalysisOpen(false)}>
+              Болих
+            </Button>
+            <Button disabled={pending} onClick={submitAnalysis}>
               Бүртгэх
             </Button>
           </>
         }
       >
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Чиглэл" htmlFor="offer-dir">
-              <Select
-                id="offer-dir"
-                value={offerDirection}
-                onChange={(e) => setOfferDirection(e.target.value as "offer" | "counter")}
-              >
-                <option value="offer">Санал</option>
-                <option value="counter">Сөрөг санал</option>
-              </Select>
-            </Field>
-            <Field label="Дүн (₮)" htmlFor="offer-amount">
+          <p className="text-xs text-muted">Дор хаяж {dealFlow.priceAnalysisMinComparables} жишиг объект.</p>
+          {comps.map((c, i) => (
+            <div key={i} className="grid grid-cols-[1fr_7rem_5rem] gap-2">
               <Input
-                id="offer-amount"
+                aria-label={`Жишиг ${i + 1} хаяг`}
+                placeholder="Хаяг, хотхон"
+                value={c.address}
+                onChange={(e) => setComps((arr) => arr.map((x, j) => (j === i ? { ...x, address: e.target.value } : x)))}
+              />
+              <Input
+                aria-label={`Жишиг ${i + 1} үнэ`}
+                placeholder="Үнэ"
                 type="number"
-                min="0"
-                value={offerAmount}
-                onChange={(e) => setOfferAmount(e.target.value)}
+                inputMode="numeric"
+                value={c.price || ""}
+                onChange={(e) =>
+                  setComps((arr) => arr.map((x, j) => (j === i ? { ...x, price: Number(e.target.value) || 0 } : x)))
+                }
               />
-            </Field>
-          </div>
-          <Field label="Нөхцөл" htmlFor="offer-terms" hint="Төлбөрийн нөхцөл, санхүүжилт, багтах/үл багтах зүйлс">
-            <Input id="offer-terms" value={offerTerms} onChange={(e) => setOfferTerms(e.target.value)} />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Хүчинтэй хугацаа" htmlFor="offer-valid">
               <Input
-                id="offer-valid"
-                type="date"
-                value={offerValidUntil}
-                onChange={(e) => setOfferValidUntil(e.target.value)}
+                aria-label={`Жишиг ${i + 1} талбай`}
+                placeholder="м²"
+                type="number"
+                inputMode="decimal"
+                value={c.area_m2 ?? ""}
+                onChange={(e) =>
+                  setComps((arr) =>
+                    arr.map((x, j) => (j === i ? { ...x, area_m2: e.target.value ? Number(e.target.value) : null } : x))
+                  )
+                }
               />
+            </div>
+          ))}
+          <Button size="sm" variant="ghost" onClick={() => setComps((arr) => [...arr, blankComp()])}>
+            + Жишиг нэмэх
+          </Button>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Field label="Доод (₮)" htmlFor="pa-min">
+              <Input id="pa-min" type="number" inputMode="numeric" value={priceMin} onChange={(e) => setPriceMin(e.target.value)} />
             </Field>
-            <Field label="Дараагийн алхам" htmlFor="offer-next">
-              <Input id="offer-next" value={offerNextStep} onChange={(e) => setOfferNextStep(e.target.value)} />
+            <Field label="Санал болгох (₮)" htmlFor="pa-rec">
+              <Input id="pa-rec" type="number" inputMode="numeric" value={recommended} onChange={(e) => setRecommended(e.target.value)} />
+            </Field>
+            <Field label="Дээд (₮)" htmlFor="pa-max">
+              <Input id="pa-max" type="number" inputMode="numeric" value={priceMax} onChange={(e) => setPriceMax(e.target.value)} />
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Сүүлийн байр суурь" htmlFor="offer-pos">
-              <Input id="offer-pos" value={offerPosition} onChange={(e) => setOfferPosition(e.target.value)} />
-            </Field>
-            <Field label="Саад" htmlFor="offer-obs">
-              <Input id="offer-obs" value={offerObstacle} onChange={(e) => setOfferObstacle(e.target.value)} />
-            </Field>
-          </div>
-          <p className="text-xs text-muted">
-            Дамжуулсан огноог систем автоматаар хадгална; бүртгэгдмэгц эргэн холбогдох даалгавар үүснэ (Д-06).
+          <Field label="Тайлбар" htmlFor="pa-note">
+            <Input id="pa-note" value={analysisNote} onChange={(e) => setAnalysisNote(e.target.value)} />
+          </Field>
+          {error ? <p className="text-sm text-danger">{error}</p> : null}
+        </div>
+      </Modal>
+
+      {/* Хэлцлийн хавтас нээх */}
+      <Modal
+        open={txnOpen}
+        onClose={() => setTxnOpen(false)}
+        title="Хэлцлийн хавтас нээх"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setTxnOpen(false)}>
+              Болих
+            </Button>
+            <Button disabled={pending} onClick={submitTxn}>
+              Нээх
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-muted">
+            Үл хөдлөх: <span className="font-medium text-ink">{opp.property ? `${opp.property.name} ${opp.property.number}` : "—"}</span>
           </p>
+          <Field label="Хэлцлийн төрөл" htmlFor="txn-type">
+            <Select id="txn-type" value={txnType} onChange={(e) => setTxnType(e.target.value as TxnType)}>
+              {TXN_TYPES.filter((t) => t !== "replacement").map((t) => (
+                <option key={t} value={t}>
+                  {TXN_TYPE_LABEL[t]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Хэлцлийн дүн (₮)" htmlFor="txn-amount">
+            <Input id="txn-amount" type="number" inputMode="numeric" min="0" value={txnAmount} onChange={(e) => setTxnAmount(e.target.value)} />
+          </Field>
+          {error ? <p className="text-sm text-danger">{error}</p> : null}
         </div>
       </Modal>
 
@@ -675,7 +1297,7 @@ export function OpportunityDetailShell({
       <Modal
         open={transferOpen}
         onClose={() => setTransferOpen(false)}
-        title="Урсгал хооронд шилжүүлэх (F-361)"
+        title="Урсгал хооронд шилжүүлэх"
         footer={
           <>
             <Button variant="outline" onClick={() => setTransferOpen(false)}>
@@ -691,19 +1313,15 @@ export function OpportunityDetailShell({
           <Field label="Зорилтот урсгал" htmlFor="transfer-code">
             <Select id="transfer-code" value={transferCode} onChange={(e) => setTransferCode(e.target.value)}>
               <option value="">— Сонгоно уу —</option>
-              {PL_CODES.filter((c) => c !== opp.pipeline.code).map((c) => (
+              {PL_CODES.filter((c) => c !== opp.pipeline.code && c !== "PL-6").map((c) => (
                 <option key={c} value={c}>
-                  {c} · {PL_LABEL[c]}
+                  {PL_LABEL[c]}
                 </option>
               ))}
             </Select>
           </Field>
-          <Field label="Шалтгаан (заавал)" htmlFor="transfer-reason" hint="Түүх хадгалагдаж, шинэ урсгалын эхний тохирох шатанд орно">
-            <Input
-              id="transfer-reason"
-              value={transferReason}
-              onChange={(e) => setTransferReason(e.target.value)}
-            />
+          <Field label="Шалтгаан (заавал)" htmlFor="transfer-reason" hint="Түүх хадгалагдаж, шинэ урсгалын тохирох шатанд орно">
+            <Input id="transfer-reason" value={transferReason} onChange={(e) => setTransferReason(e.target.value)} />
           </Field>
         </div>
       </Modal>
@@ -738,11 +1356,7 @@ export function OpportunityDetailShell({
             </Select>
           </Field>
           <Field label="Шалтгаан" htmlFor="reassign-reason">
-            <Select
-              id="reassign-reason"
-              value={reassignReason}
-              onChange={(e) => setReassignReason(e.target.value)}
-            >
+            <Select id="reassign-reason" value={reassignReason} onChange={(e) => setReassignReason(e.target.value)}>
               {REASSIGN_REASONS.map((r) => (
                 <option key={r.code} value={r.code}>
                   {r.label}

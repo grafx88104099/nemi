@@ -56,11 +56,11 @@ export function OwnerStatementsShell({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-ink">Өмчлөгчийн тайлан</h1>
-          <p className="text-sm text-muted">Орлого − зардал − менежментийн хөлс = цэвэр олголт (F-561); «Хугацаандаа тайлагнасан %» KPI зорилт 95% (F-564).</p>
+          <p className="text-sm text-muted">Орлого − зардал − менежментийн хөлс = цэвэр олголт; «Хугацаандаа тайлагнасан %» KPI зорилт 95%.</p>
         </div>
         {canWrite && (
           <Button size="sm" onClick={() => setBuildOpen(true)}>
-            <Plus className="size-4" /> Тайлан угсрах (F-560)
+            <Plus className="size-4" /> Тайлан угсрах
           </Button>
         )}
       </div>
@@ -108,7 +108,7 @@ export function OwnerStatementsShell({
                     <Link
                       href={`/office/crm/rentals/statements/${s.id}/print`}
                       className="rounded-lg p-1.5 text-muted hover:bg-surface-2 hover:text-ink"
-                      title="Хэвлэх / PDF (F-562)"
+                      title="Хэвлэх / PDF"
                     >
                       <Printer className="size-4" />
                     </Link>
@@ -129,7 +129,7 @@ export function OwnerStatementsShell({
             {rows.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-4 py-10 text-center text-muted">
-                  Тайлан алга — сар бүр Д-22 даалгавраар ҮХХ баг угсарна (F-563).
+                  Тайлан алга — сар бүр автомат даалгавраар ҮХХ баг угсарна.
                 </td>
               </tr>
             )}
@@ -140,7 +140,7 @@ export function OwnerStatementsShell({
       <Modal
         open={buildOpen}
         onClose={() => setBuildOpen(false)}
-        title="Өмчлөгчийн тайлан угсрах (F-560)"
+        title="Өмчлөгчийн тайлан угсрах"
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setBuildOpen(false)}>
@@ -182,9 +182,9 @@ export function OwnerStatementsShell({
             </Field>
           </div>
           <p className="text-xs text-muted">
-            Тайлант үеийн орлого (орлогын бүртгэл F-526б), өмчлөгчийн хариуцсан засварын зардал, менежментийн
+            Тайлант үеийн орлого (орлогын бүртгэл), өмчлөгчийн хариуцсан засварын зардал, менежментийн
             хөлсний нэхэмжлэхүүдээс автомат угсарна; PMC-ээр дамжаагүй төлбөр хяналтын бүртгэлээс мэдээллийн
-            чанартай орно (F-561).
+            чанартай орно.
           </p>
           {error && <p className="text-sm text-danger">{error}</p>}
         </div>

@@ -21,7 +21,7 @@ export default async function ContactMergePage({ searchParams }: { searchParams:
       <div className="p-8">
         <h1 className="text-2xl font-extrabold text-ink">Бүртгэл нэгтгэх</h1>
         <p className="mt-2 text-sm text-muted">
-          Харилцагчийн жагсаалтаас яг 2 бүртгэл сонгоод «Нэгтгэх» товчийг дарна уу (F-108).
+          Харилцагчийн жагсаалтаас яг 2 бүртгэл сонгоод «Нэгтгэх» товчийг дарна уу.
         </p>
         <Link href="/office/crm/contacts" className="mt-3 inline-block text-sm font-semibold text-brand-700 hover:underline">
           Харилцагчийн сан руу буцах

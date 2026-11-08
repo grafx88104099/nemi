@@ -5,6 +5,18 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendAgentInvite } from "@/lib/email/resend";
+import { getOffboardingBlockers } from "@/lib/queries-crm-ownership";
+import { offboardingBlockMessage } from "@/lib/validation/crm-ownership";
+
+/**
+ * CRM-ийн хүлээлцэх шалгалт (§6.28.11, §6.32): CRM-д нээлттэй эзэмшилтэй
+ * эсвэл батлагдсан хүлээлцэх актгүй ажилтны нэвтрэлтийг хаахгүй, бүрэн устгахгүй.
+ */
+async function crmOffboardingGuard(profileId: string, action: "disable" | "delete"): Promise<string | null> {
+  const b = await getOffboardingBlockers(profileId);
+  if ("error" in b) return b.error;
+  return offboardingBlockMessage(b, action);
+}
 
 /** Office_admin (эсвэл admin) эсэхийг шалгаж office_id буцаана. */
 async function requireOffice() {
@@ -110,6 +122,10 @@ export async function setAgentLoginEnabled(agentId: string, enabled: boolean): P
   const ctx = await guard(agentId);
   if ("error" in ctx) return { ok: false, error: ctx.error };
   if (!ctx.agent.profile_id) return { ok: false, error: "no_account" };
+  if (!enabled) {
+    const blocked = await crmOffboardingGuard(ctx.agent.profile_id, "disable");
+    if (blocked) return { ok: false, error: blocked };
+  }
   const { error } = await ctx.admin.auth.admin.updateUserById(ctx.agent.profile_id, {
     ban_duration: enabled ? "none" : "876000h",
   });
@@ -143,6 +159,13 @@ export async function deleteAgentFully(
   } = await supabase.auth.getUser();
   if (user && agent.profile_id === user.id) {
     return { ok: false, error: "Та өөрийгөө устгаж болохгүй." };
+  }
+
+  // CRM-ийн бүртгэл, нотолгоо ON DELETE RESTRICT-ээр хамгаалагдсан тул хагас
+  // устгал үүсгэхгүйн тулд ЭХЛЭЭД шалгана (зар, agent мөр устахаас өмнө).
+  if (agent.profile_id) {
+    const blocked = await crmOffboardingGuard(agent.profile_id, "delete");
+    if (blocked) return { ok: false, error: blocked };
   }
 
   // Өөр админ бүртгэлийг устгахыг хориглох

@@ -1,5 +1,6 @@
 "use client";
 
+import { fmtDateNum } from "@/lib/format";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -87,7 +88,7 @@ export function ReferralPanel({
 
       {referrals.length === 0 ? (
         <p className="py-4 text-center text-sm text-muted">
-          Реферал бүртгэгдээгүй. Рефералын хөлс тусдаа бодлогоор — систем зөвхөн бүртгэл, холбоос хөтөлнө (F-753).
+          Реферал бүртгэгдээгүй. Рефералын хөлс тусдаа бодлогоор — систем зөвхөн бүртгэл, холбоос хөтөлнө.
         </p>
       ) : (
         <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
@@ -107,7 +108,7 @@ export function ReferralPanel({
               </span>
               {r.lead_status && <Badge tone="neutral">{r.lead_status}</Badge>}
               <span className="ml-auto text-xs text-subtle">
-                {new Date(r.created_at).toLocaleDateString("mn-MN")}
+                {fmtDateNum(r.created_at)}
               </span>
             </li>
           ))}

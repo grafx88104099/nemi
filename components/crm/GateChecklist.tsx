@@ -3,11 +3,12 @@
 import { CheckCircle2, CircleAlert, ShieldCheck } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/ui/empty-state";
 import { GATE_LABEL, type GateCode } from "@/lib/constants-crm";
 
 /**
- * Гейтийн checklist (F-354): дараагийн шатны босго шаардлага бүрийг
- * хангагдсан/дутуу төлөвтэй нь жагсаана. Эх үнэн — DB-ийн crm_check_gate;
+ * Шилжих шалгуурын жагсаалт (§6.13, §6.14): дараагийн шатанд орох шаардлага
+ * бүрийг хангагдсан/дутуу төлөвтэй нь харуулна. Эх үнэн — DB-ийн crm_check_gate;
  * items-ийг серверээс (gate_requirements + gate_missing) угсарч дамжуулна.
  */
 export function GateChecklist({
@@ -26,11 +27,16 @@ export function GateChecklist({
         <ShieldCheck className={cn("size-4", allOk ? "text-emerald-600" : "text-amber-600")} />
         {GATE_LABEL[gateCode]}
         <span className={cn("text-xs font-medium", allOk ? "text-emerald-700" : "text-amber-700")}>
-          {allOk ? "Нээлттэй" : "Дутуу шаардлагатай"}
+          {allOk ? "Хангагдсан" : "Дутуу шаардлагатай"}
         </span>
       </div>
       {items.length === 0 ? (
-        <p className="text-xs text-muted">Энэ гейтэд идэвхтэй шаардлага тохируулаагүй байна.</p>
+        <EmptyState
+          compact
+          icon={ShieldCheck}
+          title="Нэмэлт шаардлагагүй"
+          description="Энэ шатанд шилжихэд тохируулсан шалгуур одоогоор алга."
+        />
       ) : (
         <ul className="space-y-1.5">
           {items.map((it) => (

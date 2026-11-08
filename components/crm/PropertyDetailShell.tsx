@@ -3,7 +3,7 @@
 import { useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Globe, KeyRound, Pencil, Plus, UserRoundCog } from "lucide-react";
+import { FileBarChart, Globe, KeyRound, Pencil, Plus, QrCode, UserRoundCog } from "lucide-react";
 
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,15 @@ import { BackLink } from "@/components/ui/back-link";
 import { ActivationChecklist } from "@/components/crm/ActivationChecklist";
 import { EntityDocs } from "@/components/crm/EntityDocs";
 import { MatchList } from "@/components/crm/MatchList";
+import { ActivityComposer } from "@/components/crm/ActivityComposer";
+import { ActivityTimeline } from "@/components/crm/ActivityTimeline";
+import { toast } from "@/components/ui/toast";
+import {
+  PROPERTY_TAG_GROUPS,
+  PROPERTY_TAG_GROUP_LABEL,
+  normalizePropertyTags,
+  type PropertyTagGroup,
+} from "@/lib/crm/matching";
 import {
   assignPropertyRole,
   createListingAgreement,
@@ -31,7 +40,7 @@ import {
 import { fmtMNT, fmtDate, fmtDateTime } from "@/lib/format";
 import type { PropertyDetail } from "@/lib/queries-crm-properties";
 import type { MatchRow } from "@/lib/queries-crm-matching";
-import type { AgentOption } from "@/lib/queries-crm-leads";
+import type { AgentOption, ActivityTimelineRow } from "@/lib/queries-crm-leads";
 import type { DocRow } from "@/lib/queries-crm-docs";
 import {
   CRM_PROPERTY_ROLES,
@@ -49,11 +58,15 @@ import {
 } from "@/lib/constants-crm";
 
 /**
- * Объектын карт (F-201–219): статусын машин, идэвхжүүлэлтийн checklist,
- * 3 роль (эх сурвалж хамгаалалттай), листингийн гэрээ, үнийн түүх,
- * тохируулга (урвуу F-254), ашиглалт/сул хоног, тоолуур, түлхүүр.
- * UI-ийн шилжилтийн сонголт = тохиргооны seed-тэй ижил тойм; эцсийн үнэн DB guard.
+ * Үл хөдлөхийн карт: төлөвийн машин, идэвхжүүлэх нөхцөл, 3 роль (эх
+ * сурвалж хамгаалалттай), листингийн гэрээ, үнийн түүх, тохирох харилцагчид
+ * (§6.10 — ангиллаар бүлэглэсэн), шошго засах (§6.10.2), ашиглалт, тоолуур,
+ * түлхүүр. UI-ийн шилжилтийн сонголт = тохиргооны seed-тэй ижил тойм;
+ * эцсийн үнэн DB guard.
  */
+
+const splitList = (v: string) =>
+  [...new Set(v.split(",").map((x) => x.trim()).filter(Boolean))];
 
 const STATUS_NEXT: Record<CrmPropertyStatus, { to: CrmPropertyStatus; reason?: boolean }[]> = {
   draft: [],
@@ -72,6 +85,9 @@ export function PropertyDetailShell({
   roles,
   basePath,
   docs = [],
+  activities = [],
+  objections = [],
+  me = "",
 }: {
   property: PropertyDetail;
   matches: MatchRow[];
@@ -81,6 +97,10 @@ export function PropertyDetailShell({
   basePath: string;
   /** F-203/204: объектын баримт/зураг (category='photo' идэвхжүүлэлтэд тоологдоно). */
   docs?: DocRow[];
+  /** §6.11: үл хөдлөхтэй холбоотой үйл ажиллагаа (өмчлөгчтэй харилцсан түүх). */
+  activities?: ActivityTimelineRow[];
+  objections?: { id: string; label: string }[];
+  me?: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -113,6 +133,11 @@ export function PropertyDetailShell({
   const [keyOpen, setKeyOpen] = useState(false);
   const [keyLocation, setKeyLocation] = useState(property.key_location ?? "");
   const [keyHolder, setKeyHolder] = useState(property.key_holder_id ?? "");
+  const [tagsOpen, setTagsOpen] = useState(false);
+  const [tagDraft, setTagDraft] = useState<Record<PropertyTagGroup, string>>(
+    () => Object.fromEntries(PROPERTY_TAG_GROUPS.map((g) => [g, ""])) as Record<PropertyTagGroup, string>
+  );
+  const [featuresDraft, setFeaturesDraft] = useState("");
 
   const isRental = property.service_kind !== "sale";
   const canManage = ["sales_director", "property_manager", "team_lead", "agent"].some((r) => roles.includes(r as CrmRole));
@@ -142,12 +167,34 @@ export function PropertyDetailShell({
     .filter(Boolean)
     .join(", ");
 
-  const tags = (property.match_tags ?? {}) as Record<string, string[]>;
+  const tags = normalizePropertyTags(property.match_tags);
+
+  function openTags() {
+    setTagDraft(
+      Object.fromEntries(PROPERTY_TAG_GROUPS.map((g) => [g, tags[g].join(", ")])) as Record<PropertyTagGroup, string>
+    );
+    setFeaturesDraft(property.features.join(", "));
+    setTagsOpen(true);
+  }
+
+  function saveTags() {
+    const matchTags = Object.fromEntries(PROPERTY_TAG_GROUPS.map((g) => [g, splitList(tagDraft[g])])) as Record<
+      PropertyTagGroup,
+      string[]
+    >;
+    run(
+      () => updateProperty({ id: property.id, matchTags, features: splitList(featuresDraft) }),
+      () => {
+        setTagsOpen(false);
+        toast.success("Шошго хадгалагдлаа — тохирох харилцагчийг дахин тооцоолно.");
+      }
+    );
+  }
   const activeAgreement = property.agreements.find((a) => a.expires_on >= new Date().toISOString().slice(0, 10));
 
   return (
     <div className="space-y-4">
-      <BackLink href={`${basePath}/properties`} label="Объектын сан" />
+      <BackLink href={`${basePath}/properties`} label="Үл хөдлөхийн сан" />
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -189,6 +236,22 @@ export function PropertyDetailShell({
               <Globe className="size-4" /> {property.listing_id ? "Сайтын зар шинэчлэх" : "Сайтад нийтлэх"}
             </Button>
           ) : null}
+          {basePath.startsWith("/agent") ? (
+            <>
+              <Link href="/agent/crm/links?new=owner_report">
+                <Button size="sm" variant="outline">
+                  <FileBarChart className="size-4" /> Өмчлөгчийн тайлан
+                </Button>
+              </Link>
+              {property.status === "active" ? (
+                <Link href="/agent/crm/links?new=open_house">
+                  <Button size="sm" variant="outline">
+                    <QrCode className="size-4" /> Нээлттэй үзлэгийн QR
+                  </Button>
+                </Link>
+              ) : null}
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -205,25 +268,26 @@ export function PropertyDetailShell({
         </div>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
         <div className="space-y-4">
           <Tabs
             value={tab}
             onValueChange={setTab}
             items={[
               { value: "overview", label: "Ерөнхий" },
-              { value: "roles", label: "Роли ба гэрээ" },
+              { value: "roles", label: "Үүрэг ба гэрээ" },
               { value: "price", label: "Үнийн түүх" },
               { value: "matching", label: `Тохируулга (${matches.length})` },
               { value: "rental", label: "Ашиглалт / Тоолуур" },
               { value: "docs", label: `Баримт / Зураг (${docs.length})` },
+              { value: "history", label: `Түүх (${activities.length})` },
             ]}
           />
 
           {tab === "overview" ? (
             <Card>
               <CardBody className="space-y-4">
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Info label="Үл хөдлөхийн төрөл" value={CRM_PROPERTY_TYPE_LABEL[property.property_type as CrmPropertyType] ?? property.property_type} />
                   <Info label="Үйлчилгээ" value={SERVICE_KIND_LABEL[property.service_kind]} />
                   <Info
@@ -246,7 +310,7 @@ export function PropertyDetailShell({
                   } />
                   <Info label="Төлбөрийн өдөр" value={property.payment_day != null ? `Сарын ${property.payment_day}` : "—"} />
                   <Info
-                    label="Түлхүүр (F-215)"
+                    label="Түлхүүр"
                     value={
                       <span className="inline-flex items-center gap-1.5">
                         <KeyRound className="size-3.5 text-subtle" />
@@ -272,14 +336,19 @@ export function PropertyDetailShell({
                 </div>
 
                 <div>
-                  <p className="mb-1 text-xs font-semibold text-subtle">Тохируулгын шошго (F-209)</p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {(["location", "type", "price", "goal", "special"] as const).map((g) => (
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-subtle">Тохируулгын шошго</p>
+                    {canManage ? (
+                      <Button size="sm" variant="ghost" onClick={openTags} disabled={pending}>
+                        <Pencil className="size-3.5" /> Шошго засах
+                      </Button>
+                    ) : null}
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {PROPERTY_TAG_GROUPS.map((g) => (
                       <div key={g} className="text-sm">
-                        <span className="text-xs text-subtle">
-                          {{ location: "Байршил", type: "Төрөл", price: "Үнэ", goal: "Зорилго", special: "Онцгой" }[g]}:
-                        </span>{" "}
-                        {Array.isArray(tags[g]) && tags[g].length > 0 ? (
+                        <span className="text-xs text-subtle">{PROPERTY_TAG_GROUP_LABEL[g]}:</span>{" "}
+                        {tags[g].length > 0 ? (
                           tags[g].map((t) => (
                             <Badge key={t} tone="blue" className="mr-1">
                               {t}
@@ -291,6 +360,11 @@ export function PropertyDetailShell({
                       </div>
                     ))}
                   </div>
+                  {tags.location.length === 0 || tags.type.length === 0 ? (
+                    <p className="mt-1.5 text-xs text-amber-700">
+                      Идэвхжүүлэхэд «Бүс», «Төрөл» шошго заавал — «Шошго засах» дарж нэмнэ үү.
+                    </p>
+                  ) : null}
                 </div>
               </CardBody>
             </Card>
@@ -301,7 +375,7 @@ export function PropertyDetailShell({
               <Card>
                 <CardBody className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-ink">Агентын 3 роль (F-206)</h3>
+                    <h3 className="text-sm font-bold text-ink">Агентын 3 роль</h3>
                     <Button size="sm" variant="outline" onClick={() => { setRoleReason(""); setRoleOpen(true); }}>
                       <UserRoundCog className="size-4" /> Роль онооx / шилжүүлэх
                     </Button>
@@ -321,7 +395,7 @@ export function PropertyDetailShell({
                     </tbody>
                   </table>
                   <p className="text-xs text-subtle">
-                    Эх сурвалжийн роль хамгаалагдана — өөрчлөлт зөвхөн Борлуулалтын захирал/ЧМТ, шалтгаантай, аудиттай.
+                    Эх сурвалжийн роль хамгаалагдана — өөрчлөлтийг зөвхөн Борлуулалт хариуцсан захирал эсвэл Үйл ажиллагаа-ЧМТ шалтгаантайгаар хийнэ.
                     Ролийн бүртгэл урамшууллын нотолгоонд шууд дамжина.
                   </p>
                 </CardBody>
@@ -330,7 +404,7 @@ export function PropertyDetailShell({
               <Card>
                 <CardBody className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-ink">Листингийн гэрээ (F-205)</h3>
+                    <h3 className="text-sm font-bold text-ink">Листингийн гэрээ</h3>
                     <Button size="sm" variant="outline" onClick={() => setAgrOpen(true)}>
                       <Plus className="size-4" /> Гэрээ бүртгэх
                     </Button>
@@ -374,7 +448,7 @@ export function PropertyDetailShell({
             <Card>
               <CardBody className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-ink">Үнийн түүх (F-208)</h3>
+                  <h3 className="text-sm font-bold text-ink">Үнийн түүх</h3>
                   <Button size="sm" variant="outline" disabled={!canManage} onClick={() => { setNewPrice(""); setNewRent(""); setPriceReason(""); setPriceOpen(true); }}>
                     <Pencil className="size-4" /> Үнэ өөрчлөх
                   </Button>
@@ -425,7 +499,7 @@ export function PropertyDetailShell({
             <div className="space-y-4">
               <Card>
                 <CardBody className="space-y-3">
-                  <h3 className="text-sm font-bold text-ink">Ашиглалтын статус (F-210/565)</h3>
+                  <h3 className="text-sm font-bold text-ink">Ашиглалтын статус</h3>
                   {property.service_kind === "managed_rental" ? (
                     <div className="flex flex-wrap items-center gap-2">
                       <Select
@@ -441,14 +515,14 @@ export function PropertyDetailShell({
                           </option>
                         ))}
                       </Select>
-                      <span className="text-xs text-subtle">Листингийн статусаас тусдаа; сул мөчлөг автоматаар түүхчлэгдэнэ (F-566).</span>
+                      <span className="text-xs text-subtle">Листингийн статусаас тусдаа; сул мөчлөг автоматаар түүхчлэгдэнэ.</span>
                     </div>
                   ) : (
                     <p className="text-sm text-subtle">Ашиглалтын статус зөвхөн менежменттэй түрээсэд хөтлөгдөнө.</p>
                   )}
                   {property.vacancies.length > 0 ? (
                     <div>
-                      <p className="mb-1 text-xs font-semibold text-subtle">Сул хоногийн мөчлөг (F-566/567)</p>
+                      <p className="mb-1 text-xs font-semibold text-subtle">Сул хоногийн мөчлөг</p>
                       <ul className="space-y-1 text-sm text-muted">
                         {property.vacancies.map((v) => (
                           <li key={v.id}>
@@ -464,7 +538,7 @@ export function PropertyDetailShell({
               <Card>
                 <CardBody className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-ink">Тоолуур (F-214)</h3>
+                    <h3 className="text-sm font-bold text-ink">Тоолуур</h3>
                     <Button size="sm" variant="outline" onClick={() => setMeterOpen(true)}>
                       <Plus className="size-4" /> Тоолуур нэмэх
                     </Button>
@@ -504,10 +578,28 @@ export function PropertyDetailShell({
             </div>
           ) : null}
 
+          {tab === "history" ? (
+            <div className="space-y-4">
+              {property.owner_contact_id ? (
+                <ActivityComposer
+                  contactId={property.owner_contact_id}
+                  propertyId={property.id}
+                  objections={objections}
+                  title="Өмчлөгчтэй харилцсан үйл ажиллагаа бүртгэх"
+                />
+              ) : (
+                <p className="rounded-xl border border-line bg-surface-2 px-3 py-2 text-sm text-muted">
+                  Өмчлөгч бүртгэгдээгүй тул үйл ажиллагаа бүртгэх боломжгүй.
+                </p>
+              )}
+              <ActivityTimeline rows={activities} currentProfileId={me} />
+            </div>
+          ) : null}
+
           {tab === "docs" ? (
             <Card>
               <CardBody>
-                <h3 className="mb-3 text-sm font-bold text-ink">Баримт, зураг (F-203/204/704)</h3>
+                <h3 className="mb-3 text-sm font-bold text-ink">Баримт, зураг</h3>
                 <EntityDocs entity="property" entityId={property.id} docs={docs} roles={roles} />
               </CardBody>
             </Card>
@@ -518,7 +610,7 @@ export function PropertyDetailShell({
           <ActivationChecklist propertyId={property.id} status={property.status} missing={missing} />
           <Card>
             <CardBody className="space-y-2 text-sm">
-              <h3 className="text-sm font-bold text-ink">Бүс, салбар (F-207)</h3>
+              <h3 className="text-sm font-bold text-ink">Бүс, салбар</h3>
               <p className="text-muted">
                 {property.zone_id ? "Бүсийн лавлахаас автомат тодорхойлогдсон." : "Бүсийн лавлахад тохирох мөр олдоогүй."}
               </p>
@@ -534,7 +626,7 @@ export function PropertyDetailShell({
       <Modal
         open={!!statusTarget}
         onClose={() => setStatusTarget(null)}
-        title={statusTarget ? `Статус: ${CRM_PROPERTY_STATUS_LABEL[statusTarget.to].label}` : ""}
+        title={statusTarget ? `Төлөв: ${CRM_PROPERTY_STATUS_LABEL[statusTarget.to].label}` : ""}
         footer={
           <div className="flex w-full items-center justify-end gap-2">
             <Button variant="ghost" onClick={() => setStatusTarget(null)} disabled={pending}>
@@ -552,12 +644,12 @@ export function PropertyDetailShell({
           </div>
         }
       >
-        <Field label="Шалтгаан (заавал)" hint="Шилжилт бүр аудит логт бүртгэгдэнэ (F-218)">
+        <Field label="Шалтгаан (заавал)" hint="Шилжилт бүр аудит логт бүртгэгдэнэ">
           <Input value={statusReason} onChange={(e) => setStatusReason(e.target.value)} />
         </Field>
       </Modal>
 
-      {/* Үнэ өөрчлөх (F-208) */}
+      {/* Үнэ өөрчлөх */}
       <Modal
         open={priceOpen}
         onClose={() => setPriceOpen(false)}
@@ -599,7 +691,7 @@ export function PropertyDetailShell({
         </div>
       </Modal>
 
-      {/* Роль онооx/шилжүүлэх (F-206) */}
+      {/* Роль онооx/шилжүүлэх */}
       <Modal
         open={roleOpen}
         onClose={() => setRoleOpen(false)}
@@ -659,7 +751,7 @@ export function PropertyDetailShell({
           ) : null}
           {roleKind === "sourcing" && property.roles.find((r) => r.role === "sourcing") && !canReassignSourcing ? (
             <p className="text-xs text-rose-700">
-              Эх сурвалжийн ролийг зөвхөн Борлуулалтын захирал/ЧМТ шилжүүлнэ (F-206).
+              Эх сурвалжийн ролийг зөвхөн Борлуулалт хариуцсан захирал эсвэл Үйл ажиллагаа-ЧМТ шилжүүлнэ.
             </p>
           ) : null}
         </div>
@@ -704,7 +796,7 @@ export function PropertyDetailShell({
             <Field label="Гарын үсэг зурсан">
               <Input type="date" value={agrSigned} onChange={(e) => setAgrSigned(e.target.value)} />
             </Field>
-            <Field label="Дуусах огноо" hint="Дуусахаас өмнө сануулга автомат (F-205)">
+            <Field label="Дуусах огноо" hint="Дуусахаас өмнө сануулга автомат">
               <Input type="date" value={agrExpires} onChange={(e) => setAgrExpires(e.target.value)} />
             </Field>
           </div>
@@ -777,7 +869,44 @@ export function PropertyDetailShell({
         </div>
       </Modal>
 
-      {/* Түлхүүрийн мэдээлэл (F-215) */}
+      {/* Тохируулгын шошго (§6.10.2) */}
+      <Modal
+        open={tagsOpen}
+        onClose={() => setTagsOpen(false)}
+        title="Тохируулгын шошго засах"
+        footer={
+          <div className="flex w-full items-center justify-end gap-2">
+            <Button variant="ghost" onClick={() => setTagsOpen(false)} disabled={pending}>
+              Болих
+            </Button>
+            <Button onClick={saveTags} disabled={pending}>
+              {pending ? "Хадгалж байна…" : "Хадгалах"}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-xs text-muted">Утга бүрийг таслалаар тусгаарлана. Шошгоор тохирох харилцагчийг хайна.</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {PROPERTY_TAG_GROUPS.map((g) => (
+              <Field key={g} label={PROPERTY_TAG_GROUP_LABEL[g]} htmlFor={`tag-${g}`}>
+                <Input
+                  id={`tag-${g}`}
+                  value={tagDraft[g]}
+                  onChange={(e) => setTagDraft((d) => ({ ...d, [g]: e.target.value }))}
+                  placeholder={TAG_PLACEHOLDER[g]}
+                />
+              </Field>
+            ))}
+          </div>
+          <Field label="Онцлог (тавилга, зогсоол, лифт г.м.)" htmlFor="tag-features">
+            <Input id="tag-features" value={featuresDraft} onChange={(e) => setFeaturesDraft(e.target.value)} />
+          </Field>
+          {error ? <p className="text-xs text-danger">{error}</p> : null}
+        </div>
+      </Modal>
+
+      {/* Түлхүүрийн мэдээлэл */}
       <Modal
         open={keyOpen}
         onClose={() => setKeyOpen(false)}
@@ -807,7 +936,7 @@ export function PropertyDetailShell({
         }
       >
         <div className="space-y-3">
-          <Field label="Байршил" hint="Өөрчлөлт бүр түүхтэй (F-215)">
+          <Field label="Байршил" hint="Өөрчлөлт бүр түүхтэй">
             <Input value={keyLocation} onChange={(e) => setKeyLocation(e.target.value)} placeholder="Оффисын сейф, шүүгээ 3" />
           </Field>
           <Field label="Хариуцагч">
@@ -825,6 +954,16 @@ export function PropertyDetailShell({
     </div>
   );
 }
+
+const TAG_PLACEHOLDER: Record<PropertyTagGroup, string> = {
+  location: "Хан-Уул, Зайсан",
+  price: "Дунд сегмент",
+  type: "Орон сууц, 3 өрөө",
+  size: "70–90 м²",
+  condition: "Шинэ засвартай",
+  goal: "Амьдрах, Хөрөнгө оруулалт",
+  special: "Гол гудамж, Сургууль ойр",
+};
 
 function Info({ label, value }: { label: string; value: ReactNode }) {
   return (

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CRM_ROLES, type CrmRole } from "@/lib/constants-crm";
+import { createHandoverAct } from "@/lib/actions/crm-post-sale";
 
 /**
  * CRM ажилтны удирдлага (§1.1). Бичих эрх: sysadmin (RLS давхар шалгана;
@@ -162,8 +163,9 @@ export async function upsertStaff(raw: StaffInput): Promise<{ id?: string; error
 }
 
 /**
- * P-10: гарах урсгал эхлүүлэх — offboarding=true + удирдлагад мэдэгдэл,
- * хүлээлцэх даалгавар (Д-11-ийн эхлэл; багцын бүрэн шилжүүлэлт U8-ийн урсгалаар).
+ * Гарах урсгал эхлүүлэх (§6.28.11, §6.32): offboarding=true + хүлээлцэх актыг
+ * автоматаар үүсгэнэ (нээлттэй сэжим, боломж, үл хөдлөхийн үүрэг), удирдлагад
+ * мэдэгдэл, хүлээлцэх даалгавар. Акт батлагдахаас өмнө идэвхгүй болгохгүй.
  */
 export async function startOffboarding(staffId: string): Promise<{ ok: boolean; error?: string }> {
   const supabase = await createClient();
@@ -201,8 +203,8 @@ export async function startOffboarding(staffId: string): Promise<{ ok: boolean; 
         office_id: ctx.officeId,
         created_by: ctx.userId,
         responsible_id: ctx.userId,
-        title: "Гарах ажилтны хүлээлцэх (Д-11)",
-        description: "Гарах төлөвт орсон ажилтны нээлттэй бичлэгүүдийг шилжүүлж, хүлээлцэх актыг бүрдүүлнэ.",
+        title: "Гарах ажилтны хүлээлцэх",
+        description: "Гарах төлөвт орсон ажилтны нээлттэй сэжим, боломж, үл хөдлөхийг шилжүүлж, хүлээлцэх актыг батална.",
         priority: "high",
       })
       .select("id")
@@ -219,6 +221,10 @@ export async function startOffboarding(staffId: string): Promise<{ ok: boolean; 
   } catch {
     // даалгавар/лог амжилтгүй ч offboarding төлөв хадгалагдсан
   }
+
+  // Хүлээлцэх акт (багцын жагсаалт автомат) — алдаа гарвал гараар үүсгэнэ.
+  const act = await createHandoverAct(staffId);
+  if (act.error && !act.id) console.error("startOffboarding act:", act.error);
 
   await notify([staff.profile_id], "crm_offboarding", "Гарах урсгал", "Таны CRM бүртгэлд гарах урсгал эхэллээ.");
   revalidateStaffPaths();
@@ -245,10 +251,16 @@ export async function deactivateStaff(staffId: string): Promise<{ ok: boolean; e
     .eq("office_id", ctx.officeId);
   if (error) {
     console.error("deactivateStaff:", error.message);
+    if (error.message.includes("батлагдсан хүлээлцэх акт")) {
+      return {
+        ok: false,
+        error: "Батлагдсан хүлээлцэх акт шаардлагатай — гарах урсгал эхлүүлж, актыг Борлуулалт хариуцсан захирлаар батлуулна уу.",
+      };
+    }
     if (error.message.includes("хүлээлцэх дуусаагүй")) {
       return {
         ok: false,
-        error: "Хүлээлцэх дуусаагүй — энэ ажилтанд нээлттэй эзэмшилтэй бичлэг байна. Эхлээд шилжүүлнэ үү.",
+        error: "Хүлээлцэх дуусаагүй — энэ ажилтанд нээлттэй сэжим, боломж эсвэл үл хөдлөхийн үүрэг байна. Эхлээд шилжүүлнэ үү.",
       };
     }
     return { ok: false, error: SAVE_ERR };

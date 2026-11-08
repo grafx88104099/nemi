@@ -1,5 +1,6 @@
 "use client";
 
+import { fmtDateNum, fmtDateTime } from "@/lib/format";
 import { Printer } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -66,7 +67,7 @@ export function PrintSheet({ sheet }: { sheet: CommissionSheet }) {
                 <p className="text-muted">Тайлант сар: {d.record_month?.slice(0, 7) ?? "—"}</p>
               </>
             )}
-            <p className="text-muted">Тооцсон огноо: {new Date(d.created_at).toLocaleDateString()}</p>
+            <p className="text-muted">Тооцсон огноо: {fmtDateNum(d.created_at)}</p>
           </div>
         </div>
 
@@ -79,11 +80,11 @@ export function PrintSheet({ sheet }: { sheet: CommissionSheet }) {
           </thead>
           <tbody>
             <tr className="border-b border-line">
-              <td className="py-2 text-muted">Тооцооллын суурь (Санхүү баталгаажуулсан, татварын дараах — F-455)</td>
+              <td className="py-2 text-muted">Тооцооллын суурь (Санхүү баталгаажуулсан, татварын дараах)</td>
               <td className="py-2 text-right font-medium text-ink">{d.base_amount.toLocaleString()}₮</td>
             </tr>
             <tr className="border-b border-line">
-              <td className="py-2 text-muted">Хэрэглэсэн хувь (тохиргооны хувилбараар — F-453)</td>
+              <td className="py-2 text-muted">Хэрэглэсэн хувь (тохиргооны хувилбараар)</td>
               <td className="py-2 text-right font-medium text-ink">{d.applied_rate_pct}%</td>
             </tr>
             <tr className="border-b border-line">
@@ -91,7 +92,7 @@ export function PrintSheet({ sheet }: { sheet: CommissionSheet }) {
               <td className="py-2 text-right font-bold text-ink">{d.amount.toLocaleString()}₮</td>
             </tr>
             <tr className="border-b border-line">
-              <td className="py-2 text-muted">Олгосон дүн (F-464)</td>
+              <td className="py-2 text-muted">Олгосон дүн</td>
               <td className="py-2 text-right font-medium text-ink">{d.paid_amount.toLocaleString()}₮</td>
             </tr>
             <tr>
@@ -102,11 +103,11 @@ export function PrintSheet({ sheet }: { sheet: CommissionSheet }) {
         </table>
 
         {d.hold_reason && (
-          <p className="mb-4 text-sm text-rose-600">Түдгэлзүүлсэн шалтгаан (F-461): {d.hold_reason}</p>
+          <p className="mb-4 text-sm text-rose-600">Түдгэлзүүлсэн шалтгаан: {d.hold_reason}</p>
         )}
 
         <div className="mb-6">
-          <p className="mb-2 text-sm font-semibold text-ink">Баталгаажуулалтын түүх (F-460/473)</p>
+          <p className="mb-2 text-sm font-semibold text-ink">Баталгаажуулалтын түүх</p>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line text-left text-xs text-muted">
@@ -123,7 +124,7 @@ export function PrintSheet({ sheet }: { sheet: CommissionSheet }) {
                     {COMMISSION_STATUS_LABEL[h.to_status].label}
                   </td>
                   <td className="py-1.5 text-muted">{h.decided_name ?? "Систем"}</td>
-                  <td className="py-1.5 text-right text-muted">{new Date(h.created_at).toLocaleString()}</td>
+                  <td className="py-1.5 text-right text-muted">{fmtDateTime(h.created_at)}</td>
                 </tr>
               ))}
             </tbody>
@@ -132,7 +133,7 @@ export function PrintSheet({ sheet }: { sheet: CommissionSheet }) {
 
         {d.clawbacks.length > 0 && (
           <div className="mb-6">
-            <p className="mb-2 text-sm font-semibold text-ink">Буцаалт (F-462)</p>
+            <p className="mb-2 text-sm font-semibold text-ink">Буцаалт</p>
             <ul className="space-y-1 text-sm text-muted">
               {d.clawbacks.map((cb) => (
                 <li key={cb.id}>

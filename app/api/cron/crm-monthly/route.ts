@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { cronAuthError } from "@/lib/crm/cron-auth";
 import { daysInMonth, monthStart, nextMonthStart, prorate } from "@/lib/crm/proration";
 import type { Json } from "@/types/database";
+import { notifyCrm } from "@/lib/crm/notify";
 
 /**
  * CRM сарын cron (D8, §4.4) — сар бүрийн 1-нд (vercel.json):
@@ -16,7 +17,9 @@ import type { Json } from "@/types/database";
  *    менежментийн бүртгэл (журмын 9.2, autofill талбартай) — сар бүр НЭГ;
  *  • Д-22: өмчлөгчийн тайлангийн даалгавар (өмнөх тайлант үе) ҮХХ багт;
  *  • F-466: өмнөх сарын бүрэн (100%, hold-гүй) бүртгэлүүдээс PM тооцооны
- *    гээгдэл скан → rule_runs 'pending' (U7 commission engine уншина).
+ *    гээгдэл скан → rule_runs 'pending' (U7 commission engine уншина);
+ *  • §8.5(3): оффис бүрийн сарын эхний төсөөллийн агшин зураг (идемпотент);
+ *  • §6.29: өмнөх сарын чанарын аудит хийгдээгүй бол Үйл ажиллагаа-ЧМТ-д сануулга.
  *
  * Хамгаалалт: Authorization: Bearer CRON_SECRET эсвэл ?key=.
  * Идемпотент: unique(lease,type,period) + unique(agreement,property,month) +
@@ -91,6 +94,8 @@ export async function GET(request: Request) {
     recordsCreated: 0,
     statementTasks: 0,
     pmCommissionScans: 0,
+    forecastSnapshots: 0,
+    qualityAuditReminders: 0,
     errors: [] as string[],
   };
 
@@ -432,6 +437,59 @@ export async function GET(request: Request) {
     summary.errors.push(`F-466 scan: ${e instanceof Error ? e.message : String(e)}`);
   }
 
+  // ── 6. U6 (§8.5(3)): сарын эхний төсөөллийн агшин зураг (оффис бүрд нэг, идемпотент) ──
+  // ── 7. U6 (§6.29): өмнөх сарын чанарын аудит хийгдээгүй бол Үйл ажиллагаа-ЧМТ-д сануулга ──
+  try {
+    const { data: offices } = await admin.from("crm_staff").select("office_id").eq("is_active", true);
+    const officeIds = [...new Set((offices ?? []).map((o) => o.office_id))];
+    const prevMonthStartIso = monthStart(
+      new Date(new Date(`${month}T00:00:00Z`).getTime() - 86400000).toISOString().slice(0, 10)
+    );
+    for (const officeId of officeIds) {
+      const { error: fcErr } = await admin.rpc("crm_take_forecast_snapshot", {
+        p_office: officeId,
+        p_month: month,
+        p_kind: "month_start",
+      });
+      if (fcErr) {
+        summary.errors.push(`forecast ${officeId}: ${fcErr.message}`);
+      } else {
+        summary.forecastSnapshots += 1;
+      }
+
+      const { data: done } = await admin
+        .from("crm_quality_audits")
+        .select("id")
+        .eq("office_id", officeId)
+        .eq("status", "completed")
+        .gte("period_end", prevMonthStartIso)
+        .limit(1);
+      const { data: reminded } = await admin
+        .from("crm_rule_runs")
+        .select("id")
+        .eq("office_id", officeId)
+        .eq("rule_code", "quality_audit_due")
+        .contains("result", { month })
+        .limit(1);
+      if (!done?.length && !reminded?.length) {
+        await notifyCrm({
+          officeId,
+          event: "quality_audit_due",
+          recipients: [],
+          includeRoles: ["ops_qc"],
+          title: "CRM-ийн чанарын аудитын хугацаа",
+          body: "Өмнөх сарын CRM-ийн чанарын аудит хийгдээгүй байна. Түүвэр гаргаж аудитаа эхлүүлнэ үү.",
+          link: "/office/crm/quality",
+          admin,
+        });
+        await logRun(admin, officeId, "quality_audit_due", "crm_quality_audits", null, "ok", { month });
+        summary.qualityAuditReminders += 1;
+      }
+    }
+  } catch (e) {
+    summary.errors.push(`quality/forecast: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
   // Алдаа гарвал сисадминд мэдэгдэнэ (F-602).
   if (summary.errors.length) {
     try {
@@ -448,7 +506,7 @@ export async function GET(request: Request) {
             user_id: id,
             type: "crm_rule_error",
             title: "Сарын cron алдаатай дууслаа",
-            body: `crm-monthly: ${summary.errors.length} алдаа — rule_runs логоос харна уу (F-602).`.slice(0, 120),
+            body: `Сарын автомат ажилд ${summary.errors.length} алдаа гарлаа — дүрмийн гүйлтийн бүртгэлээс харна уу.`.slice(0, 120),
             link: "/office/crm/settings/rules",
           }))
         );

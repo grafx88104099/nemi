@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { UserX } from "lucide-react";
 
 import { setAgentStatus } from "@/lib/actions/offices";
+import { toast } from "@/components/ui/toast";
 
 export function DeactivateAgentButton({ agentId }: { agentId: string }) {
   const [pending, startTransition] = useTransition();
@@ -13,7 +14,13 @@ export function DeactivateAgentButton({ agentId }: { agentId: string }) {
   function onClick() {
     if (!confirm("Энэ агентыг идэвхгүй болгох уу? Нийтэд харагдахаа болино.")) return;
     startTransition(async () => {
-      await setAgentStatus(agentId, "rejected");
+      const res = await setAgentStatus(agentId, "rejected");
+      // CRM-д нээлттэй эзэмшил эсвэл батлагдаагүй хүлээлцэх акт байвал шалтгааныг харуулна.
+      if (res && "error" in res && res.error) {
+        toast.error(String(res.error));
+        return;
+      }
+      toast.success("Агент идэвхгүй боллоо");
       router.refresh();
     });
   }

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { ingestSiteInquiry } from "@/lib/crm/lead-intake";
 
 /** Зар үзсэнийг тэмдэглэх (recently_viewed upsert). Нэвтрээгүй бол алгасна. */
 export async function recordView(listingId: string) {
@@ -39,6 +40,15 @@ export async function bookViewing(
     status: "pending",
   });
   if (error) return { ok: false, error: error.message };
+  // §6.1/§6.4: сайтын хандалт CRM-ийн албан бүртгэлд сэжим болж орно
+  // (алдаа гарсан ч үзлэгийн захиалга хэвээр).
+  await ingestSiteInquiry({
+    buyerProfileId: user.id,
+    agentId,
+    listingId,
+    channel: "viewing",
+    scheduledAt,
+  });
   revalidatePath("/tours");
   return { ok: true };
 }

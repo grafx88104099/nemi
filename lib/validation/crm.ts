@@ -8,6 +8,7 @@ import {
   PROFILE_STATUSES,
 } from "@/lib/constants-crm";
 import { normalizePhone, normalizeEmail } from "@/lib/crm/normalize";
+import { OCCUPANT_KINDS, PRIVACY_LEVELS } from "@/lib/crm/agent-core";
 
 /**
  * Харилцагч, сэжим, профайлын серверийн оролтын баталгаажуулалт (U2).
@@ -51,7 +52,9 @@ const contactSchema = z
     emails: z.array(emailSchema).max(10, "И-мэйл хэт олон байна"),
     consent: z.enum(CONSENT_STATUSES),
     consentChannel: z.string().trim().max(100).nullable(),
-    /** Давхардлын анхааруулгыг үл хэрэгссэн тэмдэг (F-107 — аудитад бүртгэгдэнэ). */
+    /** §6.2 нууцлалын төлөв (байхгүй бол энгийн). */
+    privacyLevel: z.enum(PRIVACY_LEVELS).optional(),
+    /** Давхардлын анхааруулгыг үл хэрэгссэн тэмдэг (аудитад бүртгэгдэнэ). */
     duplicateOverride: z.boolean().optional(),
   })
   .strict();
@@ -84,8 +87,12 @@ const leadSchema = z
     branchId: z.string().uuid().nullable(),
     grade: z.enum(LEAD_GRADES).nullable(),
     gradeOverrideReason: z.string().trim().max(500).nullable(),
-    nextStep: z.string().trim().max(300, "Дараагийн алхам хэт урт байна").nullable(),
+    nextStep: z.string().trim().max(300, "Дараагийн үйлдэл хэт урт байна").nullable(),
     nextStepDate: z.string().nullable(),
+    /** Мэдээлэл хүлээн авсан мөч (реферал, хувийн сүлжээ — тухайн өдөрт нь бүртгэх SLA). */
+    receivedAt: z.string().nullable().optional(),
+    /** Эх сурвалжийн дэлгэрэнгүй (байгаа харилцагч дээр сэжим нээхэд). */
+    sourceDetail: z.string().trim().max(500, "Эх сурвалжийн дэлгэрэнгүй хэт урт байна").nullable().optional(),
     duplicateOverride: z.boolean().optional(),
   })
   .strict();
@@ -102,7 +109,10 @@ export function validateLeadInput(input: unknown): { data: LeadInput } | { error
     if ("error" in c) return { error: c.error };
   }
   if (d.nextStepDate != null && Number.isNaN(Date.parse(d.nextStepDate))) {
-    return { error: "Дараагийн алхмын огноо буруу байна." };
+    return { error: "Дараагийн үйлдлийн огноо буруу байна." };
+  }
+  if (d.receivedAt != null && Number.isNaN(Date.parse(d.receivedAt))) {
+    return { error: "Мэдээлэл авсан огноо буруу байна." };
   }
   return { data: d };
 }
@@ -112,8 +122,8 @@ const activateLeadSchema = z
   .object({
     grade: z.enum(LEAD_GRADES, "Ангилал сонгоно уу"),
     gradeOverrideReason: z.string().trim().max(500).nullable(),
-    nextStep: z.string().trim().min(1, "Дараагийн алхам заавал").max(300),
-    nextStepDate: z.string().min(1, "Дараагийн алхмын огноо заавал"),
+    nextStep: z.string().trim().min(1, "Дараагийн үйлдэл заавал").max(300),
+    nextStepDate: z.string().min(1, "Дараагийн үйлдлийн огноо заавал"),
   })
   .strict();
 
@@ -122,7 +132,7 @@ export type ActivateLeadInput = z.infer<typeof activateLeadSchema>;
 export function validateActivateLead(input: unknown): { data: ActivateLeadInput } | { error: string } {
   const r = activateLeadSchema.safeParse(input);
   if (!r.success) return { error: firstError(r.error) };
-  if (Number.isNaN(Date.parse(r.data.nextStepDate))) return { error: "Дараагийн алхмын огноо буруу байна." };
+  if (Number.isNaN(Date.parse(r.data.nextStepDate))) return { error: "Дараагийн үйлдлийн огноо буруу байна." };
   return { data: r.data };
 }
 
@@ -150,7 +160,7 @@ export const TIMELINE_LABEL: Record<(typeof TIMELINE_OPTIONS)[number], string> =
   "0_30": "0–30 хоног",
   "1_3m": "1–3 сар",
   "3_12m": "3–12 сар",
-  "12m_plus": "12+ сар",
+  "12m_plus": "12 сараас дээш",
 };
 
 const structuredListItem = z.string().trim().min(1, "Хоосон мөр байна").max(200, "Мөр хэт урт байна");
@@ -160,41 +170,85 @@ const needProfileSchema = z
     id: z.string().uuid().optional(),
     contactId: z.string().uuid("Харилцагч сонгоно уу"),
     profileType: z.enum(NEED_PROFILE_TYPES),
-    goalId: z.string().uuid().nullable(),
+    goalId: z.string().uuid("Зорилго сонгоно уу"),
     locations: z.array(z.string().trim().min(1)).min(1, "Сонирхсон байршил сонгоно уу").max(20),
     propertyTypes: z.array(z.string().trim().min(1)).min(1, "Үл хөдлөхийн төрөл сонгоно уу").max(10),
     budgetMin: z.number().nonnegative("Төсөв сөрөг байж болохгүй").nullable(),
-    budgetTarget: z.number().nonnegative().nullable(),
+    budgetTarget: z.number().nonnegative("Төсөв сөрөг байж болохгүй").nullable(),
     budgetMax: z.number().positive("Төсвийн дээд хязгаар заавал"),
-    financing: z.enum(FINANCING_OPTIONS),
+    budgetOverrunApproved: z.boolean().optional(),
+    budgetOverrunMax: z.number().positive().nullable().optional(),
+    financing: z.enum(FINANCING_OPTIONS, "Санхүүжилтийг сонгоно уу"),
     roomsMin: z.number().int().nonnegative().nullable(),
+    roomsTarget: z.number().int().nonnegative().nullable().optional(),
     areaMin: z.number().nonnegative().nullable(),
+    areaTarget: z.number().nonnegative().nullable().optional(),
     conditions: z.array(z.string().trim().min(1)).max(20),
-    timeline: z.enum(TIMELINE_OPTIONS),
+    timeline: z.enum(TIMELINE_OPTIONS, "Хугацааг сонгоно уу"),
     moveInDate: z.string().nullable(),
-    mustHaves: z.array(structuredListItem).min(1, "Заавал байх 3–5 шаардлага бүртгэнэ үү").max(5, "Заавал шаардлага дээд тал нь 5"),
+    mustHaves: z.array(structuredListItem).max(5, "Заавал шаардлага дээд тал нь 5"),
     niceToHaves: z.array(structuredListItem).max(10, "Байвал сайн нөхцөл хэт олон байна"),
-    dealBreakers: z.array(structuredListItem).max(10, "Таслах нөхцөл хэт олон байна"),
+    dealBreakers: z.array(structuredListItem).max(10, "Хэлцэл таслах нөхцөл хэт олон байна"),
     decisionMaker: z.string().trim().max(100).nullable(),
+    decisionMakerId: z.string().uuid().nullable().optional(),
+    decisionMakerInvolved: z.boolean().nullable().optional(),
     blocker: z.string().trim().max(200).nullable(),
+    blockerId: z.string().uuid().nullable().optional(),
+    blockerNote: z.string().trim().max(300).nullable().optional(),
+    occupantKind: z.enum(OCCUPANT_KINDS).nullable().optional(),
+    occupantNote: z.string().trim().max(300).nullable().optional(),
   })
   .strict();
 
 export type NeedProfileInput = z.infer<typeof needProfileSchema>;
 
-export function validateNeedProfile(input: unknown): { data: NeedProfileInput } | { error: string } {
+/**
+ * §6.7 баталгаажуулалт. mustHavesMin — тохиргооны lead_score_factors.must_haves_min.
+ */
+export function validateNeedProfile(
+  input: unknown,
+  opts: { mustHavesMin?: number } = {}
+): { data: NeedProfileInput } | { error: string } {
   const r = needProfileSchema.safeParse(input);
   if (!r.success) return { error: firstError(r.error) };
   const d = r.data;
+  const mustMin = Math.max(1, opts.mustHavesMin ?? 3);
+  const tenant = d.profileType === "tenant";
+  if (!tenant) {
+    if (d.budgetMin == null) return { error: "Доод төсөв заавал." };
+    if (d.budgetTarget == null) return { error: "Зорилтот төсөв заавал." };
+  }
   if (d.budgetMin != null && d.budgetMin > d.budgetMax) {
     return { error: "Төсвийн доод хязгаар дээдээс их байж болохгүй." };
+  }
+  if (d.budgetMin != null && d.budgetTarget != null && d.budgetMin > d.budgetTarget) {
+    return { error: "Доод төсөв зорилтот төсвөөс их байж болохгүй." };
   }
   if (d.budgetTarget != null && d.budgetTarget > d.budgetMax) {
     return { error: "Зорилтот төсөв дээд хязгаараас их байж болохгүй." };
   }
-  if (d.profileType === "tenant") {
+  if (d.budgetOverrunApproved) {
+    if (d.budgetOverrunMax == null || d.budgetOverrunMax < d.budgetMax) {
+      return { error: "Харилцагч төсөв хэтрэхийг зөвшөөрсөн бол хэтрэлтийн дээд хэмжээ дээд төсвөөс багагүй байна." };
+    }
+  }
+  if (d.roomsTarget != null && d.roomsMin != null && d.roomsTarget < d.roomsMin) {
+    return { error: "Сонирхсон өрөөний тоо наад захаас бага байж болохгүй." };
+  }
+  if (d.areaTarget != null && d.areaMin != null && d.areaTarget < d.areaMin) {
+    return { error: "Сонирхсон талбай наад захаас бага байж болохгүй." };
+  }
+  if (d.mustHaves.length < mustMin) {
+    return { error: `Заавал байх шийдвэрлэх шаардлагыг дор хаяж ${mustMin}-ыг бүртгэнэ үү.` };
+  }
+  if (!d.decisionMakerId && !d.decisionMaker?.trim()) return { error: "Шийдвэр гаргагчийг сонгоно уу." };
+  if (!d.blockerId && !d.blocker?.trim()) {
+    return { error: "Одоогийн саадыг сонгоно уу (саад байхгүй бол «Саад байхгүй»)." };
+  }
+  if (tenant) {
     if (!d.moveInDate) return { error: "Түрээслэгчийн профайлд орох огноо заавал." };
     if (Number.isNaN(Date.parse(d.moveInDate))) return { error: "Орох огноо буруу байна." };
+    if (!d.occupantKind) return { error: "Түрээслэгчийн өрх буюу бизнесийн хэрэгцээг сонгоно уу." };
   }
   return { data: d };
 }
@@ -270,9 +324,9 @@ export function validateProfileStatus(input: unknown): { data: ProfileStatusInpu
   if (d.status === "paused" && d.pausedUntil && Number.isNaN(Date.parse(d.pausedUntil))) {
     return { error: "Дахин идэвхжүүлэх огноо буруу байна." };
   }
-  if (d.status === "lost" && !d.lostReasonId) return { error: "Алдагдсанд шалтгаан заавал (F-156)." };
+  if (d.status === "lost" && !d.lostReasonId) return { error: "Алдагдсанд шалтгаан заавал." };
   if (d.status === "fulfilled" && !d.fulfilledTxnId) {
-    return { error: "Хангагдсанд амжилттай хаагдсан хэлцлийн холбоос заавал (F-156)." };
+    return { error: "Хангагдсанд амжилттай хаагдсан хэлцлийн холбоос заавал." };
   }
   return { data: d };
 }

@@ -7,6 +7,8 @@ import type { ReferralRow } from "@/components/crm/ReferralPanel";
 import type { ComplaintRow } from "@/components/crm/ComplaintShell";
 import type { HandoverActRow } from "@/components/crm/HandoverActShell";
 import type { HandoverItem } from "@/lib/actions/crm-post-sale";
+import { addDays, ubDateIso, weekStartOf } from "@/lib/crm/week";
+import { classifyMove } from "@/lib/crm/weekly-score";
 
 /**
  * U9 (crm-reports-uat) — тайлан/самбарын уншилтууд (DESIGN §8).
@@ -49,13 +51,9 @@ function monthStart(d = new Date()): string {
   return `${d.toISOString().slice(0, 8)}01`;
 }
 
-/** Долоо хоногийн эхлэл (Даваа, 00:00, локал биш ISO огноогоор). */
+/** Долоо хоногийн эхлэл — Даваа, Улаанбаатарын огноогоор (§6.19 цонх). */
 export function weekStartIso(d = new Date()): string {
-  const day = d.getDay(); // 0=Ня
-  const diff = day === 0 ? 6 : day - 1;
-  const monday = new Date(d);
-  monday.setDate(d.getDate() - diff);
-  return monday.toISOString().slice(0, 10);
+  return weekStartOf(ubDateIso(d));
 }
 
 // ── R-01: агентын өдрийн товчоо (view) ────────────────────
@@ -346,47 +344,45 @@ export async function getGoldenRuleRows(limit = 30): Promise<GoldenRuleRow[]> {
   }));
 }
 
-// ── Долоо хоногийн нэгтгэлүүд (R-02/R-03/R-04/R-05) ───────
+// ── Долоо хоногийн нэгтгэлүүд (§6.19, §6.24) ──────────────
+// U7: тоог DB-ийн crm_agent_week_metrics / crm_agent_week_moves функцээс
+// (Даваа–Ням, УБ, зөвхөн борлуулалтын урсгал, мөрийн хязгааргүй) авна.
 
 export type WeeklyAgentActivity = {
   owner_id: string;
   full_name: string | null;
+  /** Гадагш чиглэсэн холболт (§6.19.1). */
   calls: number;
+  /** Өмчлөгч + худалдан авагчтай хийсэн уулзалт. */
   meetings: number;
   showings: number;
+  /** Утга бүхий ярилцлага (§6.19.2). */
   material: number;
-  same_day: number;
 };
 
-/** Тайлант 7 хоногийн үйл ажиллагааны бүртгэл — агент бүрээр (болсон огноогоор). */
+/** Тайлант 7 хоногийн үйл ажиллагаа — агент бүрээр (УБ цагаар). */
 export async function getWeeklyActivityByAgent(weekStart: string): Promise<WeeklyAgentActivity[]> {
   const supabase = await createClient();
-  const from = `${weekStart}T00:00:00`;
-  const to = new Date(new Date(`${weekStart}T00:00:00Z`).getTime() + 7 * 86400000)
-    .toISOString()
-    .slice(0, 10);
-  const { data, error } = await supabase
-    .from("crm_activities")
-    .select("owner_id, channel, occurred_at, created_at")
-    .gte("occurred_at", from)
-    .lt("occurred_at", `${to}T00:00:00`)
-    .limit(2000);
+  const { data, error } = await supabase.rpc("crm_agent_week_metrics", {
+    p_week: weekStartOf(weekStart),
+    p_office: null,
+    p_agent: null,
+  });
   if (error) {
     console.error("getWeeklyActivityByAgent:", error.message);
     return [];
   }
-  type Raw = { owner_id: string; channel: string; occurred_at: string; created_at: string };
   const by = new Map<string, WeeklyAgentActivity>();
-  for (const a of (data ?? []) as Raw[]) {
+  for (const r of (data ?? []) as { agent_id: string; metric_code: string; actual: number | string | null }[]) {
     const cur =
-      by.get(a.owner_id) ??
-      ({ owner_id: a.owner_id, full_name: null, calls: 0, meetings: 0, showings: 0, material: 0, same_day: 0 } satisfies WeeklyAgentActivity);
-    cur.material += 1;
-    if (a.channel === "call" || a.channel === "chat") cur.calls += 1;
-    if (a.channel === "meeting") cur.meetings += 1;
-    if (a.channel === "showing") cur.showings += 1;
-    if (a.occurred_at.slice(0, 10) === a.created_at.slice(0, 10)) cur.same_day += 1;
-    by.set(a.owner_id, cur);
+      by.get(r.agent_id) ??
+      ({ owner_id: r.agent_id, full_name: null, calls: 0, meetings: 0, showings: 0, material: 0 } satisfies WeeklyAgentActivity);
+    const v = Number(r.actual ?? 0);
+    if (r.metric_code === "outbound_contacts") cur.calls = v;
+    if (r.metric_code === "owner_meetings" || r.metric_code === "buyer_meetings") cur.meetings += v;
+    if (r.metric_code === "showings") cur.showings = v;
+    if (r.metric_code === "meaningful_conversations") cur.material = v;
+    by.set(r.agent_id, cur);
   }
   const rows = [...by.values()];
   const names = await getNameMap(rows.map((r) => r.owner_id));
@@ -398,178 +394,66 @@ export type WeeklyStageMove = {
   owner_id: string;
   advanced: number;
   backward: number;
-  to_offer: number;
-  to_contract: number;
   won: number;
   lost: number;
+  none: number;
 };
 
-/** Тайлант 7 хоногийн шатны хөдөлгөөн — агент бүрээр (R-04 «Урсгалын хөдөлгөөн»). */
+/**
+ * Тайлант 7 хоногийн урсгалын хөдөлгөөн (§6.24): боломж бүрийн долоо хоногийн
+ * эхний → сүүлийн шат. Амжилтгүй хаалт «ахисан» биш (lost тусдаа).
+ */
 export async function getWeeklyStageMoves(weekStart: string): Promise<WeeklyStageMove[]> {
   const supabase = await createClient();
-  const to = new Date(new Date(`${weekStart}T00:00:00Z`).getTime() + 7 * 86400000)
-    .toISOString()
-    .slice(0, 10);
-  const { data, error } = await supabase
-    .from("crm_stage_history")
-    .select(
-      "entered_at, " +
-        "from_stage:crm_stages!crm_stage_history_from_stage_id_fkey(code, sort_order), " +
-        "to_stage:crm_stages!crm_stage_history_to_stage_id_fkey(code, sort_order, terminal_state), " +
-        "opportunity:crm_opportunities!crm_stage_history_opportunity_id_fkey(owner_id)"
-    )
-    .gte("entered_at", `${weekStart}T00:00:00`)
-    .lt("entered_at", `${to}T00:00:00`)
-    .limit(2000);
+  const { data, error } = await supabase.rpc("crm_agent_week_moves", {
+    p_week: weekStartOf(weekStart),
+    p_office: null,
+    p_agent: null,
+  });
   if (error) {
     console.error("getWeeklyStageMoves:", error.message);
     return [];
   }
-  type Raw = {
-    entered_at: string;
-    from_stage: { code: string; sort_order: number } | null;
-    to_stage: { code: string; sort_order: number; terminal_state: string | null } | null;
-    opportunity: { owner_id: string } | null;
-  };
   const by = new Map<string, WeeklyStageMove>();
-  for (const m of (data ?? []) as unknown as Raw[]) {
-    const owner = m.opportunity?.owner_id;
-    if (!owner || !m.to_stage) continue;
-    const cur =
-      by.get(owner) ??
-      ({ owner_id: owner, advanced: 0, backward: 0, to_offer: 0, to_contract: 0, won: 0, lost: 0 } satisfies WeeklyStageMove);
-    if (m.from_stage && m.to_stage.sort_order > m.from_stage.sort_order) cur.advanced += 1;
-    if (m.from_stage && m.to_stage.sort_order < m.from_stage.sort_order) cur.backward += 1;
-    if (m.to_stage.code === "offer") cur.to_offer += 1;
-    if (m.to_stage.code === "contract") cur.to_contract += 1;
-    if (m.to_stage.terminal_state === "won") cur.won += 1;
-    if (m.to_stage.terminal_state === "lost") cur.lost += 1;
-    by.set(owner, cur);
+  for (const m of (data ?? []) as { agent_id: string; from_sort: number | null; to_sort: number | null; to_terminal: string | null }[]) {
+    const cur = by.get(m.agent_id) ?? ({ owner_id: m.agent_id, advanced: 0, backward: 0, won: 0, lost: 0, none: 0 } satisfies WeeklyStageMove);
+    const kind = classifyMove({
+      fromSort: m.from_sort,
+      toSort: m.to_sort,
+      toTerminal: m.to_terminal === "won" || m.to_terminal === "lost" ? m.to_terminal : null,
+    });
+    cur[kind] += 1;
+    by.set(m.agent_id, cur);
   }
   return [...by.values()];
 }
 
 export type LostReasonRow = { label: string; cnt: number };
 
-/** R-04: алдсан шалтгааны бүтэц (сүүлийн 90 хоног). */
+/** Алдсан шалтгааны бүтэц — амжилтгүй хаагдсан огноогоор (сүүлийн 90 хоног, УБ). */
 export async function getLostReasons(): Promise<LostReasonRow[]> {
   const supabase = await createClient();
-  const since = new Date(Date.now() - 90 * 86400000).toISOString();
-  const { data, error } = await supabase
-    .from("crm_opportunities")
-    .select("lost_reason:crm_lookups!crm_opportunities_lost_reason_id_fkey(label)")
-    .eq("state", "lost")
-    .gte("updated_at", since)
-    .limit(500);
+  const to = ubDateIso();
+  const from = addDays(to, -90);
+  const { data, error } = await supabase.rpc("crm_kpi_period_metrics", { p_from: from, p_to: to });
   if (error) {
     console.error("getLostReasons:", error.message);
     return [];
   }
-  type Raw = { lost_reason: { label: string } | null };
   const by = new Map<string, number>();
-  for (const r of (data ?? []) as unknown as Raw[]) {
-    const label = r.lost_reason?.label ?? "Тодорхойгүй";
-    by.set(label, (by.get(label) ?? 0) + 1);
+  for (const r of (data ?? []) as { metric: string; dim_label: string | null; cnt: number }[]) {
+    if (r.metric !== "lost") continue;
+    const label = r.dim_label ?? "Бүртгэгдээгүй";
+    by.set(label, (by.get(label) ?? 0) + Number(r.cnt));
   }
   return [...by.entries()].map(([label, cnt]) => ({ label, cnt })).sort((a, b) => b.cnt - a.cnt);
 }
 
-// ── R-05: агентын 100 оноот үнэлгээ ───────────────────────
-
-export type AgentScoreRow = {
-  owner_id: string;
-  full_name: string | null;
-  activity: number;
-  pipeline: number;
-  progress: number;
-  closing: number;
-  followup: number;
-  quality: number;
-  total: number;
-};
-
-export type AgentScoreWeights = {
-  activity: number;
-  pipeline: number;
-  progress: number;
-  closing: number;
-  followup: number;
-  quality: number;
-};
-
-const DEFAULT_SCORE_WEIGHTS: AgentScoreWeights = {
-  activity: 20,
-  pipeline: 20,
-  progress: 20,
-  closing: 20,
-  followup: 10,
-  quality: 10,
-};
-
-export type WeeklyTargets = { material: number; qualified: number; progress: number; closings: number };
-const DEFAULT_TARGETS: WeeklyTargets = { material: 25, qualified: 3, progress: 5, closings: 1 };
-
-/**
- * R-05 (PMC-CRM-PRO-001 6.25): 6 бүлэг × жин (тохиргоо 'agent_score_weights').
- * Бүлэг бүрийн гүйцэтгэл = min(бодит/зорилт, 1) × жин; зорилт 'weekly_targets'.
- */
-export async function getAgentScores(weekStart: string): Promise<{
-  rows: AgentScoreRow[];
-  weights: AgentScoreWeights;
-  targets: WeeklyTargets;
-}> {
-  const [weights, targets, acts, moves, today] = await Promise.all([
-    getSettingValue<AgentScoreWeights>("agent_score_weights").then((w) => w ?? DEFAULT_SCORE_WEIGHTS),
-    getSettingValue<WeeklyTargets>("weekly_targets").then((t) => t ?? DEFAULT_TARGETS),
-    getWeeklyActivityByAgent(weekStart),
-    getWeeklyStageMoves(weekStart),
-    getAgentToday(),
-  ]);
-
-  const owners = new Set<string>([
-    ...acts.map((a) => a.owner_id),
-    ...moves.map((m) => m.owner_id),
-    ...today.map((t) => t.owner_id),
-  ]);
-  const names = await getNameMap([...owners]);
-  const ratio = (actual: number, target: number) => (target > 0 ? Math.min(actual / target, 1) : 0);
-
-  const rows: AgentScoreRow[] = [...owners].map((owner) => {
-    const a = acts.find((x) => x.owner_id === owner);
-    const m = moves.find((x) => x.owner_id === owner);
-    const t = today.find((x) => x.owner_id === owner);
-    const material = a?.material ?? 0;
-    const qualifiedNew = (m?.advanced ?? 0) > 0 ? m!.advanced : 0;
-    const progress = (m?.to_offer ?? 0) + (m?.to_contract ?? 0) + (a?.showings ?? 0);
-    const won = m?.won ?? 0;
-    const overdue = t?.steps_overdue ?? 0;
-    const activeLeads = t?.active_leads ?? 0;
-    const sameDayPct = material > 0 ? (a?.same_day ?? 0) / material : 1;
-
-    const activity = ratio(material, targets.material) * weights.activity;
-    const pipeline = ratio(qualifiedNew, targets.qualified) * weights.pipeline;
-    const prog = ratio(progress, targets.progress) * weights.progress;
-    const closing = ratio(won, targets.closings) * weights.closing;
-    const followup =
-      (activeLeads + overdue > 0 ? activeLeads / (activeLeads + overdue) : 1) * weights.followup;
-    const quality = sameDayPct * weights.quality;
-
-    const r = {
-      owner_id: owner,
-      full_name: names.get(owner) ?? null,
-      activity: Math.round(activity * 10) / 10,
-      pipeline: Math.round(pipeline * 10) / 10,
-      progress: Math.round(prog * 10) / 10,
-      closing: Math.round(closing * 10) / 10,
-      followup: Math.round(followup * 10) / 10,
-      quality: Math.round(quality * 10) / 10,
-      total: 0,
-    };
-    r.total = Math.round((r.activity + r.pipeline + r.progress + r.closing + r.followup + r.quality) * 10) / 10;
-    return r;
-  });
-  return { rows: rows.sort((a, b) => b.total - a.total), weights, targets };
-}
+// ── §6.25 агентын 100 оноот үнэлгээ ───────────────────────
+// Тооцоолол lib/crm/weekly-score.ts (computeWeeklyScore) ба
+// lib/queries-crm-weekly.ts (getWeekBoard) — зорилт агентын картаас, гүйцэтгэл
+// DB-ээс, зөвхөн идэвхтэй борлуулагч агент; хуучин «урсгал = ахилт» алдаа
+// (алдсан хэлцэл оноо өгдөг байсан) засагдсан.
 
 // ── R-12: салбар хоорондын KPI ────────────────────────────
 
@@ -628,6 +512,8 @@ export async function getBranchKpi(): Promise<BranchKpiRow[]> {
 }
 
 // ── getDashboard(scope) — DESIGN §6.1 нэгдсэн орц ─────────
+// Даваа/Баасан гарагийн хурлын өгөгдөл U7-ээс: lib/queries-crm-weekly.ts
+// (getWeekBoard, getMeetingAgenda) — энд давхардуулахгүй.
 
 export type ExecDashboard = {
   kpi: KpiMonthlyRow | null;
@@ -636,21 +522,6 @@ export type ExecDashboard = {
   violations: GoldenRuleRow[];
   arrears: ArrearsRow[];
   occupancy: OccupancyRow[];
-};
-
-export type MondayBoard = {
-  weekStart: string;
-  activity: WeeklyAgentActivity[];
-  moves: WeeklyStageMove[];
-  forecastByOwner: { owner_id: string; full_name: string | null; open_count: number; weighted_amount: number }[];
-};
-
-export type FridayBoard = {
-  weekStart: string;
-  activity: WeeklyAgentActivity[];
-  moves: WeeklyStageMove[];
-  lostReasons: LostReasonRow[];
-  violations: GoldenRuleRow[];
 };
 
 export async function getExecDashboard(): Promise<ExecDashboard> {
@@ -666,54 +537,15 @@ export async function getExecDashboard(): Promise<ExecDashboard> {
   return { kpi, funnel, forecast: sumForecast(forecastRows), violations, arrears, occupancy };
 }
 
-export async function getMondayBoard(): Promise<MondayBoard> {
-  const weekStart = weekStartIso();
-  const [activity, moves, forecastRows] = await Promise.all([
-    getWeeklyActivityByAgent(weekStart),
-    getWeeklyStageMoves(weekStart),
-    getForecastView(),
-  ]);
-  const byOwner = new Map<string, { owner_id: string; full_name: string | null; open_count: number; weighted_amount: number }>();
-  for (const f of forecastRows) {
-    const cur = byOwner.get(f.owner_id) ?? {
-      owner_id: f.owner_id,
-      full_name: null,
-      open_count: 0,
-      weighted_amount: 0,
-    };
-    cur.open_count += f.open_count;
-    cur.weighted_amount += Number(f.weighted_amount);
-    byOwner.set(f.owner_id, cur);
-  }
-  const forecastByOwner = [...byOwner.values()].sort((a, b) => b.weighted_amount - a.weighted_amount);
-  const names = await getNameMap(forecastByOwner.map((r) => r.owner_id));
-  for (const r of forecastByOwner) r.full_name = names.get(r.owner_id) ?? null;
-  return { weekStart, activity, moves, forecastByOwner };
-}
-
-export async function getFridayBoard(): Promise<FridayBoard> {
-  const weekStart = weekStartIso();
-  const [activity, moves, lostReasons, violations] = await Promise.all([
-    getWeeklyActivityByAgent(weekStart),
-    getWeeklyStageMoves(weekStart),
-    getLostReasons(),
-    getGoldenRuleRows(20),
-  ]);
-  return { weekStart, activity, moves, lostReasons, violations };
-}
-
-export type DashboardScope = "exec" | "agent" | "pm" | "monday" | "friday";
+export type DashboardScope = "exec" | "agent" | "pm";
 
 /** DESIGN §6.1-ийн нэг орц: scope-оор тохирох нэгтгэлийг буцаана. */
 export async function getDashboard(scope: DashboardScope) {
   switch (scope) {
     case "exec":
       return { scope, data: await getExecDashboard() } as const;
-    case "monday":
-      return { scope, data: await getMondayBoard() } as const;
-    case "friday":
-      return { scope, data: await getFridayBoard() } as const;
     case "pm": {
+
       const [arrears, occupancy, compliance] = await Promise.all([
         getArrearsAging(),
         getOccupancy(),
