@@ -23,6 +23,7 @@ import {
   ListChecks,
   Link2,
   Activity,
+  Home,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -54,6 +55,7 @@ const ITEMS: NavItem[] = [
   { segment: "/week", label: "Долоо хоног", icon: CalendarRange, officeRoles: LEAD_ROLES },
   { segment: "/team", label: "Миний баг", icon: UsersRound, agentOnly: true, roles: LEAD_ROLES },
   { segment: "/leads", label: "Сэжим", icon: Flame },
+  { segment: "/listings", label: "Сэжимтэй зар", icon: Home },
   { segment: "/contacts", label: "Харилцагч", icon: Users },
   { segment: "/properties", label: "Үл хөдлөх", icon: Building2 },
   { segment: "/pipeline", label: "Урсгал", icon: KanbanSquare },

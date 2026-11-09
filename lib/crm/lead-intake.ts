@@ -14,6 +14,7 @@ import {
   type SlaPolicy,
 } from "@/lib/crm/calendar";
 import { normalizeEmail, normalizePhone } from "@/lib/crm/normalize";
+import { fetchListingForLead, parseListingRef, toListingSnapshot } from "@/lib/crm/lead-listing";
 import { isOnLeave } from "@/lib/validation/crm-ownership";
 import { notifyCrm } from "@/lib/crm/notify";
 import type { Json } from "@/types/database";
@@ -428,12 +429,24 @@ export async function ingestLead(input: IngestLeadInput): Promise<IngestLeadResu
   if (contactId) {
     const { data: open } = await admin
       .from("crm_leads")
-      .select("id, owner_id")
+      .select("id, owner_id, listing_id, listing_snapshot")
       .eq("contact_id", contactId)
       .in("status", ["new", "active"])
       .limit(1)
       .maybeSingle();
     if (open) {
+      // Нэг сэжим нэг зартай тул зар холбогдоогүй нээлттэй сэжимд л энэ хандалтын зарыг холбоно.
+      const openListingRef = open.listing_id || open.listing_snapshot ? null : parseListingRef(input.channelRef);
+      const openListing = openListingRef ? await fetchListingForLead(admin, openListingRef) : null;
+      if (openListing) {
+        const { error: listingErr } = await admin
+          .from("crm_leads")
+          .update({ listing_id: openListing.id, listing_snapshot: toListingSnapshot(openListing, now) })
+          .eq("id", open.id)
+          .is("listing_id", null)
+          .is("listing_snapshot", null);
+        if (listingErr) console.error("ingestLead listing:", listingErr.message);
+      }
       if (open.owner_id) {
         await notifyCrm({
           officeId: input.officeId,
@@ -502,6 +515,10 @@ export async function ingestLead(input: IngestLeadInput): Promise<IngestLeadResu
   const env = await officeSlaEnv(admin, input.officeId, now);
   const due = firstContactDue(env, receivedAt, input.sourceCode);
 
+  // Зар олдохгүй бол (устсан, буруу лавлагаа) сэжмийг зарын холбоосгүй бүртгэнэ.
+  const listingRef = parseListingRef(input.channelRef);
+  const listing = listingRef ? await fetchListingForLead(admin, listingRef) : null;
+
   const { data: lead, error: leadErr } = await admin
     .from("crm_leads")
     .insert({
@@ -512,6 +529,8 @@ export async function ingestLead(input: IngestLeadInput): Promise<IngestLeadResu
       source_detail: input.sourceDetail,
       campaign_code: input.campaignCode ?? null,
       channel_ref: input.channelRef ?? null,
+      listing_id: listing?.id ?? null,
+      listing_snapshot: listing ? toListingSnapshot(listing, now) : null,
       status: "new",
       received_at: receivedAt.toISOString(),
       first_contact_due_at: due.toISOString(),

@@ -22,6 +22,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Search
     ownerId: sp.owner || undefined,
     branchId: sp.branch || undefined,
     sourceId: sp.source || undefined,
+    listingId: sp.listing || undefined,
     unprotected: sp.unprotected === "1",
     overdue: sp.overdue === "1",
     noContactHours: sp.nocontact === "1" ? settings.noContactHours : undefined,

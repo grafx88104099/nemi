@@ -2,6 +2,12 @@ import { createClient } from "@/lib/supabase/server";
 import { getSettingValue } from "@/lib/queries-crm-core";
 import { toIsoDate } from "@/lib/crm/calendar";
 import { conditionParam } from "@/lib/crm/rules";
+import {
+  LEAD_LIVE_LISTING_FIELDS,
+  parseListingSnapshot,
+  type LeadListingInfo,
+  type LeadListingSnapshot,
+} from "@/lib/crm/lead-listing";
 import { DEFAULT_RECONTACT_RANGES, DEFAULT_GRADE_THRESHOLDS, gradeFromScore, type GradeThresholds, type RecontactRanges } from "@/lib/crm/scoring";
 import type { Json } from "@/types/database";
 import type { ActivityRow } from "@/lib/queries-crm-pipeline";
@@ -37,11 +43,18 @@ export type LeadRow = {
   kyc_public_status: KycStatus;
   /** Холбоотой нээлттэй боломжийн шат (байхгүй бол null). */
   stage_name: string | null;
+  /** Зар устсан бол null ч listing_snapshot үлдэнэ. */
+  listing_id: string | null;
+  listing_snapshot: LeadListingSnapshot | null;
+  /** Идэвхтэй зарын одоогийн мэдээлэл; бусад үед null (хуулбарыг харуулна). */
+  listing_live: LeadListingInfo | null;
 };
 
 const LEAD_SELECT =
   "id, status, grade, score, owner_id, branch_id, source_id, next_step, next_step_date, " +
   "last_contact_at, first_contact_at, first_contact_due_at, received_at, unprotected, created_at, contact_id, " +
+  "listing_id, listing_snapshot, " +
+  `live_listing:listings!crm_leads_listing_id_fkey(${LEAD_LIVE_LISTING_FIELDS}), ` +
   "owner:profiles!crm_leads_owner_id_fkey(full_name), " +
   "source:crm_lookups!crm_leads_source_id_fkey(label), " +
   "contact:crm_contacts!crm_leads_contact_id_fkey(display_name, number, kyc_public_status, " +
@@ -50,8 +63,18 @@ const LEAD_SELECT =
 
 type RawLead = Omit<
   LeadRow,
-  "owner_name" | "source_label" | "contact_name" | "contact_number" | "contact_phone" | "kyc_public_status" | "stage_name"
+  | "owner_name"
+  | "source_label"
+  | "contact_name"
+  | "contact_number"
+  | "contact_phone"
+  | "kyc_public_status"
+  | "stage_name"
+  | "listing_snapshot"
+  | "listing_live"
 > & {
+  listing_snapshot: unknown;
+  live_listing: (LeadListingInfo & { status: string }) | null;
   owner: { full_name: string | null } | null;
   source: { label: string } | null;
   contact: {
@@ -64,7 +87,7 @@ type RawLead = Omit<
 };
 
 function toLeadRow(r: RawLead): LeadRow {
-  const { owner, source, contact, opps, ...rest } = r;
+  const { owner, source, contact, opps, listing_snapshot, live_listing, ...rest } = r;
   const phones = contact?.phones ?? [];
   const primary = phones.find((p) => p.is_primary) ?? phones[0];
   const open = (opps ?? []).find((o) => o.state === "open") ?? (opps ?? [])[0];
@@ -77,6 +100,8 @@ function toLeadRow(r: RawLead): LeadRow {
     contact_phone: primary?.raw ?? null,
     kyc_public_status: contact?.kyc_public_status ?? "pending",
     stage_name: open?.stage?.name ?? null,
+    listing_snapshot: parseListingSnapshot(listing_snapshot),
+    listing_live: live_listing?.status === "active" ? live_listing : null,
   };
 }
 
@@ -86,6 +111,7 @@ export type LeadFilters = {
   ownerId?: string;
   branchId?: string;
   sourceId?: string;
+  listingId?: string;
   contactType?: ContactType;
   unprotected?: boolean;
   /** Дараагийн үйлдэл хэтэрсэн нээлттэй сэжим. */
@@ -106,6 +132,7 @@ export async function getLeads(filters: LeadFilters = {}): Promise<LeadRow[]> {
   if (filters.ownerId) query = query.eq("owner_id", filters.ownerId);
   if (filters.branchId) query = query.eq("branch_id", filters.branchId);
   if (filters.sourceId) query = query.eq("source_id", filters.sourceId);
+  if (filters.listingId) query = query.eq("listing_id", filters.listingId);
   if (filters.unprotected) query = query.eq("unprotected", true);
   if (filters.overdue) {
     query = query.in("status", ["new", "active"]).lt("next_step_date", toIsoDate(new Date()));
@@ -175,6 +202,13 @@ export type LeadDetail = {
   created_by: string;
   created_by_name: string | null;
   created_at: string;
+  /** Зар устсан бол null ч listing_snapshot үлдэнэ. */
+  listing_id: string | null;
+  listing_snapshot: LeadListingSnapshot | null;
+  /** Амьд зарын төлөв; устсан эсвэл энэ хэрэглэгчид харагдахгүй бол null. */
+  listing_live_status: string | null;
+  /** Идэвхтэй зарын одоогийн мэдээлэл; бусад үед null (хуулбарыг харуулна). */
+  listing_live: Omit<LeadListingSnapshot, "captured_at"> | null;
   contact: {
     id: string;
     display_name: string;
@@ -195,6 +229,8 @@ const LEAD_DETAIL_SELECT =
   "id, status, grade, grade_override_reason, score, score_breakdown, owner_id, branch_id, " +
   "source_id, source_detail, campaign_code, channel_ref, next_step, next_step_task_id, next_step_date, " +
   "last_contact_at, first_contact_at, first_contact_due_at, received_at, unprotected, inactivity_days, created_by, created_at, " +
+  "listing_id, listing_snapshot, " +
+  `live_listing:listings!crm_leads_listing_id_fkey(${LEAD_LIVE_LISTING_FIELDS}), ` +
   "owner:profiles!crm_leads_owner_id_fkey(full_name), " +
   "creator:profiles!crm_leads_created_by_fkey(full_name), " +
   "source:crm_lookups!crm_leads_source_id_fkey(label), " +
@@ -214,7 +250,19 @@ export async function getLead(id: string): Promise<LeadDetail | null> {
   }
   if (!data) return null;
 
-  type Raw = Omit<LeadDetail, "owner_name" | "source_label" | "ownershipHistory" | "created_by_name" | "opportunities"> & {
+  type Raw = Omit<
+    LeadDetail,
+    | "owner_name"
+    | "source_label"
+    | "ownershipHistory"
+    | "created_by_name"
+    | "opportunities"
+    | "listing_snapshot"
+    | "listing_live_status"
+    | "listing_live"
+  > & {
+    listing_snapshot: unknown;
+    live_listing: (Omit<LeadListingSnapshot, "captured_at"> & { status: string }) | null;
     owner: { full_name: string | null } | null;
     creator: { full_name: string | null } | null;
     source: { label: string } | null;
@@ -245,12 +293,15 @@ export async function getLead(id: string): Promise<LeadDetail | null> {
     new_owner_name: new_owner?.full_name ?? null,
   }));
 
-  const { owner, creator, source, opps, ...rest } = raw;
+  const { owner, creator, source, opps, listing_snapshot, live_listing, ...rest } = raw;
   return {
     ...rest,
     owner_name: owner?.full_name ?? null,
     created_by_name: creator?.full_name ?? null,
     source_label: source?.label ?? null,
+    listing_snapshot: parseListingSnapshot(listing_snapshot),
+    listing_live_status: live_listing?.status ?? null,
+    listing_live: live_listing?.status === "active" ? live_listing : null,
     opportunities: (opps ?? []).map((o) => ({
       id: o.id,
       state: o.state,

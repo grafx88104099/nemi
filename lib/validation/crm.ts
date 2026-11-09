@@ -93,6 +93,8 @@ const leadSchema = z
     receivedAt: z.string().nullable().optional(),
     /** Эх сурвалжийн дэлгэрэнгүй (байгаа харилцагч дээр сэжим нээхэд). */
     sourceDetail: z.string().trim().max(500, "Эх сурвалжийн дэлгэрэнгүй хэт урт байна").nullable().optional(),
+    /** Сэжмийн сонирхсон nemi.mn зар; мэдээллийг сервер дахин уншина. */
+    listingId: z.string().uuid("Зар буруу байна").nullable().optional(),
     duplicateOverride: z.boolean().optional(),
   })
   .strict();
@@ -115,6 +117,21 @@ export function validateLeadInput(input: unknown): { data: LeadInput } | { error
     return { error: "Мэдээлэл авсан огноо буруу байна." };
   }
   return { data: d };
+}
+
+const setLeadListingSchema = z
+  .object({
+    leadId: z.string().uuid("Сэжимийн дугаар буруу байна"),
+    listingId: z.string().uuid("Зар буруу байна").nullable(),
+  })
+  .strict();
+
+export type SetLeadListingInput = z.infer<typeof setLeadListingSchema>;
+
+export function validateSetLeadListing(input: unknown): { data: SetLeadListingInput } | { error: string } {
+  const r = setLeadListingSchema.safeParse(input);
+  if (!r.success) return { error: firstError(r.error) };
+  return { data: r.data };
 }
 
 /** Идэвхжүүлэлт — алтан дүрмийн 5 бүрдэл (F-125). */

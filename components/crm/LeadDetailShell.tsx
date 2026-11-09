@@ -25,6 +25,7 @@ import { NeedProfileForm, NeedProfileSummary } from "@/components/crm/NeedProfil
 import { MatchList } from "@/components/crm/MatchList";
 import { OwnershipPanel } from "@/components/crm/OwnershipPanel";
 import { OpportunityCreateModal } from "@/components/crm/OpportunityCreateModal";
+import { LeadListingCard } from "@/components/crm/LeadListingCard";
 import { TrackEnrollButton } from "@/components/crm/mobile/TrackEnrollButton";
 import { activateLead, refreshLeadScore, setLeadGrade, setLeadStatus, updateLead } from "@/lib/actions/crm-leads";
 import { fmtDate, fmtDateTime } from "@/lib/format";
@@ -123,6 +124,11 @@ export function LeadDetailShell({
   const [stepDate, setStepDate] = useState(lead.next_step_date ?? "");
 
   const isOpen = lead.status === "new" || lead.status === "active";
+  // crm_leads_update RLS-ийн нөхцөл: маркетинг, МУТСТ зэрэг зөвхөн харах эрхтэд товч гарахгүй.
+  const canEditListing =
+    lead.owner_id === me ||
+    (!lead.owner_id && lead.created_by === me) ||
+    roles.some((r) => r === "team_lead" || r === "sales_director" || r === "ops_qc" || r === "ceo");
   const openOpp = lead.opportunities.find((o) => o.state === "open") ?? null;
   const stageName = openOpp?.stage_name ?? null;
   const primaryPhone = lead.contact.phones.find((p) => p.is_primary) ?? lead.contact.phones[0];
@@ -289,6 +295,8 @@ export function LeadDetailShell({
       />
 
       {data.duplicates.length > 0 ? <DuplicateHint hits={data.duplicates} basePath={basePath} /> : null}
+
+      <LeadListingCard lead={lead} canEdit={canEditListing} />
 
       {/* Дараагийн үйлдэл + эхний холболт */}
       <Card>

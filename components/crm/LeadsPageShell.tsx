@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Plus, Bookmark, Trash2, UserRoundCog, ShieldOff, Search, Phone, AlarmClock, PhoneMissed, Flame } from "lucide-react";
+import { Plus, Bookmark, Trash2, UserRoundCog, ShieldOff, Search, Phone, AlarmClock, PhoneMissed, Flame, Building2, X } from "lucide-react";
 
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,11 +14,13 @@ import { Modal } from "@/components/ui/modal";
 import { EmptyState } from "@/components/ui/empty-state";
 import { toast } from "@/components/ui/toast";
 import { LeadFormModal } from "@/components/crm/LeadFormModal";
+import { ListingThumb } from "@/components/crm/ListingPicker";
 import { bulkAssign } from "@/lib/actions/crm-leads";
 import { saveSavedView, deleteSavedView } from "@/lib/actions/crm-contacts";
 import { fmtDate } from "@/lib/format";
 import { formatPhone, normalizePhone } from "@/lib/crm/normalize";
 import { leadSlaState, slaStateLabel, ubToday } from "@/lib/crm/agent-core";
+import { listingPriceLabel } from "@/lib/crm/lead-listing";
 import type { LeadRow, AgentOption } from "@/lib/queries-crm-leads";
 import type { SavedViewRow } from "@/lib/queries-crm-contacts";
 import type { LookupRow, BranchRow } from "@/lib/queries-crm-core";
@@ -144,9 +146,12 @@ export function LeadsPageShell({
   }
 
   const today = ubToday(now);
+  const listingFilter = sp.get("listing");
+  const listingFilterRow = rows.find((r) => r.listing_id === listingFilter);
+  const listingFilterTitle = (listingFilterRow?.listing_live ?? listingFilterRow?.listing_snapshot)?.title ?? "Сонгосон зар";
   const filtered = Boolean(
     sp.get("q") || sp.get("status") || sp.get("grade") || sp.get("owner") || sp.get("branch") || sp.get("source") ||
-      sp.get("unprotected") || sp.get("overdue") || sp.get("nocontact")
+      sp.get("unprotected") || sp.get("overdue") || sp.get("nocontact") || listingFilter
   );
 
   function toggleChip(key: string) {
@@ -174,6 +179,25 @@ export function LeadsPageShell({
     const s = slaStateLabel(leadSlaState(r, now, noContactHours));
     if (!s || s.tone === "green") return null;
     return <Badge tone={s.tone}>{s.label}</Badge>;
+  }
+
+  function listingSummary(r: LeadRow) {
+    const listing = r.listing_live ?? r.listing_snapshot;
+    if (!listing) return null;
+    return (
+      <div className="flex min-w-0 items-center gap-2">
+        <ListingThumb photo={listing.photo} className="size-9 rounded-md" sizes="36px" />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-xs font-medium text-ink" title={listing.title}>
+            {listing.title}
+          </div>
+          <div className="text-xs text-muted">
+            {listingPriceLabel(listing)}
+            {r.listing_id ? "" : " · зар устсан"}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -229,6 +253,23 @@ export function LeadsPageShell({
               </button>
             </span>
           ))}
+        </div>
+      ) : null}
+
+      {listingFilter ? (
+        <div className="flex items-center gap-2 rounded-xl border border-brand-200 bg-brand-50 py-1 pl-3 pr-1">
+          <Building2 className="size-4 shrink-0 text-brand-700" />
+          <p className="min-w-0 flex-1 truncate text-sm text-muted">
+            Зараар шүүсэн: <span className="font-semibold text-ink">{listingFilterTitle}</span>
+          </p>
+          <button
+            type="button"
+            aria-label="Зарын шүүлт цэвэрлэх"
+            onClick={() => setParam({ listing: null })}
+            className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-muted transition hover:bg-brand-100 hover:text-ink"
+          >
+            <X className="size-4" />
+          </button>
         </div>
       ) : null}
 
@@ -344,6 +385,7 @@ export function LeadsPageShell({
                         {r.stage_name ? ` · ${r.stage_name}` : ""}
                         {r.owner_name ? ` · ${r.owner_name}` : " · Оноогдоогүй"}
                       </div>
+                      {r.listing_live || r.listing_snapshot ? <div className="mt-2">{listingSummary(r)}</div> : null}
                     </Link>
                     {phone ? (
                       <a
@@ -377,6 +419,7 @@ export function LeadsPageShell({
                         />
                       </th>
                       <th className="px-4 py-2.5 font-medium">Харилцагч</th>
+                      <th className="px-4 py-2.5 font-medium">Зар</th>
                       <th className="px-4 py-2.5 font-medium">Төлөв / Шат</th>
                       <th className="px-4 py-2.5 font-medium">Ангилал</th>
                       <th className="px-4 py-2.5 font-medium">Эзэмшигч</th>
@@ -418,6 +461,7 @@ export function LeadsPageShell({
                               ) : null}
                             </div>
                           </td>
+                          <td className="max-w-[220px] px-4 py-2.5">{listingSummary(r) ?? <span className="text-xs text-subtle">—</span>}</td>
                           <td className="px-4 py-2.5">
                             <Badge tone={CRM_LIFECYCLE_LABEL[r.status].tone}>{CRM_LIFECYCLE_LABEL[r.status].label}</Badge>
                             {r.stage_name ? <div className="mt-0.5 text-xs text-subtle">{r.stage_name}</div> : null}

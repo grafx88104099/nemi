@@ -1462,6 +1462,9 @@ export type Database = {
           recycle_reason: string | null;
           // U6 (20261107001600): ангилал шинэчлэгдсэн огноо
           grade_reviewed_at: string | null;
+          // 20261109000100: сэжмийн зар (хэлбэр: lib/crm/lead-listing.ts)
+          listing_id: string | null;
+          listing_snapshot: Json | null;
           created_by: string;
           created_at: string;
           updated_at: string;
@@ -1482,6 +1485,8 @@ export type Database = {
           recycled_by?: string | null;
           recycle_reason?: string | null;
           grade_reviewed_at?: string | null;
+          listing_id?: string | null;
+          listing_snapshot?: Json | null;
           campaign_code?: string | null;
           channel_ref?: string | null;
           status?: Database["public"]["Enums"]["crm_lifecycle"];

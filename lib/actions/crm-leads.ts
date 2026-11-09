@@ -38,6 +38,7 @@ import {
   officeSlaEnv,
   planLeadAssignment,
 } from "@/lib/crm/lead-intake";
+import { fetchListingForLead, LISTING_UNAVAILABLE_ERR, toListingSnapshot } from "@/lib/crm/lead-listing";
 import { registrarOwnsLead, ubToday } from "@/lib/crm/agent-core";
 import { notifyCrm } from "@/lib/crm/notify";
 import { LEAD_GRADES, LEAD_GRADE_LABEL, type LeadGrade, type CrmLifecycle } from "@/lib/constants-crm";
@@ -65,6 +66,8 @@ const GOLDEN_RULE_ERR =
 function revalidateLeadPaths(id?: string) {
   revalidatePath("/office/crm/leads");
   revalidatePath("/agent/crm/leads");
+  revalidatePath("/office/crm/listings");
+  revalidatePath("/agent/crm/listings");
   revalidatePath("/office/crm");
   revalidatePath("/agent/crm");
   if (id) {
@@ -347,6 +350,12 @@ export async function createLead(raw: LeadInput): Promise<CreateLeadResult> {
     return { error: "Дараагийн үйлдлийн огноо өнгөрсөн байж болохгүй." };
   }
 
+  // Зарыг серверт дахин уншина (клиентэд найдахгүй) — шинэ харилцагч үүсгэхээс өмнө.
+  const listing = input.listingId
+    ? await fetchListingForLead(supabase, input.listingId, { activeOnly: true })
+    : null;
+  if (input.listingId && !listing) return { error: LISTING_UNAVAILABLE_ERR };
+
   // Анхны оноо — байгаа профайл (байвал) дээр.
   const settings = await scoreSettings();
   let suggestedGrade: LeadGrade = "d";
@@ -411,6 +420,8 @@ export async function createLead(raw: LeadInput): Promise<CreateLeadResult> {
       source_detail: sourceDetail?.trim() || null,
       campaign_code: input.campaignCode,
       channel_ref: input.channelRef,
+      listing_id: listing?.id ?? null,
+      listing_snapshot: listing ? toListingSnapshot(listing, now) : null,
       status: "new",
       grade,
       grade_override_reason: input.grade && input.grade !== suggestedGrade ? input.gradeOverrideReason : null,

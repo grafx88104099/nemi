@@ -12,8 +12,10 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/toast";
 import { ClaimCard } from "@/components/crm/ClaimCard";
 import { QuickCapture } from "@/components/crm/QuickCapture";
+import { ListingPicker } from "@/components/crm/ListingPicker";
 import { createLead } from "@/lib/actions/crm-leads";
 import { findDuplicatesMasked, type MaskedDuplicate } from "@/lib/actions/crm-ownership";
+import { LISTING_UNAVAILABLE_ERR, type LeadListingOption } from "@/lib/crm/lead-listing";
 import type { LookupRow, BranchRow } from "@/lib/queries-crm-core";
 import {
   CONTACT_KINDS,
@@ -66,6 +68,11 @@ export function LeadFormModal({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  const [listing, setListing] = useState<LeadListingOption | null>(null);
+  const [noListing, setNoListing] = useState(false);
+  const [listingError, setListingError] = useState<string | null>(null);
+  const listingSection = useRef<HTMLDivElement>(null);
 
   const [existing, setExisting] = useState<MaskedDuplicate | null>(null);
   const [kind, setKind] = useState<ContactKind>("person");
@@ -125,8 +132,17 @@ export function LeadFormModal({
     setTypes((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
   }
 
+  function showListingError(message: string) {
+    setListingError(message);
+    // Товч footer-т байдаг тул маягт доош гүйлгэгдсэн үед алдаа харагдахгүй үлдэж болно.
+    listingSection.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
   function reset() {
     setError(null);
+    setListing(null);
+    setNoListing(false);
+    setListingError(null);
     setExisting(null);
     setKind("person");
     setLastName("");
@@ -157,6 +173,11 @@ export function LeadFormModal({
 
   function submit() {
     setError(null);
+    setListingError(null);
+    if (!listing && !noListing) {
+      showListingError("Зар сонгоно уу, эсвэл «Тодорхой зар байхгүй»-г тэмдэглэнэ үү.");
+      return;
+    }
     if (!sourceId) {
       setError("Эх сурвалж сонгоно уу — эх сурвалжгүй сэжим бүртгэхгүй.");
       return;
@@ -176,6 +197,7 @@ export function LeadFormModal({
     startTransition(async () => {
       const res = await createLead({
         contactId: existing?.contact_id ?? null,
+        listingId: listing?.id ?? null,
         newContact: existing
           ? null
           : {
@@ -204,6 +226,11 @@ export function LeadFormModal({
         receivedAt: sameDay && receivedAt ? new Date(receivedAt).toISOString() : null,
         duplicateOverride: dupOverride,
       });
+      if (res.error === LISTING_UNAVAILABLE_ERR) {
+        setListing(null);
+        showListingError(res.error);
+        return;
+      }
       if (res.error) {
         setError(res.error);
         if (res.maskedDuplicates?.length) setHits(res.maskedDuplicates);
@@ -229,7 +256,7 @@ export function LeadFormModal({
       onClose={close}
       title="Шинэ сэжим бүртгэх"
       footer={
-        <div className="flex w-full items-center justify-end gap-2">
+        <div className="flex w-full items-center justify-end gap-2 border-t border-line p-4">
           <Button variant="ghost" onClick={close} disabled={pending}>
             Болих
           </Button>
@@ -239,12 +266,49 @@ export function LeadFormModal({
         </div>
       }
     >
-      <div className="space-y-4">
+      <div className="space-y-4 p-4">
         {error ? (
           <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">
             {error}
           </p>
         ) : null}
+
+        <div ref={listingSection} className="space-y-2">
+          {noListing ? null : (
+            <Field label="Зар (заавал)" hint="Сэжим nemi.mn-ийн аль зартай холбоотойг сонгоно.">
+              <ListingPicker
+                value={listing}
+                onChange={(next) => {
+                  setListing(next);
+                  setListingError(null);
+                }}
+                disabled={pending}
+              />
+            </Field>
+          )}
+          <label className="flex items-start gap-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={noListing}
+              disabled={pending}
+              onChange={(e) => {
+                setNoListing(e.target.checked);
+                setListing(null);
+                setListingError(null);
+              }}
+              className="mt-0.5 size-4 shrink-0 rounded border-line"
+            />
+            <span>
+              <span className="font-medium">Тодорхой зар байхгүй</span>
+              <span className="block text-xs text-muted">Зараа зарах эзэмшигч, эсвэл тодорхой зар сонгоогүй худалдан авагч</span>
+            </span>
+          </label>
+          {listingError ? (
+            <p className="text-xs text-danger" role="alert">
+              {listingError}
+            </p>
+          ) : null}
+        </div>
 
         {existing ? (
           <div className="flex items-center justify-between gap-2 rounded-xl border border-brand-200 bg-brand-50 px-3 py-2">

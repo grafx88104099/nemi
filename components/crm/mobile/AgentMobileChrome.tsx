@@ -9,6 +9,7 @@ import {
   CalendarRange,
   FileSignature,
   Flame,
+  Home,
   KanbanSquare,
   Link2,
   ListChecks,
@@ -65,6 +66,7 @@ const MENU_SECTIONS: { title: string; items: Item[] }[] = [
     title: "Бүртгэл",
     items: [
       { href: `${BASE}/leads`, label: "Сэжим", icon: Flame },
+      { href: `${BASE}/listings`, label: "Сэжимтэй зар", icon: Home },
       { href: `${BASE}/contacts`, label: "Харилцагч", icon: Users },
       { href: `${BASE}/properties`, label: "Үл хөдлөх", icon: Building2 },
       { href: `${BASE}/pipeline`, label: "Урсгал", icon: KanbanSquare },
