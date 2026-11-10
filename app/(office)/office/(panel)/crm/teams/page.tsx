@@ -30,7 +30,7 @@ export default async function TeamsPage() {
     );
   }
 
-  const overview = await getTeamsOverview();
+  const overview = await getTeamsOverview(ctx.profileId);
 
   return (
     <div className="p-4 sm:p-8">

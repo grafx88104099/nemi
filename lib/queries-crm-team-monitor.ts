@@ -249,6 +249,8 @@ export type TeamProgressSection = ProgressGroup<TeamMonitorMember> & {
   team: { id: string; name: string; branchName: string | null };
   /** null = ахлагч томилоогүй (эсвэл бичигдсэн хүн гишүүн биш, ахлагчийн дүргүй). */
   lead: TeamMonitorMember | null;
+  /** Оффисын админы батлалт хүлээж буй ахлагчийн санал (гишүүнээс нэр нь); null = санал алга. */
+  pendingLead: { name: string } | null;
 };
 
 export type OfficeTeamsProgress = {
@@ -263,9 +265,15 @@ export type OfficeTeamsProgress = {
 };
 
 const PROGRESS_TEAM_SELECT =
-  "id, name, lead_profile_id, branch:crm_branches!crm_teams_branch_id_office_id_fkey(name)";
+  "id, name, lead_profile_id, pending_lead_profile_id, branch:crm_branches!crm_teams_branch_id_office_id_fkey(name)";
 
-type RawProgressTeam = { id: string; name: string; lead_profile_id: string | null; branch: { name: string } | null };
+type RawProgressTeam = {
+  id: string;
+  name: string;
+  lead_profile_id: string | null;
+  pending_lead_profile_id: string | null;
+  branch: { name: string } | null;
+};
 
 /**
  * Оффисын бүх баг ба багт хуваарилагдаагүй агентуудын явц — getTeamMonitor-той ижил
@@ -304,6 +312,10 @@ export async function getOfficeTeamsProgress(officeId: string, now: Date = new D
     teams: grouped.teams.map(({ team, members, totals }) => ({
       team: { id: team.id, name: team.name, branchName: team.branch?.name ?? null },
       lead: members.find((m) => m.isLead) ?? null,
+      // Санал болгогдсон хүн багийн идэвхтэй гишүүн байх ёстой (гарвал DB саналыг цэвэрлэнэ).
+      pendingLead: team.pending_lead_profile_id
+        ? { name: members.find((m) => m.profileId === team.pending_lead_profile_id)?.name ?? "Хэрэглэгч" }
+        : null,
       members,
       totals,
     })),

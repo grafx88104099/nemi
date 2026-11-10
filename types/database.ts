@@ -804,6 +804,10 @@ export type Database = {
           branch_id: string;
           name: string;
           lead_profile_id: string | null;
+          // 20261110000100: ахлагчийн санал (оффисын админ батална). profiles руу FK-гүй — embed хийхгүй.
+          pending_lead_profile_id: string | null;
+          lead_proposed_by: string | null;
+          lead_proposed_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -812,6 +816,9 @@ export type Database = {
           branch_id: string;
           name: string;
           lead_profile_id?: string | null;
+          pending_lead_profile_id?: string | null;
+          lead_proposed_by?: string | null;
+          lead_proposed_at?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["crm_teams"]["Insert"]>;
@@ -4911,8 +4918,16 @@ export type Database = {
       crm_team_save: { Args: { p_id: string | null; p_name: string; p_branch: string }; Returns: string };
       /** p_team = null бол багаас гаргана. CRM-д шинээр бүртгэгдсэн бол true. */
       crm_team_assign_member: { Args: { p_team: string | null; p_profile: string }; Returns: boolean };
-      /** p_profile = null бол ахлагчийг чөлөөлнө. */
+      /** p_profile = null бол ахлагчийг чөлөөлнө (баг удирдах эрхтэй хэн ч); томилох нь зөвхөн оффисын админ. */
       crm_team_set_lead: { Args: { p_team: string; p_profile: string | null }; Returns: undefined };
+      // === Ахлагчийг оффисын админ батална (20261110000100) ===
+      crm_can_approve_team_lead: { Args: Record<string, never>; Returns: boolean };
+      /** Оффисын админ бол шууд томилно ('applied'), бусад үед санал болгоно ('pending'). */
+      crm_team_propose_lead: { Args: { p_team: string; p_profile: string }; Returns: string };
+      /** Зөвхөн оффисын админ. Батлагдсан ахлагчийн profile_id. */
+      crm_team_approve_lead: { Args: { p_team: string }; Returns: string };
+      /** Оффисын админ татгалзана эсвэл санал болгогч өөрийн саналаа цуцлана. */
+      crm_team_reject_lead: { Args: { p_team: string }; Returns: undefined };
       staff_chat_directory: {
         Args: Record<string, never>;
         Returns: {

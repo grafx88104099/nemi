@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight, Crown, UsersRound } from "lucide-react";
+import { ChevronRight, Crown, Hourglass, UsersRound } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { BackLink } from "@/components/ui/back-link";
@@ -126,7 +126,7 @@ export async function TeamsProgress({
             />
           ) : null}
 
-          {data.teams.map(({ team, lead, ...group }) => (
+          {data.teams.map(({ team, lead, pendingLead, ...group }) => (
             <Card key={team.id}>
               <CardBody className={SECTION_BODY}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -144,7 +144,7 @@ export async function TeamsProgress({
                     Багийн явц <ChevronRight className="size-4" aria-hidden />
                   </ButtonLink>
                 </div>
-                <div className="mt-2">
+                <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
                   {lead ? (
                     <Badge tone="brand" className="max-w-full">
                       <Crown aria-hidden className="shrink-0" />
@@ -153,6 +153,15 @@ export async function TeamsProgress({
                   ) : (
                     <Badge tone="amber">Ахлагч томилоогүй</Badge>
                   )}
+                  {pendingLead ? (
+                    // Нэр нь гол мэдээлэл — 375px-д тасрахгүй, багтахгүй бол мөр шилжинэ.
+                    <Badge tone="blue" className="max-w-full rounded-xl">
+                      <Hourglass aria-hidden className="shrink-0" />
+                      <span className="min-w-0 whitespace-normal break-words">
+                        Батлалт хүлээж буй ахлагч: {pendingLead.name}
+                      </span>
+                    </Badge>
+                  ) : null}
                 </div>
                 <GroupBody
                   group={group}

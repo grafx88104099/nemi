@@ -3,7 +3,20 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowRightLeft, ChevronRight, Crown, Pencil, Plus, Search, UserMinus, UsersRound } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRightLeft,
+  Check,
+  ChevronRight,
+  Crown,
+  Hourglass,
+  Pencil,
+  Plus,
+  Search,
+  UserMinus,
+  UsersRound,
+  X,
+} from "lucide-react";
 
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +27,16 @@ import { Field, Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
-import { assignTeamMember, removeTeamMember, saveCrmTeam, setTeamLead } from "@/lib/actions/crm-teams";
+import {
+  approveTeamLead,
+  assignTeamMember,
+  rejectTeamLead,
+  removeTeamMember,
+  saveCrmTeam,
+  setTeamLead,
+} from "@/lib/actions/crm-teams";
+import { leadActionFor, leadChangeToast } from "@/lib/crm/team-lead";
+import { fmtDateTime } from "@/lib/format";
 import type { ManagedTeam, TeamPerson, TeamsOverview } from "@/lib/queries-crm-teams";
 
 const FALLBACK_ERR = "Алдаа гарлаа. Дахин оролдоно уу.";
@@ -22,11 +44,13 @@ const MODAL_FOOTER = "flex justify-end gap-2 border-t border-line p-4";
 
 type TeamDraft = { id?: string; name: string; branchId: string };
 type MoveDraft = { member: TeamPerson; team: ManagedTeam; toTeamId: string };
+type SuccessToast = { title: string; description?: string };
 
 export function TeamsManager({
   teams,
   unassigned,
   branches,
+  canApproveLead,
   canViewProgress,
 }: TeamsOverview & { canViewProgress: boolean }) {
   const router = useRouter();
@@ -45,12 +69,19 @@ export function TeamsManager({
     ? unassigned.filter((p) => p.name.toLowerCase().includes(q) || p.phone?.includes(q))
     : unassigned;
   const allVisibleSelected = visible.length > 0 && visible.every((p) => selectedIds.includes(p.profileId));
+  const pendingProposals = teams.filter((t) => t.pendingLead).length;
 
-  function run(fn: () => Promise<{ ok: boolean; error?: string }>, success: string, after?: () => void) {
+  function run<R extends { ok: boolean; error?: string }>(
+    fn: () => Promise<R>,
+    success: string | SuccessToast | ((res: R) => SuccessToast),
+    after?: () => void
+  ) {
     startTransition(async () => {
       const res = await fn();
       if (res.ok) {
-        toast.success(success);
+        const msg =
+          typeof success === "string" ? { title: success } : typeof success === "function" ? success(res) : success;
+        toast.success(msg.title, { description: msg.description });
         after?.();
       } else {
         toast.error(res.error ?? FALLBACK_ERR);
@@ -83,9 +114,49 @@ export function TeamsManager({
     });
   }
 
+  /** Оффисын админ шууд томилно; бусад нь санал болгож, оффисын админы батлалтыг хүлээнэ. */
   function makeLead(team: ManagedTeam, member: TeamPerson) {
-    if (team.lead && !window.confirm(`«${team.lead.name}»-г ахлагчаас чөлөөлж, «${member.name}»-г ахлагч болгох уу?`)) return;
-    run(() => setTeamLead({ teamId: team.id, profileId: member.profileId }), `${member.name} багийн ахлагч боллоо`);
+    const proposal = team.pendingLead;
+    const question = canApproveLead
+      ? [
+          team.lead
+            ? `«${team.lead.name}»-г ахлагчаас чөлөөлж, «${member.name}»-г ахлагч болгох уу?`
+            : `«${member.name}»-г ахлагч болгох уу?`,
+          proposal ? `«${proposal.name}»-г ахлагчаар санал болгосон нь хүчингүй болно.` : "",
+        ]
+      : [
+          `«${member.name}»-г ахлагчаар санал болгох уу?`,
+          team.lead ? `Оффисын админ батлавал «${team.lead.name}» ахлагчаас чөлөөлөгдөнө.` : "",
+          proposal ? `Одоогийн санал («${proposal.name}») солигдоно.` : "",
+        ];
+    if ((team.lead || proposal) && !window.confirm(question.filter(Boolean).join(" "))) return;
+    run(
+      () => setTeamLead({ teamId: team.id, profileId: member.profileId }),
+      (res) => leadChangeToast(res.status ?? "applied", member.name)
+    );
+  }
+
+  function approveLead(team: ManagedTeam) {
+    const proposal = team.pendingLead;
+    if (!proposal) return;
+    const leadNote = team.lead ? ` «${team.lead.name}» ахлагчаас чөлөөлөгдөнө.` : "";
+    if (!window.confirm(`«${proposal.name}»-г «${team.name}» багийн ахлагчаар батлах уу?${leadNote}`)) return;
+    // Хуудсанд харсан саналыг дамжуулна — хооронд нь солигдсон бол action батлахгүй.
+    run(
+      () => approveTeamLead(team.id, proposal.profileId),
+      (res) => leadChangeToast("applied", res.name ?? proposal.name)
+    );
+  }
+
+  /** Оффисын админ татгалзана; санал болгогч өөрийн саналаа цуцлана. */
+  function dropProposal(team: ManagedTeam) {
+    const proposal = team.pendingLead;
+    if (!proposal) return;
+    const question = canApproveLead
+      ? `«${proposal.name}»-г ахлагчаар санал болгосныг татгалзах уу?`
+      : `«${proposal.name}»-г ахлагчаар санал болгосноо цуцлах уу?`;
+    if (!window.confirm(question)) return;
+    run(() => rejectTeamLead(team.id, proposal.profileId), canApproveLead ? "Саналыг татгалзлаа" : "Саналыг цуцаллаа");
   }
 
   function clearLead(team: ManagedTeam, name: string) {
@@ -94,7 +165,12 @@ export function TeamsManager({
   }
 
   function removeMember(team: ManagedTeam, member: TeamPerson) {
-    const leadNote = team.lead?.profileId === member.profileId ? " Ахлагчийн эрх нь цуцлагдана." : "";
+    const leadNote =
+      team.lead?.profileId === member.profileId
+        ? " Ахлагчийн эрх нь цуцлагдана."
+        : team.pendingLead?.profileId === member.profileId
+          ? " Ахлагчийн санал цуцлагдана."
+          : "";
     if (!window.confirm(`«${member.name}»-г «${team.name}» багаас гаргах уу?${leadNote}`)) return;
     run(() => removeTeamMember(member.profileId), `${member.name} багаас гарлаа`);
   }
@@ -120,9 +196,15 @@ export function TeamsManager({
   return (
     <div className="mt-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted">
-          {teams.length} баг · {unassigned.length} агент багт ороогүй
-        </p>
+        <div className="min-w-0">
+          <p className="text-sm text-muted">
+            {teams.length} баг · {unassigned.length} агент багт ороогүй
+            {pendingProposals > 0 ? ` · ${pendingProposals} ахлагчийн санал батлалт хүлээж байна` : ""}
+          </p>
+          {!canApproveLead ? (
+            <p className="text-xs text-subtle">Таны санал болгосон ахлагчийг оффисын админ батална.</p>
+          ) : null}
+        </div>
         <Button size="sm" disabled={activeBranches.length === 0} onClick={openNewTeam}>
           <Plus className="size-4" /> Баг нэмэх
         </Button>
@@ -261,14 +343,56 @@ export function TeamsManager({
                   ) : null}
                 </div>
 
+                {team.pendingLead ? (
+                  <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800">
+                    <p className="flex items-start gap-2">
+                      <Hourglass className="mt-0.5 size-4 shrink-0" aria-hidden />
+                      <span className="min-w-0 break-words">
+                        Ахлагчаар санал болгосон: <span className="font-semibold">{team.pendingLead.name}</span>
+                        {team.pendingLead.proposedBy ? ` — ${team.pendingLead.proposedBy.name}` : ""}
+                        {team.pendingLead.proposedAt ? `, ${fmtDateTime(team.pendingLead.proposedAt)}` : ""}
+                      </span>
+                    </p>
+                    <p className="mt-1 text-xs sm:pl-6">
+                      {canApproveLead
+                        ? `Батлавал ахлагчийн эрх тэр даруй идэвхжинэ.${team.lead ? ` «${team.lead.name}» ахлагчаас чөлөөлөгдөнө.` : ""}`
+                        : "Оффисын админ батлах хүртэл ахлагчийн эрх идэвхжихгүй."}
+                    </p>
+                    {canApproveLead || team.pendingLead.byViewer ? (
+                      <div className="mt-2 flex flex-wrap gap-2 sm:pl-6">
+                        {canApproveLead ? (
+                          <>
+                            <Button size="sm" disabled={pending} onClick={() => approveLead(team)}>
+                              <Check className="size-4" aria-hidden /> Батлах
+                            </Button>
+                            <Button size="sm" variant="outline" disabled={pending} onClick={() => dropProposal(team)}>
+                              <X className="size-4" aria-hidden /> Татгалзах
+                            </Button>
+                          </>
+                        ) : (
+                          <Button size="sm" variant="outline" disabled={pending} onClick={() => dropProposal(team)}>
+                            Саналыг цуцлах
+                          </Button>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
                 {team.brokenLead ? (
                   <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
                     <p className="flex items-start gap-2">
                       <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
                       <span>
                         {team.brokenLead.isMember
-                          ? `«${team.brokenLead.name}» ахлагчаар бичигдсэн ч ахлагчийн эрх олгогдоогүй байна. Жагсаалтаас «Ахлагч болгох»-ыг дарна уу.`
-                          : `«${team.brokenLead.name}» ахлагчаар бичигдсэн ч энэ багийн гишүүн биш тул гишүүдийн сэжмийг харахгүй. Чөлөөлөөд гишүүдээс ахлагч томилно уу.`}
+                          ? `«${team.brokenLead.name}» ахлагчаар бичигдсэн ч ахлагчийн эрх олгогдоогүй байна. ${
+                              canApproveLead
+                                ? "Жагсаалтаас «Ахлагч болгох»-ыг дарна уу."
+                                : "Оффисын админ жагсаалтаас «Ахлагч болгох»-оор засна."
+                            }`
+                          : `«${team.brokenLead.name}» ахлагчаар бичигдсэн ч энэ багийн гишүүн биш тул гишүүдийн сэжмийг харахгүй. Чөлөөлөөд гишүүдээс ахлагч ${
+                              canApproveLead ? "томилно" : "санал болгоно"
+                            } уу.`}
                       </span>
                     </p>
                     {!team.brokenLead.isMember ? (
@@ -291,9 +415,12 @@ export function TeamsManager({
                   <ul className="mt-2 divide-y divide-line">
                     {team.members.map((member) => {
                       const isLead = team.lead?.profileId === member.profileId;
+                      const isProposed = team.pendingLead?.profileId === member.profileId;
+                      const leadAction = leadActionFor(member.profileId, team, canApproveLead);
                       return (
-                        <li key={member.profileId} className="flex flex-col gap-2 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="flex min-w-0 items-center gap-2.5">
+                        // Товчнууд нэрийн хажууд багтахгүй бол (1024px, lg aside) доош буух — нэр шахагдахгүй.
+                        <li key={member.profileId} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-2.5">
+                          <div className="flex min-w-0 grow basis-48 items-center gap-2.5">
                             <Avatar initials={member.initials} src={member.avatarSrc} size="sm" className="shrink-0" />
                             <div className="min-w-0">
                               <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm font-medium text-ink">
@@ -306,20 +433,26 @@ export function TeamsManager({
                                   // Ажилтны тохиргооноос дүр авсан бол ахлагч биш ч гишүүдийн сэжмийг хардаг.
                                   <Badge tone="amber">Ахлагчийн эрхтэй</Badge>
                                 ) : null}
+                                {isProposed ? (
+                                  <Badge tone="blue">
+                                    <Hourglass aria-hidden /> Батлагдахыг хүлээж байна
+                                  </Badge>
+                                ) : null}
                               </p>
                               {member.phone ? <p className="truncate text-xs text-subtle">{member.phone}</p> : null}
                             </div>
                           </div>
-                          <div className="flex shrink-0 flex-wrap items-center gap-1">
+                          <div className="flex max-w-full flex-wrap items-center gap-1">
                             {isLead ? (
                               <Button size="sm" variant="ghost" disabled={pending} onClick={() => clearLead(team, member.name)}>
                                 Чөлөөлөх
                               </Button>
-                            ) : (
+                            ) : leadAction ? (
                               <Button size="sm" variant="secondary" disabled={pending} onClick={() => makeLead(team, member)}>
-                                <Crown className="size-4" aria-hidden /> Ахлагч болгох
+                                <Crown className="size-4" aria-hidden />{" "}
+                                {leadAction === "appoint" ? "Ахлагч болгох" : "Ахлагчаар санал болгох"}
                               </Button>
-                            )}
+                            ) : null}
                             {teams.length > 1 ? (
                               <Button
                                 size="sm"
@@ -439,6 +572,10 @@ export function TeamsManager({
             {moveDraft.team.lead?.profileId === moveDraft.member.profileId ? (
               <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 Энэ хүн «{moveDraft.team.name}» багийн ахлагч. Шилжвэл ахлагчаас чөлөөлөгдөнө.
+              </p>
+            ) : moveDraft.team.pendingLead?.profileId === moveDraft.member.profileId ? (
+              <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                Энэ хүнийг «{moveDraft.team.name}» багийн ахлагчаар санал болгосон. Шилжвэл санал цуцлагдана.
               </p>
             ) : null}
           </div>
