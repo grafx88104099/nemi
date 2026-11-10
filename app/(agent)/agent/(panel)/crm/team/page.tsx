@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
+import { UsersRound } from "lucide-react";
 
 import { getCrmStaffContext } from "@/lib/queries-crm-core";
 import { canLeadWeekly } from "@/lib/queries-crm-weekly";
 import { normalizeWeekParam } from "@/lib/crm/week";
+import { ButtonLink } from "@/components/ui/button";
 import { CrmNav } from "@/components/crm/CrmNav";
 import { WeekCycleView, weekTab } from "@/components/crm/weekly/WeekCycleView";
 
@@ -31,10 +33,19 @@ export default async function AgentTeamWeekPage({
       <div className="mb-4 border-b border-line">
         <CrmNav roles={ctx.roles} basePath={BASE} />
       </div>
-      <h1 className="mb-1 text-2xl font-extrabold text-ink">Миний баг</h1>
-      <p className="mb-4 text-sm text-muted">
-        Багийн долоо хоногийн карт, хурал, дүн шинжилгээ. Бүх тоо CRM-ийн бүртгэлээс — гараар засагдахгүй.
-      </p>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="mb-1 text-2xl font-extrabold text-ink">Миний баг</h1>
+          <p className="text-sm text-muted">
+            Багийн долоо хоногийн карт, хурал, дүн шинжилгээ. Бүх тоо CRM-ийн бүртгэлээс — гараар засагдахгүй.
+          </p>
+        </div>
+        {ctx.roles.includes("team_lead") && ctx.teamId ? (
+          <ButtonLink href={`${BASE}/team/monitor`} size="sm">
+            <UsersRound className="size-4" aria-hidden /> Гишүүдийн сэжим, явц
+          </ButtonLink>
+        ) : null}
+      </div>
       <WeekCycleView
         basePath={`${BASE}/team`}
         week={week}

@@ -46,6 +46,8 @@ type NavItem = {
   agentOnly?: boolean;
   /** Оффисын панельд өөр дүрийн шүүлт (агентын панельд roles хэрэглэнэ). */
   officeRoles?: CrmRole[];
+  /** true = crm_can_manage_teams() шаардана (office_admin нь CRM дүр биш тул roles-оор шүүж болохгүй). */
+  teamManagersOnly?: boolean;
 };
 
 const LEAD_ROLES: CrmRole[] = ["team_lead", "sales_director", "ops_qc", "ceo", "sysadmin"];
@@ -93,6 +95,7 @@ const ITEMS: NavItem[] = [
     roles: ["ops_qc", "sales_director", "ceo", "sysadmin", "team_lead", "marketing", "finance"],
   },
   { segment: "/vitals", label: "Ажлын эрүүл мэнд", icon: Activity, officeOnly: true, roles: LEAD_ROLES },
+  { segment: "/teams", label: "Багууд", icon: UsersRound, officeOnly: true, teamManagersOnly: true },
   { segment: "/reports", label: "Тайлан", icon: BarChart3, officeOnly: true },
   {
     segment: "/settings",
@@ -103,11 +106,20 @@ const ITEMS: NavItem[] = [
   },
 ];
 
-export function CrmNav({ roles, basePath = "/office/crm" }: { roles: CrmRole[]; basePath?: string }) {
+export function CrmNav({
+  roles,
+  basePath = "/office/crm",
+  canManageTeams = false,
+}: {
+  roles: CrmRole[];
+  basePath?: string;
+  canManageTeams?: boolean;
+}) {
   const pathname = usePathname();
   const isOffice = basePath.startsWith("/office");
   const visible = ITEMS.filter((it) => {
     if (isOffice ? it.agentOnly : it.officeOnly) return false;
+    if (it.teamManagersOnly && !canManageTeams) return false;
     const need = isOffice && it.officeRoles ? it.officeRoles : it.roles;
     return !need || need.some((r) => roles.includes(r));
   });

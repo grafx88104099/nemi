@@ -4186,6 +4186,68 @@ export type Database = {
         Relationships: [];
       };
       // === U9: crm-reports-uat — view-үүдээ Views хэсэгт нэм ===
+      // === Оффисын дотоод чат (20261109000200) ===
+      // Зөвхөн гишүүд уншина; клиент зөвхөн мессеж нэмнэ, бусад нь staff_chat_* RPC-ээр.
+      staff_chats: {
+        Row: {
+          id: string;
+          office_id: string;
+          kind: Database["public"]["Enums"]["staff_chat_kind"];
+          name: string | null;
+          team_id: string | null;
+          direct_key: string | null;
+          created_by: string | null;
+          last_message_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id: string;
+          kind: Database["public"]["Enums"]["staff_chat_kind"];
+          name?: string | null;
+          team_id?: string | null;
+          direct_key?: string | null;
+          created_by?: string | null;
+          last_message_at?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["staff_chats"]["Insert"]>;
+        Relationships: [];
+      };
+      staff_chat_members: {
+        Row: {
+          chat_id: string;
+          profile_id: string;
+          joined_at: string;
+          last_read_at: string | null;
+        };
+        Insert: {
+          chat_id: string;
+          profile_id: string;
+          joined_at?: string;
+          last_read_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["staff_chat_members"]["Insert"]>;
+        Relationships: [];
+      };
+      staff_chat_messages: {
+        Row: {
+          id: string;
+          chat_id: string;
+          sender_id: string | null;
+          body: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          chat_id: string;
+          sender_id?: string | null;
+          body: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["staff_chat_messages"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: {
       // === U8: crm-automation-notify (000800) ===
@@ -4829,6 +4891,65 @@ export type Database = {
         Args: { p_from: string; p_to: string };
         Returns: { agent_id: string; agent_name: string; team_id: string | null; branch_id: string | null; meaningful_contacts: number; showings_done: number; offers: number; contracts: number; closed_won: number }[];
       };
+      // === Баг, оффисын дотоод чат (20261109000200, 000300) ===
+      crm_can_manage_teams: { Args: Record<string, never>; Returns: boolean };
+      crm_team_roster: {
+        Args: Record<string, never>;
+        Returns: {
+          profile_id: string;
+          name: string;
+          /** agents.avatar (үсгэн товчлол) ч байж болно — lib/crm/avatar.ts-ээр ялгана. */
+          avatar_url: string | null;
+          phone: string | null;
+          user_role: Database["public"]["Enums"]["user_role"];
+          staff_id: string | null;
+          team_id: string | null;
+          is_active: boolean | null;
+          roles: Database["public"]["Enums"]["crm_role"][] | null;
+        }[];
+      };
+      crm_team_save: { Args: { p_id: string | null; p_name: string; p_branch: string }; Returns: string };
+      /** p_team = null бол багаас гаргана. CRM-д шинээр бүртгэгдсэн бол true. */
+      crm_team_assign_member: { Args: { p_team: string | null; p_profile: string }; Returns: boolean };
+      /** p_profile = null бол ахлагчийг чөлөөлнө. */
+      crm_team_set_lead: { Args: { p_team: string; p_profile: string | null }; Returns: undefined };
+      staff_chat_directory: {
+        Args: Record<string, never>;
+        Returns: {
+          profile_id: string;
+          name: string;
+          avatar_url: string | null;
+          role: Database["public"]["Enums"]["user_role"];
+          team_name: string | null;
+        }[];
+      };
+      staff_chat_open_direct: { Args: { p_other: string }; Returns: string };
+      staff_chat_create_group: { Args: { p_name: string; p_members: string[] }; Returns: string };
+      staff_chat_add_members: { Args: { p_chat: string; p_members: string[] }; Returns: undefined };
+      staff_chat_leave: { Args: { p_chat: string }; Returns: undefined };
+      staff_chat_mark_read: { Args: { p_chat: string }; Returns: undefined };
+      staff_chat_list: {
+        Args: Record<string, never>;
+        Returns: {
+          id: string;
+          kind: Database["public"]["Enums"]["staff_chat_kind"];
+          name: string | null;
+          team_id: string | null;
+          last_message_at: string | null;
+          created_at: string;
+          last_body: string | null;
+          last_sender_id: string | null;
+          unread_count: number;
+          member_count: number;
+          other_profile_id: string | null;
+          other_name: string | null;
+          other_avatar_url: string | null;
+        }[];
+      };
+      staff_chat_people: {
+        Args: { p_chat: string };
+        Returns: { profile_id: string; name: string; avatar_url: string | null; last_read_at: string | null }[];
+      };
     };
     Enums: {
       user_role: "buyer" | "agent" | "office_admin" | "admin";
@@ -4916,6 +5037,7 @@ export type Database = {
       crm_expense_bearer: "tenant" | "landlord" | "pmc";
       crm_inspection_kind: "move_in" | "move_out" | "periodic";
       crm_doc_category: "contract" | "payment_proof" | "ownership" | "identity" | "photo" | "act" | "aml" | "other";
+      staff_chat_kind: "direct" | "group" | "team";
     };
     CompositeTypes: Record<string, never>;
   };

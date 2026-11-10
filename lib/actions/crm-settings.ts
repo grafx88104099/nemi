@@ -56,6 +56,7 @@ function revalidateSettings() {
   revalidatePath("/office/crm/settings/notifications");
   revalidatePath("/office/crm/settings/lookups");
   revalidatePath("/office/crm/settings/staff");
+  revalidatePath("/office/crm/teams");
 }
 
 function firstIssue(err: z.ZodError, fallback: string): string {
@@ -177,15 +178,14 @@ const teamSchema = z
     id: z.string().uuid().optional(),
     branchId: z.string().uuid("Салбар сонгоно уу"),
     name: z.string().trim().min(1, "Нэр оруулна уу").max(120),
-    leadProfileId: z.string().uuid().nullable(),
   })
   .strict();
 
+/** Нэр, салбар. Ахлагчийг зөвхөн crm_team_set_lead (Багууд хуудас) — дүрийг хамт олгоно. */
 export async function saveTeam(raw: {
   id?: string;
   branchId: string;
   name: string;
-  leadProfileId: string | null;
 }): Promise<{ ok: boolean; error?: string }> {
   const supabase = await createClient();
   const ctx = await settingsContext(supabase);
@@ -197,14 +197,13 @@ export async function saveTeam(raw: {
   const { error } = input.id
     ? await supabase
         .from("crm_teams")
-        .update({ branch_id: input.branchId, name: input.name, lead_profile_id: input.leadProfileId })
+        .update({ branch_id: input.branchId, name: input.name })
         .eq("id", input.id)
         .eq("office_id", ctx.officeId)
     : await supabase.from("crm_teams").insert({
         office_id: ctx.officeId,
         branch_id: input.branchId,
         name: input.name,
-        lead_profile_id: input.leadProfileId,
       });
   if (error) {
     console.error("saveTeam:", error.message);

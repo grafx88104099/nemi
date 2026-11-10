@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Pencil } from "lucide-react";
 
@@ -107,6 +108,13 @@ export function ZonesShell({
               </Button>
             ) : null}
           </div>
+          <p className="mt-1 text-xs text-subtle">
+            Гишүүд, ахлагчийг{" "}
+            <Link href="/office/crm/teams" className="font-medium text-brand-700 hover:underline">
+              «Багууд» хуудсанд
+            </Link>{" "}
+            удирдана.
+          </p>
           <div className="mt-3 flex flex-wrap gap-2">
             {teams.length === 0 ? <p className="text-sm text-subtle">Баг бүртгэгдээгүй.</p> : null}
             {teams.map((t) => (
@@ -267,7 +275,7 @@ export function ZonesShell({
               onClick={() =>
                 teamDraft &&
                 run(
-                  () => saveTeam({ id: teamDraft.id, branchId: teamDraft.branchId, name: teamDraft.name, leadProfileId: null }),
+                  () => saveTeam({ id: teamDraft.id, branchId: teamDraft.branchId, name: teamDraft.name }),
                   () => setTeamDraft(null)
                 )
               }
