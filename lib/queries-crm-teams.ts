@@ -33,6 +33,14 @@ export type TeamsOverview = {
   branches: BranchRow[];
 };
 
+// crm_is_manager(): office_admin, sysadmin баг удирдаж чадах ч сэжим уншихгүй тул багийн явцыг харахгүй.
+const TEAM_PROGRESS_ROLES: CrmRole[] = ["sales_director", "ops_qc", "ceo"];
+
+/** Багийн явцын хуудсанд (гишүүдийн сэжим) орох эрх; дээр нь canManageTeams() шаардлагатай. */
+export function hasTeamProgressRole(roles: CrmRole[]): boolean {
+  return roles.some((r) => TEAM_PROGRESS_ROLES.includes(r));
+}
+
 export async function canManageTeams(): Promise<boolean> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("crm_can_manage_teams");

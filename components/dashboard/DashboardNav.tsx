@@ -2,9 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Building2, Users, UserCircle, FolderKanban, ClipboardList } from "lucide-react";
+import { LayoutDashboard, Building2, Users, UserCircle, FolderKanban, ClipboardList, MessagesSquare } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { StaffChatUnreadBadge } from "@/components/staff-chat/StaffChatUnreadBadge";
+
+const CHAT_HREF = "/agent/chat";
 
 const items = [
   ["/agent", "Тойм", LayoutDashboard],
@@ -12,6 +15,7 @@ const items = [
   ["/agent/crm", "CRM", Users],
   ["/agent/projects", "Төслүүд", FolderKanban],
   ["/agent/tasks", "Даалгавар", ClipboardList],
+  [CHAT_HREF, "Чат", MessagesSquare],
   ["/agent/profile", "Миний профайл", UserCircle],
 ] as const;
 
@@ -31,6 +35,7 @@ export function DashboardNav() {
             )}
           >
             <Icon className="size-4" /> {label}
+            {href === CHAT_HREF ? <StaffChatUnreadBadge /> : null}
           </Link>
         );
       })}

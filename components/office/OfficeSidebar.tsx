@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  MessagesSquare,
   Settings,
   UserCheck,
 } from "lucide-react";
@@ -22,12 +23,16 @@ import { cn } from "@/lib/utils";
 import { Logo } from "@/components/brand/Logo";
 import { Drawer } from "@/components/ui/drawer";
 import { LogoutButton } from "@/components/auth/LogoutButton";
+import { StaffChatUnreadBadge } from "@/components/staff-chat/StaffChatUnreadBadge";
+
+const CHAT_HREF = "/office/chat";
 
 const items = [
   { href: "/office", label: "Хяналтын самбар", icon: LayoutDashboard },
   { href: "/office/about", label: "Танилцуулга", icon: BookOpen },
   { href: "/office/agents", label: "Агентууд", icon: UserCheck },
   { href: "/office/tasks", label: "Даалгавар", icon: ClipboardList },
+  { href: CHAT_HREF, label: "Чат", icon: MessagesSquare },
   { href: "/office/crm", label: "CRM", icon: Briefcase },
   { href: "/office/projects", label: "Төсөл", icon: FolderKanban },
   { href: "/office/listings", label: "Зарууд", icon: Home },
@@ -57,6 +62,7 @@ function NavList({ unread = 0, hasCrm = false, onNavigate }: { unread?: number; 
       {items.map((it) => (
         <Link key={it.href} href={it.href} onClick={onNavigate} className={linkClass(isActive(it.href))}>
           <it.icon className="size-4" /> {it.label}
+          {it.href === CHAT_HREF ? <StaffChatUnreadBadge className="ml-auto" /> : null}
         </Link>
       ))}
       {hasCrm ? (

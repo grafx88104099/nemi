@@ -31,11 +31,13 @@ export function ZonesShell({
   teams,
   zones,
   canEdit,
+  canManageTeams,
 }: {
   branches: BranchRow[];
   teams: TeamRow[];
   zones: ZoneRow[];
   canEdit: boolean;
+  canManageTeams: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -108,13 +110,15 @@ export function ZonesShell({
               </Button>
             ) : null}
           </div>
-          <p className="mt-1 text-xs text-subtle">
-            Гишүүд, ахлагчийг{" "}
-            <Link href="/office/crm/teams" className="font-medium text-brand-700 hover:underline">
-              «Багууд» хуудсанд
-            </Link>{" "}
-            удирдана.
-          </p>
+          {canManageTeams ? (
+            <p className="mt-1 text-xs text-subtle">
+              Гишүүд, ахлагчийг{" "}
+              <Link href="/office/crm/teams" className="font-medium text-brand-700 hover:underline">
+                «Багууд» хуудсанд
+              </Link>{" "}
+              удирдана.
+            </p>
+          ) : null}
           <div className="mt-3 flex flex-wrap gap-2">
             {teams.length === 0 ? <p className="text-sm text-subtle">Баг бүртгэгдээгүй.</p> : null}
             {teams.map((t) => (

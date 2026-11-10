@@ -1,4 +1,5 @@
 import { getBranches, getTeams, getZones } from "@/lib/queries-crm-core";
+import { canManageTeams } from "@/lib/queries-crm-teams";
 import { requireSettingsAccess } from "../_lib/guard";
 import { ZonesShell } from "./ZonesShell";
 
@@ -6,7 +7,12 @@ export const metadata = { title: "Бүс, салбар, баг — CRM тохи�
 
 export default async function ZoneSettingsPage() {
   const ctx = await requireSettingsAccess();
-  const [branches, teams, zones] = await Promise.all([getBranches(), getTeams(), getZones()]);
+  const [branches, teams, zones, canManage] = await Promise.all([
+    getBranches(),
+    getTeams(),
+    getZones(),
+    canManageTeams(),
+  ]);
 
   return (
     <div className="p-8">
@@ -14,7 +20,7 @@ export default async function ZoneSettingsPage() {
       <p className="text-sm text-muted">
         Бүсийн лавлах объектын салбарыг автоматаар тогтооно; өөрчлөлт бүр аудитад бүртгэгдэнэ.
       </p>
-      <ZonesShell branches={branches} teams={teams} zones={zones} canEdit={ctx.canEdit} />
+      <ZonesShell branches={branches} teams={teams} zones={zones} canEdit={ctx.canEdit} canManageTeams={canManage} />
     </div>
   );
 }

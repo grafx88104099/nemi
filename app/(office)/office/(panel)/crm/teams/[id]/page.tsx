@@ -1,16 +1,13 @@
 import { redirect } from "next/navigation";
 
 import { getCrmStaffContext } from "@/lib/queries-crm-core";
-import { canManageTeams } from "@/lib/queries-crm-teams";
+import { canManageTeams, hasTeamProgressRole } from "@/lib/queries-crm-teams";
 import { TeamMonitor } from "@/components/crm/teams/TeamMonitor";
 import { EmptyState } from "@/components/ui/empty-state";
 
 export const metadata = { title: "Багийн явц — CRM" };
 
 const TEAMS_PATH = "/office/crm/teams";
-
-// crm_is_manager(): office_admin, sysadmin баг удирдаж чадах ч сэжим уншихгүй тул тэгээр харуулахгүй.
-const LEAD_VIEW_ROLES = ["sales_director", "ops_qc", "ceo"];
 
 export default async function OfficeTeamMonitorPage({
   params,
@@ -22,7 +19,7 @@ export default async function OfficeTeamMonitorPage({
   const ctx = await getCrmStaffContext();
   if (!ctx) redirect("/office");
 
-  const allowed = (await canManageTeams()) && ctx.roles.some((r) => LEAD_VIEW_ROLES.includes(r));
+  const allowed = hasTeamProgressRole(ctx.roles) && (await canManageTeams());
   if (!allowed) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-8">

@@ -23,7 +23,12 @@ const MODAL_FOOTER = "flex justify-end gap-2 border-t border-line p-4";
 type TeamDraft = { id?: string; name: string; branchId: string };
 type MoveDraft = { member: TeamPerson; team: ManagedTeam; toTeamId: string };
 
-export function TeamsManager({ teams, unassigned, branches }: TeamsOverview) {
+export function TeamsManager({
+  teams,
+  unassigned,
+  branches,
+  canViewProgress,
+}: TeamsOverview & { canViewProgress: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [query, setQuery] = useState("");
@@ -246,12 +251,14 @@ export function TeamsManager({ teams, unassigned, branches }: TeamsOverview) {
                   ) : (
                     <Badge tone="amber">Ахлагч томилоогүй</Badge>
                   )}
-                  <Link
-                    href={`/office/crm/teams/${team.id}`}
-                    className="inline-flex min-h-9 items-center gap-1 text-sm font-semibold text-brand-700 hover:underline"
-                  >
-                    Сэжим, явц хянах <ChevronRight className="size-4" aria-hidden />
-                  </Link>
+                  {canViewProgress ? (
+                    <Link
+                      href={`/office/crm/teams/${team.id}`}
+                      className="inline-flex min-h-9 items-center gap-1 text-sm font-semibold text-brand-700 hover:underline"
+                    >
+                      Сэжим, явц хянах <ChevronRight className="size-4" aria-hidden />
+                    </Link>
+                  ) : null}
                 </div>
 
                 {team.brokenLead ? (
@@ -295,6 +302,9 @@ export function TeamsManager({ teams, unassigned, branches }: TeamsOverview) {
                                   <Badge tone="brand">
                                     <Crown aria-hidden /> Ахлагч
                                   </Badge>
+                                ) : member.roles.includes("team_lead") ? (
+                                  // Ажилтны тохиргооноос дүр авсан бол ахлагч биш ч гишүүдийн сэжмийг хардаг.
+                                  <Badge tone="amber">Ахлагчийн эрхтэй</Badge>
                                 ) : null}
                               </p>
                               {member.phone ? <p className="truncate text-xs text-subtle">{member.phone}</p> : null}

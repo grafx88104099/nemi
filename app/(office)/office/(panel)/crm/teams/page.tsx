@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { getCrmStaffContext } from "@/lib/queries-crm-core";
-import { canManageTeams, getTeamsOverview } from "@/lib/queries-crm-teams";
+import { canManageTeams, getTeamsOverview, hasTeamProgressRole } from "@/lib/queries-crm-teams";
 import { TeamsManager } from "@/components/crm/teams/TeamsManager";
 import { EmptyState } from "@/components/ui/empty-state";
 
@@ -31,7 +31,7 @@ export default async function TeamsPage() {
       <p className="text-sm text-muted">
         Оффисын агентуудыг багт хуваарилж, ахлагч томилно. Ахлагч гишүүдийнхээ бүртгэсэн сэжим, явцыг хянана.
       </p>
-      <TeamsManager {...overview} />
+      <TeamsManager {...overview} canViewProgress={hasTeamProgressRole(ctx.roles)} />
     </div>
   );
 }

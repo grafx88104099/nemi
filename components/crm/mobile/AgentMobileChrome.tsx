@@ -14,6 +14,7 @@ import {
   Link2,
   ListChecks,
   Menu,
+  MessagesSquare,
   Percent,
   Plus,
   QrCode,
@@ -29,6 +30,7 @@ import {
 
 import { Drawer } from "@/components/ui/drawer";
 import { CommandPalette, openCommandPalette } from "@/components/crm/CommandPalette";
+import { StaffChatUnreadBadge } from "@/components/staff-chat/StaffChatUnreadBadge";
 import type { CrmRole } from "@/lib/constants-crm";
 import { cn } from "@/lib/utils";
 import { showBottomNav } from "@/lib/crm/today";
@@ -47,6 +49,7 @@ import { registerSw } from "./pwa";
  */
 
 const BASE = "/agent/crm";
+const CHAT_HREF = "/agent/chat";
 const LEAD_ROLES: CrmRole[] = ["team_lead", "sales_director", "ops_qc", "ceo", "sysadmin"];
 
 type Item = { href: string; label: string; icon: typeof Flame; roles?: CrmRole[] };
@@ -60,6 +63,7 @@ const MENU_SECTIONS: { title: string; items: Item[] }[] = [
       { href: `${BASE}/worklists/tracks`, label: "Ажлын цуваа", icon: Repeat },
       { href: `${BASE}/week`, label: "Долоо хоног", icon: CalendarRange },
       { href: "/agent/tasks", label: "Даалгавар", icon: ListTodo },
+      { href: CHAT_HREF, label: "Чат", icon: MessagesSquare },
     ],
   },
   {
@@ -193,6 +197,7 @@ export function AgentMobileChrome({ roles }: { roles: CrmRole[] }) {
                       )}
                     >
                       <i.icon className="size-4 text-brand-600" /> {i.label}
+                      {i.href === CHAT_HREF ? <StaffChatUnreadBadge className="ml-auto" /> : null}
                     </Link>
                   ))}
                 </div>
