@@ -1,14 +1,14 @@
 import { redirect } from "next/navigation";
 
 import { getCrmStaffContext } from "@/lib/queries-crm-core";
-import { canManageTeams, hasTeamProgressRole } from "@/lib/queries-crm-teams";
-import { TeamMonitor } from "@/components/crm/teams/TeamMonitor";
-import { EmptyState } from "@/components/ui/empty-state";
+import { hasTeamProgressRole } from "@/lib/queries-crm-teams";
+import { TeamMonitor, TeamProgressNoAccess } from "@/components/crm/teams/TeamMonitor";
 
 export const metadata = { title: "Багийн явц — CRM" };
 
 const TEAMS_PATH = "/office/crm/teams";
 
+/** Сэжмийн RLS-ийг дагана: баг удирдах эрхгүй ч (жишээ нь CEO) явцын дүртэй бол харна. */
 export default async function OfficeTeamMonitorPage({
   params,
   searchParams,
@@ -18,19 +18,7 @@ export default async function OfficeTeamMonitorPage({
 }) {
   const ctx = await getCrmStaffContext();
   if (!ctx) redirect("/office");
-
-  const allowed = hasTeamProgressRole(ctx.roles) && (await canManageTeams());
-  if (!allowed) {
-    return (
-      <div className="mx-auto max-w-3xl px-4 py-8">
-        <EmptyState
-          title="Багийн явцыг харах эрх алга"
-          description="Гишүүдийн сэжим харахад CRM-д «Борлуулалт хариуцсан захирал», «Үйл ажиллагаа-ЧМТ» эсвэл «CEO» дүр шаардлагатай."
-          action={{ label: "Багууд", href: TEAMS_PATH }}
-        />
-      </div>
-    );
-  }
+  if (!hasTeamProgressRole(ctx.roles)) return <TeamProgressNoAccess backHref={TEAMS_PATH} backLabel="Багууд" />;
 
   const [{ id }, { member }] = await Promise.all([params, searchParams]);
 
@@ -41,8 +29,8 @@ export default async function OfficeTeamMonitorPage({
         memberId={member}
         basePath="/office/crm"
         monitorPath={`${TEAMS_PATH}/${id}`}
-        backHref={TEAMS_PATH}
-        backLabel="Багууд"
+        backHref={`${TEAMS_PATH}/progress`}
+        backLabel="Бүх багийн явц"
         emptyHint="Багт ороогүй агентуудаас «Багууд» хуудсанд нэмнэ үү."
       />
     </div>

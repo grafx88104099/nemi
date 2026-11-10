@@ -4,10 +4,14 @@ import { personAvatar } from "@/lib/crm/avatar";
 import { isOpenLeadStatus, parseListingSnapshot } from "@/lib/crm/lead-listing";
 import {
   countMemberLeads,
+  countMemberOpportunities,
+  groupTeamProgress,
+  inTeamProgressScope,
   isNextStepOverdue,
   monitorPeriods,
-  type MemberLeadCounts,
+  type MonitorMetrics,
   type MonitorOwnedLead,
+  type ProgressGroup,
 } from "@/lib/crm/team-monitor";
 import type { CrmLifecycle, CrmRole, LeadGrade } from "@/lib/constants-crm";
 
@@ -16,14 +20,14 @@ import type { CrmLifecycle, CrmRole, LeadGrade } from "@/lib/constants-crm";
  * ахлагч зөвхөн өөрийн багийн гишүүдийн, удирдлага оффисын сэжмийг харна.
  */
 
-export type TeamMonitorMember = MemberLeadCounts & {
+export type TeamMonitorMember = MonitorMetrics & {
   profileId: string;
+  /** null = багт хуваарилагдаагүй. */
+  teamId: string | null;
   name: string;
   avatarSrc: string | null;
   initials: string;
   isLead: boolean;
-  openOpps: number;
-  wonOpps: number;
   lastActivityAt: string | null;
 };
 
@@ -107,12 +111,13 @@ function groupBy<T>(rows: T[], key: (row: T) => string): Map<string, T[]> {
 }
 
 const MEMBER_SELECT =
-  "profile_id, roles, profile:profiles!crm_staff_profile_id_fkey(full_name, avatar_url)";
+  "profile_id, team_id, roles, profile:profiles!crm_staff_profile_id_fkey(full_name, avatar_url, role)";
 
 type RawMember = {
   profile_id: string;
+  team_id: string | null;
   roles: CrmRole[] | null;
-  profile: { full_name: string | null; avatar_url: string | null } | null;
+  profile: { full_name: string | null; avatar_url: string | null; role: string | null } | null;
 };
 
 const OWNED_LEAD_SELECT =
@@ -136,6 +141,83 @@ async function latestActivity(supabase: ServerClient, profileId: string): Promis
   return { at: data?.occurred_at ?? null, failed: !!error };
 }
 
+type MembersProgress = Pick<TeamMonitorData, "members" | "unavailable" | "truncated">;
+
+/**
+ * Гишүүдийн сэжим, боломжийг нэг удаа (хуудаслан) уншиж кодонд гишүүнээр бүлэглэнэ —
+ * баг тус бүрээр давтан уншихгүй. isRecordedLead: өөрийн багийн ахлагчаар бичигдсэн эсэх.
+ */
+async function readMembersProgress(
+  label: string,
+  supabase: ServerClient,
+  officeId: string,
+  staff: RawMember[],
+  isRecordedLead: (s: RawMember) => boolean,
+  now: Date
+): Promise<MembersProgress> {
+  if (staff.length === 0) return { members: [], unavailable: false, truncated: false };
+
+  const ids = staff.map((s) => s.profile_id);
+  const periods = monitorPeriods(now);
+  const [agentsRes, settings, owned, registered, opps, activity] = await Promise.all([
+    supabase.from("agents").select("profile_id, display_name, avatar, avatar_url").eq("office_id", officeId).in("profile_id", ids),
+    getLeadCardSettings(),
+    readAll<OwnedLeadRow>(`${label} owned`, (from, to) =>
+      supabase.from("crm_leads").select(OWNED_LEAD_SELECT).in("owner_id", ids).in("status", ["new", "active"]).order("id").range(from, to)
+    ),
+    readAll<RegisteredLeadRow>(`${label} registered`, (from, to) =>
+      supabase
+        .from("crm_leads")
+        .select("id, created_by, created_at")
+        .in("created_by", ids)
+        .gte("created_at", periods.since.toISOString())
+        .order("id")
+        .range(from, to)
+    ),
+    readAll<OppRow>(`${label} opportunities`, (from, to) =>
+      supabase.from("crm_opportunities").select("id, owner_id, state").in("owner_id", ids).in("state", ["open", "won"]).order("id").range(from, to)
+    ),
+    Promise.all(ids.map((id) => latestActivity(supabase, id))),
+  ]);
+  if (agentsRes.error) console.error(`${label} agents:`, agentsRes.error.message);
+
+  const agentByProfile = new Map((agentsRes.data ?? []).map((a) => [a.profile_id, a]));
+  const ownedByMember = groupBy(owned.rows, (l) => l.owner_id);
+  const registeredByMember = groupBy(registered.rows, (l) => l.created_by);
+  const oppsByMember = groupBy(opps.rows, (o) => o.owner_id);
+
+  const members = staff
+    .map((s, i): TeamMonitorMember => {
+      const agent = agentByProfile.get(s.profile_id);
+      const name = agent?.display_name || s.profile?.full_name || "Хэрэглэгч";
+      const { src, initials } = personAvatar(agent?.avatar_url ?? agent?.avatar ?? s.profile?.avatar_url ?? null, name);
+      return {
+        profileId: s.profile_id,
+        teamId: s.team_id,
+        name,
+        avatarSrc: src,
+        initials,
+        isLead: isRecordedLead(s) && !!s.roles?.includes("team_lead"),
+        ...countMemberLeads(
+          ownedByMember.get(s.profile_id) ?? [],
+          registeredByMember.get(s.profile_id) ?? [],
+          periods,
+          now,
+          settings.noContactHours
+        ),
+        ...countMemberOpportunities(oppsByMember.get(s.profile_id) ?? []),
+        lastActivityAt: activity[i].at,
+      };
+    })
+    .sort((a, b) => Number(b.isLead) - Number(a.isLead) || a.name.localeCompare(b.name, "mn"));
+
+  return {
+    members,
+    unavailable: owned.failed || registered.failed || opps.failed || activity.some((a) => a.failed),
+    truncated: owned.truncated || registered.truncated || opps.truncated,
+  };
+}
+
 /** Баг олдоогүй эсвэл хандах эрхгүй бол null. */
 export async function getTeamMonitor(teamId: string, now: Date = new Date()): Promise<TeamMonitorData | null> {
   const supabase = await createClient();
@@ -150,70 +232,86 @@ export async function getTeamMonitor(teamId: string, now: Date = new Date()): Pr
   const { office_id: officeId, lead_profile_id: leadProfileId } = teamRes.data;
   const team = { id: teamRes.data.id, name: teamRes.data.name };
   const staff = (staffRes.data ?? []) as unknown as RawMember[];
-  if (staffRes.error || staff.length === 0) {
-    return { team, members: [], unavailable: !!staffRes.error, truncated: false };
-  }
+  if (staffRes.error) return { team, members: [], unavailable: true, truncated: false };
 
-  const ids = staff.map((s) => s.profile_id);
-  const periods = monitorPeriods(now);
-  const [agentsRes, settings, owned, registered, opps, activity] = await Promise.all([
-    supabase.from("agents").select("profile_id, display_name, avatar, avatar_url").eq("office_id", officeId).in("profile_id", ids),
-    getLeadCardSettings(),
-    readAll<OwnedLeadRow>("getTeamMonitor owned", (from, to) =>
-      supabase.from("crm_leads").select(OWNED_LEAD_SELECT).in("owner_id", ids).in("status", ["new", "active"]).order("id").range(from, to)
-    ),
-    readAll<RegisteredLeadRow>("getTeamMonitor registered", (from, to) =>
-      supabase
-        .from("crm_leads")
-        .select("id, created_by, created_at")
-        .in("created_by", ids)
-        .gte("created_at", periods.since.toISOString())
-        .order("id")
-        .range(from, to)
-    ),
-    readAll<OppRow>("getTeamMonitor opportunities", (from, to) =>
-      supabase.from("crm_opportunities").select("id, owner_id, state").in("owner_id", ids).in("state", ["open", "won"]).order("id").range(from, to)
-    ),
-    Promise.all(ids.map((id) => latestActivity(supabase, id))),
+  const progress = await readMembersProgress(
+    "getTeamMonitor",
+    supabase,
+    officeId,
+    staff,
+    (s) => s.profile_id === leadProfileId,
+    now
+  );
+  return { team, ...progress };
+}
+
+export type TeamProgressSection = ProgressGroup<TeamMonitorMember> & {
+  team: { id: string; name: string; branchName: string | null };
+  /** null = ахлагч томилоогүй (эсвэл бичигдсэн хүн гишүүн биш, ахлагчийн дүргүй). */
+  lead: TeamMonitorMember | null;
+};
+
+export type OfficeTeamsProgress = {
+  teams: TeamProgressSection[];
+  /** Багт хуваарилагдаагүй идэвхтэй агентууд. */
+  unassigned: ProgressGroup<TeamMonitorMember>;
+  totals: MonitorMetrics;
+  memberCount: number;
+  /** Уншилт алдаатай бол тоог 0 гэж харуулж болохгүй. */
+  unavailable: boolean;
+  truncated: boolean;
+};
+
+const PROGRESS_TEAM_SELECT =
+  "id, name, lead_profile_id, branch:crm_branches!crm_teams_branch_id_office_id_fkey(name)";
+
+type RawProgressTeam = { id: string; name: string; lead_profile_id: string | null; branch: { name: string } | null };
+
+/**
+ * Оффисын бүх баг ба багт хуваарилагдаагүй агентуудын явц — getTeamMonitor-той ижил
+ * тодорхойлолт, сэжим, боломжийг нэг удаа уншина. Дуудах хуудас эрхийг шалгана.
+ */
+export async function getOfficeTeamsProgress(officeId: string, now: Date = new Date()): Promise<OfficeTeamsProgress> {
+  const supabase = await createClient();
+  const [teamsRes, staffRes] = await Promise.all([
+    supabase.from("crm_teams").select(PROGRESS_TEAM_SELECT).eq("office_id", officeId).order("name"),
+    supabase.from("crm_staff").select(MEMBER_SELECT).eq("office_id", officeId).eq("is_active", true),
   ]);
-  if (agentsRes.error) console.error("getTeamMonitor agents:", agentsRes.error.message);
+  if (teamsRes.error) console.error("getOfficeTeamsProgress teams:", teamsRes.error.message);
+  if (staffRes.error) console.error("getOfficeTeamsProgress staff:", staffRes.error.message);
 
-  const agentByProfile = new Map((agentsRes.data ?? []).map((a) => [a.profile_id, a]));
-  const ownedByMember = groupBy(owned.rows, (l) => l.owner_id);
-  const registeredByMember = groupBy(registered.rows, (l) => l.created_by);
-  const oppsByMember = groupBy(opps.rows, (o) => o.owner_id);
+  const teams = (teamsRes.data ?? []) as unknown as RawProgressTeam[];
+  const teamIds = new Set(teams.map((t) => t.id));
+  const leadByTeam = new Map(teams.map((t) => [t.id, t.lead_profile_id]));
+  const staff = ((staffRes.data ?? []) as unknown as RawMember[]).filter((s) =>
+    inTeamProgressScope({ teamId: s.team_id, roles: s.roles, userRole: s.profile?.role ?? null }, teamIds)
+  );
 
-  const members = staff
-    .map((s, i): TeamMonitorMember => {
-      const agent = agentByProfile.get(s.profile_id);
-      const name = agent?.display_name || s.profile?.full_name || "Хэрэглэгч";
-      const { src, initials } = personAvatar(agent?.avatar_url ?? agent?.avatar ?? s.profile?.avatar_url ?? null, name);
-      const memberOpps = oppsByMember.get(s.profile_id) ?? [];
-      return {
-        profileId: s.profile_id,
-        name,
-        avatarSrc: src,
-        initials,
-        isLead: s.profile_id === leadProfileId && !!s.roles?.includes("team_lead"),
-        ...countMemberLeads(
-          ownedByMember.get(s.profile_id) ?? [],
-          registeredByMember.get(s.profile_id) ?? [],
-          periods,
-          now,
-          settings.noContactHours
-        ),
-        openOpps: memberOpps.filter((o) => o.state === "open").length,
-        wonOpps: memberOpps.filter((o) => o.state === "won").length,
-        lastActivityAt: activity[i].at,
-      };
-    })
-    .sort((a, b) => Number(b.isLead) - Number(a.isLead) || a.name.localeCompare(b.name, "mn"));
+  const progress: MembersProgress =
+    teamsRes.error || staffRes.error
+      ? { members: [], unavailable: true, truncated: false }
+      : await readMembersProgress(
+          "getOfficeTeamsProgress",
+          supabase,
+          officeId,
+          staff,
+          (s) => !!s.team_id && leadByTeam.get(s.team_id) === s.profile_id,
+          now
+        );
 
+  const grouped = groupTeamProgress(teams, progress.members);
   return {
-    team,
-    members,
-    unavailable: owned.failed || registered.failed || opps.failed || activity.some((a) => a.failed),
-    truncated: owned.truncated || registered.truncated || opps.truncated,
+    teams: grouped.teams.map(({ team, members, totals }) => ({
+      team: { id: team.id, name: team.name, branchName: team.branch?.name ?? null },
+      lead: members.find((m) => m.isLead) ?? null,
+      members,
+      totals,
+    })),
+    unassigned: grouped.unassigned,
+    totals: grouped.totals,
+    memberCount: progress.members.length,
+    unavailable: progress.unavailable,
+    truncated: progress.truncated,
   };
 }
 

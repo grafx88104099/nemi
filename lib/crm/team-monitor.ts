@@ -80,3 +80,72 @@ export function countMemberLeads(
     noNextStep: open.filter(hasNoNextStep).length,
   };
 }
+
+/** Багийн хуудас ба бүх багийн тойм ижил үзүүлэлттэй — нийлбэр нь гишүүдийнх. */
+export type MonitorMetrics = MemberLeadCounts & { openOpps: number; wonOpps: number };
+
+const ZERO_METRICS: MonitorMetrics = {
+  registeredWeek: 0,
+  registeredMonth: 0,
+  openOwned: 0,
+  newUncontacted: 0,
+  firstContactOverdue: 0,
+  nextStepOverdue: 0,
+  noNextStep: 0,
+  openOpps: 0,
+  wonOpps: 0,
+};
+
+export const MONITOR_METRIC_KEYS = Object.keys(ZERO_METRICS) as (keyof MonitorMetrics)[];
+
+export function countMemberOpportunities(opps: { state: string }[]): Pick<MonitorMetrics, "openOpps" | "wonOpps"> {
+  return {
+    openOpps: opps.filter((o) => o.state === "open").length,
+    wonOpps: opps.filter((o) => o.state === "won").length,
+  };
+}
+
+/** Сэжим бүр нэг эзэмшигч, нэг бүртгэгчтэй тул гишүүдийн нийлбэр давхар тоолохгүй. */
+export function sumMonitorMetrics(rows: readonly MonitorMetrics[]): MonitorMetrics {
+  const total = { ...ZERO_METRICS };
+  for (const row of rows) for (const key of MONITOR_METRIC_KEYS) total[key] += row[key];
+  return total;
+}
+
+/** Агентын ажил хийдэг ажилтан; удирдлага, санхүүгийн ажилтан агент биш. */
+export function isAgentStaff(roles: readonly string[] | null | undefined, userRole: string | null | undefined): boolean {
+  return userRole === "agent" || !!roles?.some((r) => r === "agent" || r === "team_lead");
+}
+
+/** Бүх багийн явцад орох ажилтан: бүртгэлтэй багийн гишүүн, эсвэл багт ороогүй агент. */
+export function inTeamProgressScope(
+  staff: { teamId: string | null; roles: readonly string[] | null; userRole: string | null },
+  teamIds: ReadonlySet<string>
+): boolean {
+  return (!!staff.teamId && teamIds.has(staff.teamId)) || isAgentStaff(staff.roles, staff.userRole);
+}
+
+export type ProgressGroup<M> = { members: M[]; totals: MonitorMetrics };
+
+/**
+ * Гишүүдийг багаар бүлэглэж, баг бүрийн ба оффисын нийт дүнг гаргана. Бүртгэлтэй багт
+ * хамаарахгүй гишүүн «хуваарилагдаагүй»-д орно. Багуудын болон гишүүдийн дараалал хадгалагдана.
+ */
+export function groupTeamProgress<T extends { id: string }, M extends MonitorMetrics & { teamId: string | null }>(
+  teams: readonly T[],
+  members: readonly M[]
+): { teams: (ProgressGroup<M> & { team: T })[]; unassigned: ProgressGroup<M>; totals: MonitorMetrics } {
+  const byTeam = new Map<string, M[]>(teams.map((t) => [t.id, []]));
+  const unassigned: M[] = [];
+  for (const member of members) {
+    const list = member.teamId ? byTeam.get(member.teamId) : undefined;
+    if (list) list.push(member);
+    else unassigned.push(member);
+  }
+  const group = (list: M[]): ProgressGroup<M> => ({ members: list, totals: sumMonitorMetrics(list) });
+  return {
+    teams: teams.map((team) => ({ team, ...group(byTeam.get(team.id) ?? []) })),
+    unassigned: group(unassigned),
+    totals: sumMonitorMetrics(members),
+  };
+}

@@ -1,6 +1,9 @@
+import { cache } from "react";
+
 import { createClient } from "@/lib/supabase/server";
 import { getBranches, getTeams, type BranchRow } from "@/lib/queries-crm-core";
 import { personAvatar } from "@/lib/crm/avatar";
+import { isAgentStaff } from "@/lib/crm/team-monitor";
 import type { CrmRole } from "@/lib/constants-crm";
 
 /** Багийн удирдлагын уншилт — хэрэглэгчийн өөрийн эрхээр (RLS, definer RPC-ийн эрхийн шалгалт). */
@@ -36,17 +39,21 @@ export type TeamsOverview = {
 // crm_is_manager(): office_admin, sysadmin баг удирдаж чадах ч сэжим уншихгүй тул багийн явцыг харахгүй.
 const TEAM_PROGRESS_ROLES: CrmRole[] = ["sales_director", "ops_qc", "ceo"];
 
-/** Багийн явцын хуудсанд (гишүүдийн сэжим) орох эрх; дээр нь canManageTeams() шаардлагатай. */
+/**
+ * Багийн явцын хуудсууд (бүх багийн явц, нэг багийн явц) — сэжмийн RLS-ийг дагана, баг
+ * удирдах эрхээс (canManageTeams) хамаарахгүй.
+ */
 export function hasTeamProgressRole(roles: CrmRole[]): boolean {
   return roles.some((r) => TEAM_PROGRESS_ROLES.includes(r));
 }
 
-export async function canManageTeams(): Promise<boolean> {
+/** Layout ба хуудас нэг хүсэлтэд дуудна — React cache давхар RPC-ээс сэргийлнэ. */
+export const canManageTeams = cache(async (): Promise<boolean> => {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("crm_can_manage_teams");
   if (error) console.error("canManageTeams:", error.message);
   return data === true;
-}
+});
 
 export async function getTeamsOverview(): Promise<TeamsOverview> {
   const supabase = await createClient();
@@ -96,11 +103,7 @@ export async function getTeamsOverview(): Promise<TeamsOverview> {
     }),
     // Удирдлага, санхүүгийн ажилтан агент биш тул хуваарилах жагсаалтад орохгүй.
     unassigned: assignable
-      .filter(
-        (r) =>
-          !r.team_id &&
-          (r.staff_id === null || r.user_role === "agent" || r.roles?.includes("agent") || r.roles?.includes("team_lead"))
-      )
+      .filter((r) => !r.team_id && (r.staff_id === null || isAgentStaff(r.roles, r.user_role)))
       .map(toPerson)
       .sort(byName),
   };

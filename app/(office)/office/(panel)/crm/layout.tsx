@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { getCrmStaffContext } from "@/lib/queries-crm-core";
-import { canManageTeams } from "@/lib/queries-crm-teams";
+import { canManageTeams, hasTeamProgressRole } from "@/lib/queries-crm-teams";
 import { CrmNav } from "@/components/crm/CrmNav";
 
 /**
@@ -16,7 +16,11 @@ export default async function CrmLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-full flex-col">
       <div className="border-b border-line bg-surface px-8">
-        <CrmNav roles={ctx.roles} basePath="/office/crm" canManageTeams={canManage} />
+        <CrmNav
+          roles={ctx.roles}
+          basePath="/office/crm"
+          canOpenTeams={canManage || hasTeamProgressRole(ctx.roles)}
+        />
       </div>
       <div className="flex-1">{children}</div>
     </div>
