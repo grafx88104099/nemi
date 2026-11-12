@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarRange, Users } from "lucide-react";
+import { CalendarDays, CalendarRange, Users } from "lucide-react";
 
 import { getCrmStaffContext } from "@/lib/queries-crm-core";
 import {
@@ -22,6 +22,7 @@ import { MetricTable } from "@/components/crm/weekly/MetricTable";
 import { CreatePlanButton } from "@/components/crm/weekly/CreatePlanButton";
 import { CommitmentHistory } from "@/components/crm/weekly/PlanDetailView";
 import { WeekTabs } from "@/components/crm/weekly/WeekTabs";
+import { WEEK_CALENDAR_ANCHOR, WeekCalendarPanel } from "@/components/crm/weekly/WeekCalendarPanel";
 
 export const metadata = { title: "Долоо хоногийн төлөвлөгөө — CRM" };
 
@@ -30,7 +31,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 /**
  * Агентын долоо хоногийн төлөвлөгөөний карт (§6.19, §6.21): Даваагийн хурлаас
- * өмнө бөглөж, багийн ахлагчаар батлуулна. Гүйцэтгэл CRM-ээс автоматаар.
+ * өмнө бөглөж, багийн ахлагчаар батлуулна. Гүйцэтгэл CRM-ээс автоматаар. Доор нь
+ * тухайн 7 хоногийн календарь (уулзалт, үзлэгээ төлөвлөх), бүтэн календарь руу холбоостой.
  */
 export default async function AgentWeekPage({ params }: { params: Promise<{ week: string }> }) {
   const ctx = await getCrmStaffContext();
@@ -81,6 +83,12 @@ export default async function AgentWeekPage({ params }: { params: Promise<{ week
             Хурал: {slotLabel(s.meeting)} ({fmtDateTime(meetingAt(week, s).toISOString())}) · Эцсийн дүн түгжигдэх:{" "}
             {fmtDateTime(finalLockAt(week, s).toISOString())}
           </p>
+          <a
+            href={`#${WEEK_CALENDAR_ANCHOR}`}
+            className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-brand-700 hover:underline"
+          >
+            <CalendarDays className="size-4" aria-hidden /> 7 хоногийн календарь
+          </a>
         </div>
         <WeekNav
           week={week}
@@ -145,6 +153,10 @@ export default async function AgentWeekPage({ params }: { params: Promise<{ week
           </div>
         </div>
       )}
+
+      <div className="mt-6">
+        <WeekCalendarPanel basePath={BASE} week={week} agentId={ctx.profileId} viewerId={ctx.profileId} />
+      </div>
     </div>
   );
 }

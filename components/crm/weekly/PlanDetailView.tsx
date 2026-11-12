@@ -25,12 +25,22 @@ import { ApprovalPanel } from "@/components/crm/weekly/ApprovalPanel";
 import { ScoreCard } from "@/components/crm/weekly/ScoreCard";
 import { MetricTable } from "@/components/crm/weekly/MetricTable";
 import { WeekPhaseBadge } from "@/components/crm/weekly/WeekNav";
+import { WeekCalendarPanel } from "@/components/crm/weekly/WeekCalendarPanel";
 
 /**
  * Багийн ахлагч / удирдлагын нэг агентын долоо хоногийн карт, дүн шинжилгээ,
- * үнэлгээ, батлалт (§5 RACI). Засах эрхгүй — зөвхөн батлах/буцаах.
+ * үнэлгээ, батлалт (§5 RACI). Засах эрхгүй — зөвхөн батлах/буцаах. Доор нь картын
+ * эзний тухайн 7 хоногийн календарь (харагчийн эрхээр, үүсгэхгүй).
  */
-export async function PlanDetailView({ planId, crmBase, backHref }: { planId: string; crmBase: string; backHref: string }) {
+export async function PlanDetailView({
+  planId,
+  crmBase,
+  backHref,
+}: {
+  planId: string;
+  crmBase: "/agent/crm" | "/office/crm";
+  backHref: string;
+}) {
   const ctx = await getCrmStaffContext();
   const { plan, unavailable } = await getPlanById(planId);
   if (unavailable || !plan) {
@@ -128,6 +138,11 @@ export async function PlanDetailView({ planId, crmBase, backHref }: { planId: st
           <EmptyState compact title="Агент дүн шинжилгээгээ хараахан бөглөөгүй" description="Баасан гарагаас Ням 24:00 хүртэл бөглөнө." />
         )}
       </section>
+
+      {/* Календарь хамгийн доор — дүн шинжилгээ, түүний батлалт гүйлгэлтэд саадгүй. */}
+      {ctx ? (
+        <WeekCalendarPanel basePath={crmBase} week={plan.week_start} agentId={plan.agent_id} viewerId={ctx.profileId} />
+      ) : null}
     </div>
   );
 }

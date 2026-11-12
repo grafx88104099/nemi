@@ -15,6 +15,7 @@ import {
   BarChart3,
   Settings2,
   CalendarRange,
+  CalendarDays,
   UsersRound,
   ShieldCheck,
   Scale,
@@ -58,6 +59,7 @@ const LEAD_ROLES: CrmRole[] = ["team_lead", "sales_director", "ops_qc", "ceo", "
 const ITEMS: NavItem[] = [
   { segment: "", label: "Самбар", icon: LayoutDashboard },
   { segment: "/week", label: "Долоо хоног", icon: CalendarRange, officeRoles: LEAD_ROLES },
+  { segment: "/calendar", label: "Календарь", icon: CalendarDays },
   { segment: "/team", label: "Миний баг", icon: UsersRound, agentOnly: true, roles: LEAD_ROLES },
   { segment: "/leads", label: "Сэжим", icon: Flame },
   { segment: "/listings", label: "Сэжимтэй зар", icon: Home },

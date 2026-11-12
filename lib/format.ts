@@ -47,10 +47,12 @@ export function relativeDate(iso: string, now: Date = new Date()): string {
 // хэрэглэдэггүй — тогтмол UTC+8.
 const UB_OFFSET_MS = 8 * 3_600_000;
 const WEEKDAYS = ["ням", "даваа", "мягмар", "лхагва", "пүрэв", "баасан", "бямба"];
+const WEEKDAYS_SHORT = ["Ня", "Да", "Мя", "Лх", "Пү", "Ба", "Бя"];
 
-type DateInput = string | number | Date;
+export type DateInput = string | number | Date;
 
-function ubParts(input: DateInput) {
+/** Агшны Улаанбаатарын он, сар (1–12), өдөр, цаг, минут, гараг (0 = ням). */
+export function ubParts(input: DateInput) {
   const t = input instanceof Date ? input.getTime() : typeof input === "number" ? input : Date.parse(input);
   const d = new Date(t + UB_OFFSET_MS);
   return {
@@ -105,4 +107,20 @@ export function fmtShortDateTime(iso: DateInput): string {
 export function fmtDayWithWeekday(iso: DateInput): string {
   const u = ubParts(iso);
   return `${u.mo}-р сарын ${u.d}, ${WEEKDAYS[u.wd]}`;
+}
+
+/** Гарагийн богино нэр: «Да», «Мя» … «Ня». */
+export function fmtWeekdayShort(iso: DateInput): string {
+  return WEEKDAYS_SHORT[ubParts(iso).wd];
+}
+
+/** Он, сар: «2026 оны 11-р сар». */
+export function fmtMonthYear(iso: DateInput): string {
+  const u = ubParts(iso);
+  return `${u.y} оны ${u.mo}-р сар`;
+}
+
+/** Цагийн муж: «14:00–15:30» (УБ). */
+export function fmtTimeRange(start: DateInput, end: DateInput): string {
+  return `${fmtTime(start)}–${fmtTime(end)}`;
 }

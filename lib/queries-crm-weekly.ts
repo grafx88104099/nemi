@@ -470,6 +470,29 @@ export async function getPlanForAgentWeek(agentId: string, week: string): Promis
   return r === "unavailable" ? { plan: null, unavailable: true } : { plan: r, unavailable: false };
 }
 
+/**
+ * Нэг агентын тухайн 7 хоногийн картын төлөв (календарийн толгойд) — нэг мөр, RLS:
+ * агент өөрийн, ахлагч багийн, удирдлага оффисын. Картгүй, эрхгүй, хүснэгтгүй бол null.
+ */
+export async function getWeekPlanStatus(
+  agentId: string,
+  week: string
+): Promise<{ id: string; status: WeeklyStatus } | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("crm_weekly_plans")
+    .select("id, status")
+    .eq("agent_id", agentId)
+    .eq("week_start", week)
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    if (!isMissing(error.message)) console.error("getWeekPlanStatus:", error.message);
+    return null;
+  }
+  return data ? { id: data.id, status: data.status as WeeklyStatus } : null;
+}
+
 export function targetValues(plan: PlanDetail | null): WeeklyValues {
   const out: WeeklyValues = {};
   if (!plan) return out;

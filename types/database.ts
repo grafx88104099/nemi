@@ -4255,6 +4255,53 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["staff_chat_messages"]["Insert"]>;
         Relationships: [];
       };
+      // === CRM календарь (20261111000100) ===
+      // owner_id ба created_by хоёул profiles руу FK — profiles-ийг embed хийхгүй, нэрийг тусад нь уншина.
+      // Харах, нуух (is_private → «Завгүй») нь crm_calendar_events() RPC-ээр.
+      crm_events: {
+        Row: {
+          id: string;
+          office_id: string;
+          owner_id: string;
+          title: string;
+          description: string | null;
+          location: string | null;
+          kind: "meeting" | "call" | "showing" | "personal" | "other";
+          starts_at: string;
+          ends_at: string;
+          all_day: boolean;
+          is_private: boolean;
+          attendee_ids: string[];
+          lead_id: string | null;
+          contact_id: string | null;
+          opportunity_id: string | null;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id: string;
+          owner_id: string;
+          title: string;
+          description?: string | null;
+          location?: string | null;
+          kind?: "meeting" | "call" | "showing" | "personal" | "other";
+          starts_at: string;
+          ends_at: string;
+          all_day?: boolean;
+          is_private?: boolean;
+          attendee_ids?: string[];
+          lead_id?: string | null;
+          contact_id?: string | null;
+          opportunity_id?: string | null;
+          created_by?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_events"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: {
       // === U8: crm-automation-notify (000800) ===
@@ -4964,6 +5011,31 @@ export type Database = {
       staff_chat_people: {
         Args: { p_chat: string };
         Returns: { profile_id: string; name: string; avatar_url: string | null; last_read_at: string | null }[];
+      };
+      // === CRM календарь (20261111000100) ===
+      /** Өөрийн, менежер бүгдийн, багийн ахлагч гишүүдийнхээ календарийг харна. */
+      crm_calendar_can_view: { Args: { p_profile: string }; Returns: boolean };
+      /** Муж 62 хоногоос ихгүй. Хувийн үйл явдлыг эзэн/урилгатай хүнээс бусдад masked=true, гарчиг «Завгүй». */
+      crm_calendar_events: {
+        Args: { p_from: string; p_to: string; p_people: string[] };
+        Returns: {
+          id: string;
+          owner_id: string;
+          title: string;
+          description: string | null;
+          location: string | null;
+          kind: "meeting" | "call" | "showing" | "personal" | "other";
+          starts_at: string;
+          ends_at: string;
+          all_day: boolean;
+          is_private: boolean;
+          attendee_ids: string[];
+          lead_id: string | null;
+          contact_id: string | null;
+          opportunity_id: string | null;
+          masked: boolean;
+          can_edit: boolean;
+        }[];
       };
     };
     Enums: {

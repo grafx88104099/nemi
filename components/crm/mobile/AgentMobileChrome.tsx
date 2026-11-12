@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   Building2,
   CalendarCheck,
+  CalendarDays,
   CalendarRange,
   FileSignature,
   Flame,
@@ -62,6 +63,7 @@ const MENU_SECTIONS: { title: string; items: Item[] }[] = [
       { href: `${BASE}/worklists`, label: "Ажлын жагсаалт", icon: ListChecks },
       { href: `${BASE}/worklists/tracks`, label: "Ажлын цуваа", icon: Repeat },
       { href: `${BASE}/week`, label: "Долоо хоног", icon: CalendarRange },
+      { href: `${BASE}/calendar`, label: "Календарь", icon: CalendarDays },
       { href: "/agent/tasks", label: "Даалгавар", icon: ListTodo },
       { href: CHAT_HREF, label: "Чат", icon: MessagesSquare },
     ],
