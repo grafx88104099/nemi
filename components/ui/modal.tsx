@@ -3,6 +3,8 @@
 import { useEffect, useId, useRef } from "react";
 import { X } from "lucide-react";
 
+import { dialogOpener, focusDialogStart, trapTab } from "./dialog-focus";
+
 /**
  * Хүртээмжтэй модал — role=dialog, aria-modal, Escape хаах, focus trap,
  * нээхэд дотогш фокус, хаахад өмнөх элемент рүү фокус буцаах.
@@ -36,17 +38,10 @@ export function Modal({
 
   useEffect(() => {
     if (!open) return;
-    prevFocus.current = document.activeElement as HTMLElement | null;
-
-    const focusables = () =>
-      Array.from(
-        dialogRef.current?.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
-        ) ?? []
-      );
-
-    // Нээхэд эхний фокусыг диалог руу.
-    (focusables()[0] ?? dialogRef.current)?.focus();
+    // Нээгч (хаахад фокус буцаах): autoFocus фокусыг аль хэдийн дотогш оруулсан байж болно.
+    prevFocus.current = dialogOpener(dialogRef.current);
+    // Эхний фокус: autoFocus / [data-autofocus] талбар, эс бөгөөс диалог өөрөө (хаах товч биш).
+    focusDialogStart(dialogRef.current);
 
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
@@ -54,23 +49,7 @@ export function Modal({
         onCloseRef.current();
         return;
       }
-      if (e.key === "Tab") {
-        const items = focusables();
-        if (items.length === 0) {
-          e.preventDefault();
-          return;
-        }
-        const first = items[0];
-        const last = items[items.length - 1];
-        const active = document.activeElement;
-        if (e.shiftKey && active === first) {
-          e.preventDefault();
-          last.focus();
-        } else if (!e.shiftKey && active === last) {
-          e.preventDefault();
-          first.focus();
-        }
-      }
+      if (e.key === "Tab") trapTab(e, dialogRef.current);
     }
 
     document.addEventListener("keydown", onKey);
@@ -80,7 +59,7 @@ export function Modal({
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
-      prevFocus.current?.focus?.();
+      if (prevFocus.current?.isConnected) prevFocus.current.focus({ preventScroll: true });
     };
   }, [open]);
 
@@ -108,7 +87,8 @@ export function Modal({
             type="button"
             onClick={onClose}
             aria-label="Хаах"
-            className="rounded-lg p-1.5 text-muted hover:bg-surface-2 hover:text-ink"
+            data-dialog-close
+            className="-my-2 -mr-2 inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-ink"
           >
             <X className="size-4" />
           </button>

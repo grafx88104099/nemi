@@ -4,7 +4,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger" | "outline";
-type Size = "sm" | "md" | "lg";
+type Size = "sm" | "touch" | "md" | "lg";
 
 const variants: Record<Variant, string> = {
   primary: "bg-brand-500 text-white shadow-sm hover:bg-brand-600",
@@ -16,6 +16,8 @@ const variants: Record<Variant, string> = {
 
 const sizes: Record<Size, string> = {
   sm: "h-9 px-3 text-sm gap-1.5",
+  /** sm шиг нягт боловч гар утсанд 44px (h-11) — хүрэх талбайн дүрэм; sm+ дэлгэцэд h-9. */
+  touch: "h-11 px-3 text-sm gap-1.5 sm:h-9",
   md: "h-11 px-5 text-sm gap-2",
   lg: "h-12 px-6 text-base gap-2",
 };

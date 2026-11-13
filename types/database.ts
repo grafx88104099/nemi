@@ -4302,6 +4302,727 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["crm_events"]["Insert"]>;
         Relationships: [];
       };
+      // === crm2 (20261113000100_crm2_foundation): CRM v2 1-р шат ===
+      crm2_activities: {
+        Row: {
+          id: string;
+          office_id: string;
+          deal_id: string;
+          property_id: string;
+          contact_id: string;
+          kind: Database["public"]["Enums"]["crm2_activity_kind"];
+          agent_id: string;
+          occurred_at: string | null;
+          scheduled_at: string | null;
+          showing_status: Database["public"]["Enums"]["crm2_showing_status"] | null;
+          result: string | null;
+          feedback: string | null;
+          note: string | null;
+          source_activity_id: string | null;
+          finalized_at: string | null;
+          voided_at: string | null;
+          voided_by: string | null;
+          void_reason: string | null;
+          created_by: string;
+          created_at: string;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        // office_id, property_id, contact_id, created_by: BEFORE trigger бөглөнө.
+        Insert: {
+          id?: string;
+          office_id?: string;
+          deal_id: string;
+          property_id?: string;
+          contact_id?: string;
+          kind: Database["public"]["Enums"]["crm2_activity_kind"];
+          agent_id: string;
+          occurred_at?: string | null;
+          scheduled_at?: string | null;
+          showing_status?: Database["public"]["Enums"]["crm2_showing_status"] | null;
+          result?: string | null;
+          feedback?: string | null;
+          note?: string | null;
+          source_activity_id?: string | null;
+          finalized_at?: string | null;
+          voided_at?: string | null;
+          voided_by?: string | null;
+          void_reason?: string | null;
+          created_by?: string;
+          created_at?: string;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm2_activities"]["Insert"]>;
+        Relationships: [];
+      };
+      crm2_brokerage_contracts: {
+        Row: {
+          id: string;
+          office_id: string;
+          property_id: string;
+          number: string;
+          owner_contact_id: string | null;
+          start_date: string | null;
+          end_date: string | null;
+          terms: string | null;
+          commission_type: Database["public"]["Enums"]["crm2_commission_type"] | null;
+          commission_value: number | null;
+          commission_currency: string;
+          commission_note: string | null;
+          responsible_agent_id: string;
+          previous_id: string | null;
+          version: number;
+          status: Database["public"]["Enums"]["crm2_brokerage_status"];
+          activate_on_start: boolean;
+          submitted_by: string | null;
+          submitted_at: string | null;
+          approved_by: string | null;
+          approved_at: string | null;
+          approval_note: string | null;
+          rejected_by: string | null;
+          rejected_at: string | null;
+          rejection_note: string | null;
+          terminated_by: string | null;
+          terminated_at: string | null;
+          termination_reason: string | null;
+          created_by: string;
+          created_at: string;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        // office_id, responsible_agent_id: BEFORE trigger бөглөнө.
+        Insert: {
+          id?: string;
+          office_id?: string;
+          property_id: string;
+          number?: string;
+          owner_contact_id?: string | null;
+          start_date?: string | null;
+          end_date?: string | null;
+          terms?: string | null;
+          commission_type?: Database["public"]["Enums"]["crm2_commission_type"] | null;
+          commission_value?: number | null;
+          commission_currency?: string;
+          commission_note?: string | null;
+          responsible_agent_id?: string;
+          previous_id?: string | null;
+          version?: number;
+          status?: Database["public"]["Enums"]["crm2_brokerage_status"];
+          activate_on_start?: boolean;
+          submitted_by?: string | null;
+          submitted_at?: string | null;
+          approved_by?: string | null;
+          approved_at?: string | null;
+          approval_note?: string | null;
+          rejected_by?: string | null;
+          rejected_at?: string | null;
+          rejection_note?: string | null;
+          terminated_by?: string | null;
+          terminated_at?: string | null;
+          termination_reason?: string | null;
+          created_by?: string;
+          created_at?: string;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm2_brokerage_contracts"]["Insert"]>;
+        Relationships: [];
+      };
+      crm2_brokerage_files: {
+        Row: {
+          id: string;
+          office_id: string;
+          contract_id: string;
+          property_id: string;
+          storage_path: string;
+          file_name: string | null;
+          mime_type: string | null;
+          size_bytes: number | null;
+          uploaded_by: string;
+          created_at: string;
+        };
+        // office_id, property_id: BEFORE trigger бөглөнө.
+        Insert: {
+          id?: string;
+          office_id?: string;
+          contract_id: string;
+          property_id?: string;
+          storage_path: string;
+          file_name?: string | null;
+          mime_type?: string | null;
+          size_bytes?: number | null;
+          uploaded_by?: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm2_brokerage_files"]["Insert"]>;
+        Relationships: [];
+      };
+      crm2_contact_phones: {
+        Row: {
+          id: string;
+          office_id: string;
+          contact_id: string;
+          phone: string;
+          phone_norm: string;
+          label: string | null;
+          is_primary: boolean;
+          created_by: string;
+          created_at: string;
+        };
+        // office_id: BEFORE trigger бөглөнө.
+        Insert: {
+          id?: string;
+          office_id?: string;
+          contact_id: string;
+          phone: string;
+          phone_norm?: string;
+          label?: string | null;
+          is_primary?: boolean;
+          created_by?: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm2_contact_phones"]["Insert"]>;
+        Relationships: [];
+      };
+      // INSERT эрхгүй — зөвхөн crm2_create_contact RPC.
+      crm2_contacts: {
+        Row: {
+          id: string;
+          office_id: string;
+          code: string;
+          full_name: string;
+          note: string | null;
+          responsible_agent_id: string;
+          status: Database["public"]["Enums"]["crm2_record_status"];
+          archived_at: string | null;
+          search_text: string;
+          created_by: string;
+          created_at: string;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id?: string;
+          code?: string;
+          full_name: string;
+          note?: string | null;
+          responsible_agent_id?: string;
+          status?: Database["public"]["Enums"]["crm2_record_status"];
+          archived_at?: string | null;
+          search_text?: string;
+          created_by?: string;
+          created_at?: string;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm2_contacts"]["Insert"]>;
+        Relationships: [];
+      };
+      crm2_counters: {
+        Row: {
+          office_id: string;
+          kind: string;
+          prefix: string;
+          next_no: number;
+          pad: number;
+        };
+        Insert: {
+          office_id: string;
+          kind: string;
+          prefix: string;
+          next_no?: number;
+          pad?: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm2_counters"]["Insert"]>;
+        Relationships: [];
+      };
+      // INSERT эрхгүй — crm2_open_deal / crm2_log_call. stage, agent_id зөвхөн RPC-ээр.
+      crm2_deals: {
+        Row: {
+          id: string;
+          office_id: string;
+          code: string;
+          property_id: string;
+          contact_id: string;
+          requirement_id: string | null;
+          agent_id: string;
+          stage: Database["public"]["Enums"]["crm2_deal_stage"];
+          is_open: boolean | null;
+          stage_changed_at: string;
+          note: string | null;
+          cancel_reason_code: string | null;
+          cancel_reason: string | null;
+          cancelled_at: string | null;
+          cancelled_by: string | null;
+          closed_at: string | null;
+          closed_by: string | null;
+          confirmed_at: string | null;
+          requirement_version: number | null;
+          previous_deal_id: string | null;
+          origin_deal_id: string | null;
+          last_activity_at: string | null;
+          created_by: string;
+          created_at: string;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        // office_id, created_by: BEFORE trigger бөглөнө.
+        Insert: {
+          id?: string;
+          office_id?: string;
+          code?: string;
+          property_id: string;
+          contact_id: string;
+          requirement_id?: string | null;
+          agent_id: string;
+          stage?: Database["public"]["Enums"]["crm2_deal_stage"];
+          stage_changed_at?: string;
+          note?: string | null;
+          cancel_reason_code?: string | null;
+          cancel_reason?: string | null;
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          closed_at?: string | null;
+          closed_by?: string | null;
+          confirmed_at?: string | null;
+          requirement_version?: number | null;
+          previous_deal_id?: string | null;
+          origin_deal_id?: string | null;
+          last_activity_at?: string | null;
+          created_by?: string;
+          created_at?: string;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm2_deals"]["Insert"]>;
+        Relationships: [];
+      };
+      // actor → profiles: crm2_history_actor_fk.
+      crm2_history: {
+        Row: {
+          id: number;
+          office_id: string;
+          entity: string;
+          entity_id: string;
+          property_id: string | null;
+          contact_id: string | null;
+          deal_id: string | null;
+          action: string;
+          field: string | null;
+          old_value: Json | null;
+          new_value: Json | null;
+          reason: string | null;
+          actor_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          office_id: string;
+          entity: string;
+          entity_id: string;
+          property_id?: string | null;
+          contact_id?: string | null;
+          deal_id?: string | null;
+          action: string;
+          field?: string | null;
+          old_value?: Json | null;
+          new_value?: Json | null;
+          reason?: string | null;
+          actor_id?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm2_history"]["Insert"]>;
+        Relationships: [];
+      };
+      crm2_projects: {
+        Row: {
+          id: string;
+          office_id: string;
+          name: string;
+          name_key: string | null;
+          is_active: boolean;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id?: string;
+          name: string;
+          is_active?: boolean;
+          created_by?: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm2_projects"]["Insert"]>;
+        Relationships: [];
+      };
+      // 3 FK → profiles (listing/contract/photo): embed-д FK заалт заавал, ж: profiles!crm2_properties_listing_agent_id_fkey(full_name).
+      crm2_properties: {
+        Row: {
+          id: string;
+          office_id: string;
+          code: string;
+          category: Database["public"]["Enums"]["crm2_property_category"];
+          property_type: string | null;
+          status: Database["public"]["Enums"]["crm2_property_status"];
+          status_reason: string | null;
+          status_changed_at: string;
+          activated_at: string | null;
+          project_id: string | null;
+          district: string | null;
+          location_text: string | null;
+          address_detail: string | null;
+          lat: number | null;
+          lng: number | null;
+          pin_address: string | null;
+          area_m2: number | null;
+          rooms: number | null;
+          floor: number | null;
+          building_floors: number | null;
+          price: number | null;
+          currency: string;
+          price_period: Database["public"]["Enums"]["crm2_price_period"];
+          price_basis: Database["public"]["Enums"]["crm2_price_basis"];
+          price_total: number | null;
+          year_in_use: number | null;
+          operating_cost: number | null;
+          operating_cost_currency: string;
+          operating_cost_period: Database["public"]["Enums"]["crm2_price_period"];
+          operating_cost_note: string | null;
+          condition: string | null;
+          view_note: string | null;
+          notes: string | null;
+          advantages: string | null;
+          features: string[];
+          field_notes: Json;
+          available_from: string | null;
+          availability_note: string | null;
+          listing_agent_id: string | null;
+          contract_agent_id: string | null;
+          photo_agent_id: string | null;
+          brokerage_end_date: string | null;
+          last_verified_at: string | null;
+          last_verified_by: string | null;
+          search_text: string;
+          created_by: string;
+          created_at: string;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id?: string;
+          code?: string;
+          category: Database["public"]["Enums"]["crm2_property_category"];
+          property_type?: string | null;
+          status?: Database["public"]["Enums"]["crm2_property_status"];
+          status_reason?: string | null;
+          status_changed_at?: string;
+          activated_at?: string | null;
+          project_id?: string | null;
+          district?: string | null;
+          location_text?: string | null;
+          address_detail?: string | null;
+          lat?: number | null;
+          lng?: number | null;
+          pin_address?: string | null;
+          area_m2?: number | null;
+          rooms?: number | null;
+          floor?: number | null;
+          building_floors?: number | null;
+          price?: number | null;
+          currency?: string;
+          price_period?: Database["public"]["Enums"]["crm2_price_period"];
+          price_basis?: Database["public"]["Enums"]["crm2_price_basis"];
+          year_in_use?: number | null;
+          operating_cost?: number | null;
+          operating_cost_currency?: string;
+          operating_cost_period?: Database["public"]["Enums"]["crm2_price_period"];
+          operating_cost_note?: string | null;
+          condition?: string | null;
+          view_note?: string | null;
+          notes?: string | null;
+          advantages?: string | null;
+          features?: string[];
+          field_notes?: Json;
+          available_from?: string | null;
+          availability_note?: string | null;
+          listing_agent_id?: string | null;
+          contract_agent_id?: string | null;
+          photo_agent_id?: string | null;
+          brokerage_end_date?: string | null;
+          last_verified_at?: string | null;
+          last_verified_by?: string | null;
+          search_text?: string;
+          created_by?: string;
+          created_at?: string;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm2_properties"]["Insert"]>;
+        Relationships: [];
+      };
+      crm2_property_media: {
+        Row: {
+          id: string;
+          office_id: string;
+          property_id: string;
+          kind: Database["public"]["Enums"]["crm2_media_kind"];
+          storage_path: string | null;
+          external_url: string | null;
+          mime_type: string | null;
+          size_bytes: number | null;
+          caption: string | null;
+          sort_order: number;
+          is_cover: boolean;
+          uploaded_by: string;
+          created_at: string;
+        };
+        // office_id: BEFORE trigger бөглөнө.
+        Insert: {
+          id?: string;
+          office_id?: string;
+          property_id: string;
+          kind?: Database["public"]["Enums"]["crm2_media_kind"];
+          storage_path?: string | null;
+          external_url?: string | null;
+          mime_type?: string | null;
+          size_bytes?: number | null;
+          caption?: string | null;
+          sort_order?: number;
+          is_cover?: boolean;
+          uploaded_by?: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm2_property_media"]["Insert"]>;
+        Relationships: [];
+      };
+      crm2_property_private: {
+        Row: {
+          property_id: string;
+          office_id: string;
+          owner_contact_id: string | null;
+          owner_note: string | null;
+          showing_instructions: string | null;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          property_id: string;
+          office_id: string;
+          owner_contact_id?: string | null;
+          owner_note?: string | null;
+          showing_instructions?: string | null;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm2_property_private"]["Insert"]>;
+        Relationships: [];
+      };
+      crm2_reminder_log: {
+        Row: {
+          contract_id: string;
+          end_date: string;
+          days_before: number;
+          office_id: string;
+          sent_at: string;
+        };
+        Insert: {
+          contract_id: string;
+          end_date: string;
+          days_before: number;
+          office_id: string;
+          sent_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm2_reminder_log"]["Insert"]>;
+        Relationships: [];
+      };
+      crm2_requests: {
+        Row: {
+          id: string;
+          office_id: string;
+          kind: Database["public"]["Enums"]["crm2_request_kind"];
+          target_id: string;
+          property_id: string | null;
+          payload: Json;
+          reason: string | null;
+          status: Database["public"]["Enums"]["crm2_request_status"];
+          requested_by: string;
+          requested_at: string;
+          decided_by: string | null;
+          decided_at: string | null;
+          decision_note: string | null;
+        };
+        Insert: {
+          id?: string;
+          office_id: string;
+          kind: Database["public"]["Enums"]["crm2_request_kind"];
+          target_id: string;
+          property_id?: string | null;
+          payload?: Json;
+          reason?: string | null;
+          status?: Database["public"]["Enums"]["crm2_request_status"];
+          requested_by: string;
+          requested_at?: string;
+          decided_by?: string | null;
+          decided_at?: string | null;
+          decision_note?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm2_requests"]["Insert"]>;
+        Relationships: [];
+      };
+      crm2_requirement_versions: {
+        Row: {
+          id: number;
+          office_id: string;
+          requirement_id: string;
+          contact_id: string;
+          version: number;
+          snapshot: Json;
+          replaced_by: string | null;
+          replaced_at: string;
+        };
+        Insert: {
+          office_id: string;
+          requirement_id: string;
+          contact_id: string;
+          version: number;
+          snapshot: Json;
+          replaced_by?: string | null;
+          replaced_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm2_requirement_versions"]["Insert"]>;
+        Relationships: [];
+      };
+      crm2_requirements: {
+        Row: {
+          id: string;
+          office_id: string;
+          contact_id: string;
+          purpose: string | null;
+          category: Database["public"]["Enums"]["crm2_property_category"] | null;
+          property_type: string | null;
+          budget_min: number | null;
+          budget_max: number | null;
+          currency: string;
+          price_period: Database["public"]["Enums"]["crm2_price_period"];
+          locations: string[];
+          districts: string[];
+          rooms_min: number | null;
+          rooms_max: number | null;
+          area_min: number | null;
+          area_max: number | null;
+          move_in_from: string | null;
+          move_in_note: string | null;
+          must_haves: string[];
+          required_features: string[];
+          notes: string | null;
+          status: Database["public"]["Enums"]["crm2_record_status"];
+          version: number;
+          archived_at: string | null;
+          created_by: string;
+          created_at: string;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        // office_id: BEFORE trigger бөглөнө.
+        Insert: {
+          id?: string;
+          office_id?: string;
+          contact_id: string;
+          purpose?: string | null;
+          category?: Database["public"]["Enums"]["crm2_property_category"] | null;
+          property_type?: string | null;
+          budget_min?: number | null;
+          budget_max?: number | null;
+          currency?: string;
+          price_period?: Database["public"]["Enums"]["crm2_price_period"];
+          locations?: string[];
+          districts?: string[];
+          rooms_min?: number | null;
+          rooms_max?: number | null;
+          area_min?: number | null;
+          area_max?: number | null;
+          move_in_from?: string | null;
+          move_in_note?: string | null;
+          must_haves?: string[];
+          required_features?: string[];
+          notes?: string | null;
+          status?: Database["public"]["Enums"]["crm2_record_status"];
+          version?: number;
+          archived_at?: string | null;
+          created_by?: string;
+          created_at?: string;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm2_requirements"]["Insert"]>;
+        Relationships: [];
+      };
+      crm2_settings: {
+        Row: {
+          office_id: string;
+          key: string;
+          value: Json;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          office_id: string;
+          key: string;
+          value: Json;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm2_settings"]["Insert"]>;
+        Relationships: [];
+      };
+      crm2_tasks: {
+        Row: {
+          id: string;
+          office_id: string;
+          kind: Database["public"]["Enums"]["crm2_task_kind"];
+          status: Database["public"]["Enums"]["crm2_task_status"];
+          assignee_id: string;
+          due_at: string | null;
+          note: string | null;
+          property_id: string | null;
+          deal_id: string | null;
+          contact_id: string | null;
+          requirement_id: string | null;
+          brokerage_id: string | null;
+          source_activity_id: string | null;
+          done_at: string | null;
+          done_by: string | null;
+          created_by: string;
+          created_at: string;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id?: string;
+          kind: Database["public"]["Enums"]["crm2_task_kind"];
+          status?: Database["public"]["Enums"]["crm2_task_status"];
+          assignee_id?: string;
+          due_at?: string | null;
+          note?: string | null;
+          property_id?: string | null;
+          deal_id?: string | null;
+          contact_id?: string | null;
+          requirement_id?: string | null;
+          brokerage_id?: string | null;
+          source_activity_id?: string | null;
+          done_at?: string | null;
+          done_by?: string | null;
+          created_by?: string;
+          created_at?: string;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm2_tasks"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: {
       // === U8: crm-automation-notify (000800) ===
@@ -4952,7 +5673,7 @@ export type Database = {
         Returns: {
           profile_id: string;
           name: string;
-          /** agents.avatar (үсгэн товчлол) ч байж болно — lib/crm/avatar.ts-ээр ялгана. */
+          /** agents.avatar (үсгэн товчлол) ч байж болно — lib/avatar.ts-ээр ялгана. */
           avatar_url: string | null;
           phone: string | null;
           user_role: Database["public"]["Enums"]["user_role"];
@@ -5037,6 +5758,243 @@ export type Database = {
           can_edit: boolean;
         }[];
       };
+      // === crm2 (20261113000100_crm2_foundation): authenticated-д нээлттэй RPC/helper ===
+      crm2_activity_editable: { Args: { p_deal: string; p_agent: string; p_created_by: string }; Returns: boolean };
+      crm2_brokerage_approve: {
+        Args: { p_contract: string; p_note?: string | null; p_expected_updated_at?: string | null };
+        Returns: Json;
+      };
+      crm2_brokerage_approver: { Args: { p_responsible: string }; Returns: boolean };
+      crm2_brokerage_discard: { Args: { p_contract: string; p_reason?: string | null }; Returns: undefined };
+      crm2_brokerage_reject: { Args: { p_contract: string; p_note: string }; Returns: undefined };
+      crm2_brokerage_renew: { Args: { p_contract: string }; Returns: string };
+      crm2_brokerage_submit: { Args: { p_contract: string }; Returns: undefined };
+      crm2_brokerage_terminate: { Args: { p_contract: string; p_reason: string }; Returns: string };
+      crm2_brokerage_withdraw: { Args: { p_contract: string }; Returns: undefined };
+      crm2_can_attach_brokerage: { Args: { p_contract: string }; Returns: boolean };
+      crm2_can_decide_request: { Args: { p_request: string }; Returns: boolean };
+      crm2_can_detach_brokerage: { Args: { p_contract: string }; Returns: boolean };
+      crm2_can_edit_brokerage_draft: { Args: { p_contract: string }; Returns: boolean };
+      crm2_can_edit_contact: { Args: { p_contact: string }; Returns: boolean };
+      crm2_can_edit_deal: { Args: { p_deal: string }; Returns: boolean };
+      crm2_can_edit_property: { Args: { p_property: string }; Returns: boolean };
+      crm2_can_edit_requirements: { Args: { p_contact: string }; Returns: boolean };
+      crm2_can_manage_settings: { Args: Record<string, never>; Returns: boolean };
+      crm2_can_view_brokerage: { Args: { p_contract: string }; Returns: boolean };
+      crm2_can_view_contact: { Args: { p_contact: string }; Returns: boolean };
+      crm2_can_view_deal: { Args: { p_deal: string }; Returns: boolean };
+      crm2_can_view_history: {
+        Args: { p_entity: string; p_entity_id: string; p_property: string; p_contact: string; p_deal: string };
+        Returns: boolean;
+      };
+      crm2_can_view_property: { Args: { p_property: string }; Returns: boolean };
+      crm2_can_view_property_private: { Args: { p_property: string }; Returns: boolean };
+      crm2_can_view_showing_info: { Args: { p_property: string }; Returns: boolean };
+      crm2_can_view_task: { Args: { p_task: string }; Returns: boolean };
+      crm2_can_work: { Args: Record<string, never>; Returns: boolean };
+      crm2_cancel_deal: {
+        Args: { p_deal: string; p_reason_code: string; p_reason?: string | null; p_requirement?: string | null };
+        Returns: undefined;
+      };
+      crm2_cancel_request: { Args: { p_request: string }; Returns: undefined };
+      crm2_contact_deals: {
+        Args: { p_contact: string };
+        Returns: {
+          deal_id: string;
+          code: string;
+          stage: Database["public"]["Enums"]["crm2_deal_stage"];
+          is_open: boolean;
+          property_id: string;
+          property_code: string;
+          property_status: Database["public"]["Enums"]["crm2_property_status"];
+          property_category: Database["public"]["Enums"]["crm2_property_category"];
+          property_location: string | null;
+          agent_id: string;
+          agent_name: string;
+          calls: number;
+          showings: number;
+          shown: number;
+          last_activity_at: string | null;
+          created_at: string;
+          cancel_reason_code: string | null;
+          requirement_id: string | null;
+          requirement_version: number | null;
+          previous_deal_id: string | null;
+          origin_deal_id: string | null;
+        }[];
+      };
+      crm2_contact_editable: { Args: { p_responsible: string }; Returns: boolean };
+      crm2_contact_visible: { Args: { p_id: string; p_responsible: string }; Returns: boolean };
+      crm2_create_contact: {
+        Args: { p_full_name: string; p_phones: Json; p_note?: string | null; p_agent?: string | null; p_allow_duplicate?: boolean | null };
+        Returns: Json;
+      };
+      crm2_deal_editable: { Args: { p_agent: string }; Returns: boolean };
+      crm2_deal_visible: { Args: { p_id: string; p_agent: string; p_property: string; p_contact: string }; Returns: boolean };
+      crm2_decide_request: { Args: { p_request: string; p_approve: boolean; p_note?: string | null }; Returns: string };
+      crm2_ensure_project: { Args: { p_name: string }; Returns: string };
+      crm2_find_contacts_by_phone: {
+        Args: { p_phone: string; p_property?: string | null };
+        Returns: {
+          contact_id: string;
+          code: string;
+          display_name: string;
+          can_open: boolean;
+          responsible_agent_id: string;
+          responsible_agent_name: string;
+          status: Database["public"]["Enums"]["crm2_record_status"];
+          open_deals: number;
+          property_deal_id: string | null;
+          property_deal_code: string | null;
+          property_deal_stage: Database["public"]["Enums"]["crm2_deal_stage"] | null;
+          property_deal_agent_name: string | null;
+          property_deal_can_log: boolean;
+        }[];
+      };
+      crm2_has_finance: { Args: Record<string, never>; Returns: boolean };
+      crm2_has_setting_role: { Args: { p_key: string }; Returns: boolean };
+      crm2_in_my_team_any: { Args: { p_profiles: string[] }; Returns: boolean };
+      crm2_is_lead_of: { Args: { p_profile: string }; Returns: boolean };
+      crm2_is_lead_of_any: { Args: { p_profiles: string[] }; Returns: boolean };
+      crm2_is_member: { Args: Record<string, never>; Returns: boolean };
+      crm2_is_office_admin: { Args: Record<string, never>; Returns: boolean };
+      crm2_is_team_lead: { Args: Record<string, never>; Returns: boolean };
+      crm2_like_escape: { Args: { p_text: string }; Returns: string };
+      crm2_log_call: {
+        Args: { p_property: string; p_contact: string; p_occurred_at?: string | null; p_note?: string | null; p_result?: string | null; p_next_action?: Database["public"]["Enums"]["crm2_task_kind"] | null; p_next_action_due?: string | null; p_next_action_note?: string | null; p_requirement?: string | null; p_agent?: string | null; p_origin_deal?: string | null };
+        Returns: Json;
+      };
+      crm2_mask_name: { Args: { p_name: string }; Returns: string };
+      crm2_missing_text: { Args: { p_items: string[] }; Returns: string | null };
+      crm2_my_context: { Args: Record<string, never>; Returns: Json };
+      crm2_normalize_phone: { Args: { p_raw: string }; Returns: string };
+      crm2_open_deal: {
+        Args: { p_property: string; p_contact: string; p_requirement?: string | null; p_agent?: string | null; p_origin_deal?: string | null };
+        Returns: Json;
+      };
+      crm2_property_activation_check: { Args: { p_property: string }; Returns: Json };
+      crm2_property_activities: {
+        Args: { p_property: string; p_kind?: Database["public"]["Enums"]["crm2_activity_kind"] | null; p_before?: string | null; p_limit?: number | null };
+        Returns: {
+          activity_id: string;
+          kind: Database["public"]["Enums"]["crm2_activity_kind"];
+          deal_id: string;
+          deal_code: string;
+          contact_id: string | null;
+          contact_name: string;
+          contact_visible: boolean;
+          agent_id: string;
+          agent_name: string;
+          occurred_at: string | null;
+          scheduled_at: string | null;
+          showing_status: Database["public"]["Enums"]["crm2_showing_status"] | null;
+          result: string | null;
+          feedback: string | null;
+          note: string | null;
+          voided_at: string | null;
+          sort_at: string;
+        }[];
+      };
+      crm2_property_approver: { Args: { p_property: string }; Returns: boolean };
+      crm2_property_deals: {
+        Args: { p_property: string };
+        Returns: {
+          deal_id: string;
+          code: string;
+          stage: Database["public"]["Enums"]["crm2_deal_stage"];
+          is_open: boolean;
+          contact_id: string | null;
+          contact_name: string;
+          contact_visible: boolean;
+          agent_id: string;
+          agent_name: string;
+          calls: number;
+          showings: number;
+          shown: number;
+          last_activity_at: string | null;
+          created_at: string;
+          cancel_reason_code: string | null;
+          previous_deal_id: string | null;
+          origin_deal_id: string | null;
+        }[];
+      };
+      crm2_property_editable: {
+        Args: { p_status: Database["public"]["Enums"]["crm2_property_status"]; p_created_by: string; p_listing: string; p_contract: string; p_photo: string };
+        Returns: boolean;
+      };
+      crm2_property_mark_verified: { Args: { p_property: string; p_note?: string | null }; Returns: string };
+      crm2_property_set_status: {
+        Args: { p_property: string; p_status: Database["public"]["Enums"]["crm2_property_status"]; p_reason?: string | null };
+        Returns: string;
+      };
+      crm2_property_showing_info: { Args: { p_property: string }; Returns: string | null };
+      crm2_property_transition_ok: {
+        Args: { p_from: Database["public"]["Enums"]["crm2_property_status"]; p_to: Database["public"]["Enums"]["crm2_property_status"] };
+        Returns: boolean;
+      };
+      crm2_property_visible: {
+        Args: { p_id: string; p_status: Database["public"]["Enums"]["crm2_property_status"]; p_created_by: string; p_listing: string; p_contract: string; p_photo: string };
+        Returns: boolean;
+      };
+      /** 20261113000200_crm2_pending_call.sql (тавигдаагүй бол PGRST202 — UI зөөлөн ажиллана). */
+      crm2_request_transfer_with_call: {
+        Args: { p_property: string; p_contact: string; p_occurred_at?: string | null; p_note?: string | null; p_result?: string | null; p_next_action?: Database["public"]["Enums"]["crm2_task_kind"] | null; p_next_action_due?: string | null; p_next_action_note?: string | null; p_requirement?: string | null; p_reason?: string | null };
+        Returns: Json;
+      };
+      crm2_reset_setting: { Args: { p_key: string }; Returns: Json };
+      crm2_sees_all_properties: { Args: Record<string, never>; Returns: boolean };
+      crm2_self_ok: { Args: { p_involved: string[] }; Returns: boolean };
+      crm2_set_deal_stage: {
+        Args: { p_deal: string; p_stage: Database["public"]["Enums"]["crm2_deal_stage"]; p_note?: string | null };
+        Returns: undefined;
+      };
+      crm2_set_setting: { Args: { p_key: string; p_value: Json }; Returns: Json };
+      crm2_setting: { Args: { p_key: string; p_office?: string | null }; Returns: Json | null };
+      crm2_setting_bool: { Args: { p_key: string; p_office?: string | null }; Returns: boolean };
+      crm2_setting_default: { Args: { p_key: string }; Returns: Json | null };
+      crm2_setting_int: { Args: { p_key: string; p_office?: string | null }; Returns: number | null };
+      crm2_setting_keys: { Args: Record<string, never>; Returns: string[] };
+      crm2_setting_roles: { Args: { p_key: string; p_office?: string | null }; Returns: Database["public"]["Enums"]["crm_role"][] };
+      crm2_setting_text: { Args: { p_key: string; p_office?: string | null }; Returns: string | null };
+      crm2_settings_effective: { Args: Record<string, never>; Returns: Json };
+      crm2_staff_directory: {
+        Args: Record<string, never>;
+        Returns: {
+          profile_id: string;
+          name: string;
+          avatar_url: string | null;
+          team_id: string | null;
+          team_name: string | null;
+          roles: Database["public"]["Enums"]["crm_role"][];
+        }[];
+      };
+      crm2_status_label: { Args: { p_status: string }; Returns: string };
+      crm2_storage_doc_access: { Args: { p_name: string; p_mode: string }; Returns: boolean };
+      crm2_storage_media_access: { Args: { p_name: string; p_write: boolean }; Returns: boolean };
+      crm2_suggest_locations: {
+        Args: { p_query: string; p_limit?: number | null };
+        Returns: {
+          location: string;
+          property_count: number;
+        }[];
+      };
+      crm2_suggest_projects: {
+        Args: { p_query: string; p_limit?: number | null };
+        Returns: {
+          id: string;
+          name: string;
+          property_count: number;
+        }[];
+      };
+      crm2_task_visible: { Args: { p_assignee: string; p_created_by: string; p_deal: string }; Returns: boolean };
+      crm2_today: { Args: Record<string, never>; Returns: string };
+      crm2_transfer_approver: { Args: { p_from: string; p_to: string }; Returns: boolean };
+      crm2_transfer_contact: {
+        Args: { p_contact: string; p_to_agent: string; p_reason: string; p_with_deals?: boolean | null };
+        Returns: string;
+      };
+      crm2_transfer_deal: { Args: { p_deal: string; p_to_agent: string; p_reason: string }; Returns: string };
+      crm2_uuid: { Args: { p_text: string }; Returns: string | null };
     };
     Enums: {
       user_role: "buyer" | "agent" | "office_admin" | "admin";
@@ -5125,6 +6083,41 @@ export type Database = {
       crm_inspection_kind: "move_in" | "move_out" | "periodic";
       crm_doc_category: "contract" | "payment_proof" | "ownership" | "identity" | "photo" | "act" | "aml" | "other";
       staff_chat_kind: "direct" | "group" | "team";
+      // === crm2 (20261113000100_crm2_foundation): CRM v2 1-р шатны enum-ууд ===
+      crm2_property_category: "rent" | "lease" | "managed_rent" | "sale";
+      crm2_property_status: "draft" | "active" | "suspended" | "rented" | "sold" | "contract_ended" | "archived";
+      crm2_price_period: "total" | "month" | "day";
+      crm2_media_kind: "image" | "video";
+      crm2_brokerage_status: "draft" | "pending" | "active" | "expired" | "terminated";
+      crm2_commission_type: "percent" | "fixed";
+      crm2_record_status: "active" | "archived";
+      crm2_deal_stage:
+        | "interested"
+        | "contacted"
+        | "showing_scheduled"
+        | "shown"
+        | "reshow"
+        | "negotiating"
+        | "confirmed"
+        | "documents"
+        | "awaiting_payment"
+        | "closed"
+        | "cancelled";
+      crm2_activity_kind: "call" | "showing";
+      crm2_showing_status: "scheduled" | "shown" | "cancelled" | "no_show";
+      crm2_price_basis: "total" | "per_m2";
+      crm2_task_kind:
+        | "call_back"
+        | "showing"
+        | "reshow"
+        | "negotiate"
+        | "send_info"
+        | "brokerage_renewal"
+        | "owner_verify"
+        | "other";
+      crm2_task_status: "open" | "done" | "cancelled";
+      crm2_request_kind: "property_status" | "deal_transfer" | "contact_transfer";
+      crm2_request_status: "pending" | "approved" | "rejected" | "cancelled";
     };
     CompositeTypes: Record<string, never>;
   };

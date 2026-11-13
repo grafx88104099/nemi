@@ -5,11 +5,8 @@ import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getCrmStaffContext, type CrmStaffContext } from "@/lib/queries-crm-core";
-import { getNameMap } from "@/lib/queries-crm-reports";
+import { getCrmStaffContext, getNameMap, type CrmStaffContext } from "@/lib/queries-crm-core";
 import { updateTask } from "@/lib/actions/tasks";
-import { updateLead } from "@/lib/actions/crm-leads";
-import { scheduleOwnerMeeting } from "@/lib/actions/crm-opportunities";
 import {
   validateCalendarEvent,
   validateCalendarEventUpdate,
@@ -33,10 +30,8 @@ import type { TaskMemberRole, TaskPriority, TaskStatus } from "@/lib/constants";
 /**
  * CRM календарийн бичилтүүд. Өөрийн үйл явдал (crm_events) — эзэн нь л үүсгэж,
  * засаж, устгана (RLS); урилгатай хүмүүсийн оффисыг DB guard шалгана.
- * Бусад эх сурвалжийн цагийг тухайн модулийн одоо байгаа action-аар өөрчилнө
- * (даалгавар — updateTask, сэжмийн алхам — updateLead, боломжийн уулзалт —
- * scheduleOwnerMeeting); хүснэгтэд шууд бичихгүй. Үзлэг, сайтын үзлэгийн
- * цаг өөрчлөх action байхгүй тул календарьаас зөөхгүй.
+ * Даалгаврын хугацааг tasks модулийн updateTask-аар өөрчилнө (хүснэгтэд шууд
+ * бичихгүй). Staff-ийн үзүүлэлт, сайтын үзлэгийн цагийг календарьаас зөөхгүй.
  */
 
 // Төрлүүдийг @/lib/validation/crm-calendar, @/lib/crm/calendar-view-аас шууд импортлоно:
@@ -56,9 +51,6 @@ const EVENT_RETURNING = "id, title, starts_at, all_day, attendee_ids";
 function revalidateCalendarPaths() {
   revalidatePath(calendarHref.calendar("/agent/crm"));
   revalidatePath(calendarHref.calendar("/office/crm"));
-  revalidatePath("/agent/crm/week", "layout");
-  revalidatePath("/agent/crm/team", "layout");
-  revalidatePath("/office/crm/week", "layout");
 }
 
 function friendlyError(fn: string, message: string): string {
@@ -85,24 +77,6 @@ function storedRange(start: string, end: string, allDay: boolean): TimeRange | {
   if (!(ms > 0)) return { error: "Дуусах цаг эхлэх цагаас хойш байна." };
   if (ms > MAX_EVENT_MS) return { error: LONG_ERR };
   return range;
-}
-
-/** Холбох бүртгэлийг хэрэглэгч өөрийн эрхээр харж чадах эсэх (DB guard зөвхөн оффисыг шалгадаг). */
-async function linkError(
-  supabase: Supabase,
-  links: { leadId?: string | null; contactId?: string | null; opportunityId?: string | null }
-): Promise<string | null> {
-  const [lead, contact, opp] = await Promise.all([
-    links.leadId ? supabase.from("crm_leads").select("id").eq("id", links.leadId).maybeSingle() : null,
-    links.contactId ? supabase.from("crm_contacts").select("id").eq("id", links.contactId).maybeSingle() : null,
-    links.opportunityId
-      ? supabase.from("crm_opportunities").select("id").eq("id", links.opportunityId).maybeSingle()
-      : null,
-  ]);
-  if (lead && !lead.data) return "Сэжим олдсонгүй эсвэл танд эрх алга.";
-  if (contact && !contact.data) return "Харилцагч олдсонгүй эсвэл танд эрх алга.";
-  if (opp && !opp.data) return "Боломж олдсонгүй эсвэл танд эрх алга.";
-  return null;
 }
 
 /**
@@ -174,9 +148,6 @@ export async function createEvent(raw: CalendarEventInput): Promise<{ id?: strin
   if ("error" in range) return { error: range.error };
 
   const supabase = await createClient();
-  const linkErr = await linkError(supabase, input);
-  if (linkErr) return { error: linkErr };
-
   const { data, error } = await supabase
     .from("crm_events")
     .insert({
@@ -192,9 +163,6 @@ export async function createEvent(raw: CalendarEventInput): Promise<{ id?: strin
       all_day: input.allDay,
       is_private: input.isPrivate,
       attendee_ids: input.attendeeIds,
-      lead_id: input.leadId ?? null,
-      contact_id: input.contactId ?? null,
-      opportunity_id: input.opportunityId ?? null,
     })
     .select(EVENT_RETURNING)
     .single();
@@ -237,9 +205,6 @@ export async function updateEvent(raw: CalendarEventUpdateInput): Promise<Result
     all_day?: boolean;
     is_private?: boolean;
     attendee_ids?: string[];
-    lead_id?: string | null;
-    contact_id?: string | null;
-    opportunity_id?: string | null;
   } = {};
   if (input.title !== undefined) patch.title = input.title;
   if (input.description !== undefined) patch.description = input.description || null;
@@ -247,9 +212,6 @@ export async function updateEvent(raw: CalendarEventUpdateInput): Promise<Result
   if (input.kind !== undefined) patch.kind = input.kind;
   if (input.isPrivate !== undefined) patch.is_private = input.isPrivate;
   if (input.attendeeIds !== undefined) patch.attendee_ids = input.attendeeIds;
-  if (input.leadId !== undefined) patch.lead_id = input.leadId;
-  if (input.contactId !== undefined) patch.contact_id = input.contactId;
-  if (input.opportunityId !== undefined) patch.opportunity_id = input.opportunityId;
   if (input.startsAt !== undefined || input.allDay !== undefined) {
     const allDay = input.allDay ?? prev.all_day;
     const range = storedRange(input.startsAt ?? prev.starts_at, input.endsAt ?? prev.ends_at, allDay);
@@ -259,13 +221,6 @@ export async function updateEvent(raw: CalendarEventUpdateInput): Promise<Result
     patch.all_day = allDay;
   }
   if (Object.keys(patch).length === 0) return { ok: true };
-
-  const linkErr = await linkError(supabase, {
-    leadId: input.leadId,
-    contactId: input.contactId,
-    opportunityId: input.opportunityId,
-  });
-  if (linkErr) return { ok: false, error: linkErr };
 
   const { data, error } = await supabase
     .from("crm_events")
@@ -350,38 +305,6 @@ async function moveTask(supabase: Supabase, id: string, newStart: string): Promi
   return updateTask(id, input);
 }
 
-/** Сэжмийн дараагийн үйлдлийн огноо = шинэ эхлэлийн УБ-ын өдөр (өнгөрсөн өдөр updateLead татгалзана). */
-async function moveLeadStep(supabase: Supabase, id: string, newStart: string): Promise<Result> {
-  const { data: lead, error } = await supabase
-    .from("crm_leads")
-    .select("id, status, next_step_date")
-    .eq("id", id)
-    .maybeSingle();
-  if (error) console.error("rescheduleItem lead:", error.message);
-  if (!lead) return { ok: false, error: "Сэжим олдсонгүй эсвэл танд эрх алга." };
-  if (lead.status !== "new" && lead.status !== "active") return { ok: false, error: `${CALENDAR_LOCK_REASON.leadClosed}.` };
-  const day = ubDay(newStart);
-  if (lead.next_step_date?.slice(0, 10) === day) return { ok: true };
-  return updateLead({ id, nextStepDate: day });
-}
-
-/** Боломжийн өмчлөгчтэй уулзалт = шинэ эхлэл, газар хэвээр (scheduleOwnerMeeting). */
-async function moveMeeting(supabase: Supabase, id: string, newStart: string): Promise<Result> {
-  const { data: opp, error } = await supabase
-    .from("crm_opportunities")
-    .select("id, state, meeting_at, meeting_place")
-    .eq("id", id)
-    .maybeSingle();
-  if (error) console.error("rescheduleItem opportunity:", error.message);
-  if (!opp) return { ok: false, error: "Боломж олдсонгүй эсвэл танд эрх алга." };
-  if (opp.state !== "open") return { ok: false, error: `${CALENDAR_LOCK_REASON.oppClosed}.` };
-  const place = opp.meeting_place?.trim() ?? "";
-  if (place.length < 2) return { ok: false, error: `${CALENDAR_LOCK_REASON.noPlace}.` };
-  const meetingAt = iso(newStart);
-  if (opp.meeting_at && Date.parse(opp.meeting_at) === Date.parse(meetingAt)) return { ok: true };
-  return scheduleOwnerMeeting({ id, meetingAt, place });
-}
-
 /** Өөрийн үйл явдлыг зөөх: newEnd байхгүй бол үргэлжлэх хугацааг хадгална. */
 async function moveEvent(supabase: Supabase, id: string, newStart: string, newEnd: string | null): Promise<Result> {
   let endsAt = newEnd;
@@ -395,9 +318,8 @@ async function moveEvent(supabase: Supabase, id: string, newStart: string, newEn
 
 /**
  * Календарийн зүйлийг чирж шинэ цаг руу зөөх. Үйл явдал — updateEvent; даалгавар —
- * updateTask (хугацаа = newStart); сэжмийн алхам — updateLead (огноо = newStart-ийн
- * УБ-ын өдөр); боломжийн уулзалт — scheduleOwnerMeeting (цаг = newStart). Үзлэг,
- * сайтын үзлэгийг зөөхгүй — ойлгомжтой алдаа буцаана.
+ * updateTask (хугацаа = newStart). Үзүүлэлт, сайтын үзлэгийг зөөхгүй — ойлгомжтой
+ * алдаа буцаана.
  */
 export async function rescheduleItem(
   source: CalendarSource,
@@ -415,21 +337,9 @@ export async function rescheduleItem(
   if (!ctx) return { ok: false, error: NO_CRM_ERR };
   const supabase = await createClient();
 
-  let result: Result;
-  switch (input.source) {
-    case "event":
-      // updateEvent өөрөө revalidate хийнэ.
-      return moveEvent(supabase, input.id, input.newStart, input.newEnd ?? null);
-    case "task":
-      result = await moveTask(supabase, input.id, input.newStart);
-      break;
-    case "next_step":
-      result = await moveLeadStep(supabase, input.id, input.newStart);
-      break;
-    case "opportunity_meeting":
-      result = await moveMeeting(supabase, input.id, input.newStart);
-      break;
-  }
+  // updateEvent өөрөө revalidate хийнэ.
+  if (input.source === "event") return moveEvent(supabase, input.id, input.newStart, input.newEnd ?? null);
+  const result = await moveTask(supabase, input.id, input.newStart);
   if (result.ok) revalidateCalendarPaths();
   return result;
 }

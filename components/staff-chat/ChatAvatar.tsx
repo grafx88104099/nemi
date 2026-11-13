@@ -1,7 +1,7 @@
 import { Users, UsersRound } from "lucide-react";
 
 import { Avatar } from "@/components/ui/avatar";
-import { personAvatar } from "@/lib/crm/avatar";
+import { personAvatar } from "@/lib/avatar";
 import type { StaffChatKind } from "@/lib/staff-chat";
 import { cn } from "@/lib/utils";
 

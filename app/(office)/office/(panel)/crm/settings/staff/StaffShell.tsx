@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Pencil, UserMinus, LogOut, Plane } from "lucide-react";
 
@@ -12,8 +12,8 @@ import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast";
-import { handoverForLeave, returnFromLeave, setStaffLeave } from "@/lib/actions/crm-ownership";
-import { isOnLeave } from "@/lib/validation/crm-ownership";
+import { returnFromLeave, setStaffLeave } from "@/lib/actions/crm-ownership";
+import { isOnLeave } from "@/lib/crm2/offboarding";
 import { upsertStaff, startOffboarding, deactivateStaff, reactivateStaff } from "@/lib/actions/crm-staff";
 import { CRM_ROLES, CRM_ROLE_LABEL, type CrmRole } from "@/lib/constants-crm";
 import type { BranchRow, StaffRow, TeamRow } from "@/lib/queries-crm-core";
@@ -42,13 +42,14 @@ export function StaffShell({
   teams: TeamRow[];
   candidates: AssigneeOption[];
   canEdit: boolean;
-  /** Чөлөө, түр хүлээлцэх — Борлуулалт хариуцсан захирал. */
+  /** Чөлөө бүртгэх — Борлуулалт хариуцсан захирал. */
   canManageLeave: boolean;
   /** УБ-ын өнөөдөр (YYYY-MM-DD). */
   today: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const fid = useId();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [leave, setLeave] = useState<{ staffId: string; name: string; from: string; to: string; substituteId: string; note: string } | null>(null);
@@ -109,15 +110,16 @@ export function StaffShell({
     });
   }
 
-  function leaveAction(fn: () => Promise<{ ok: boolean; done?: number; error?: string }>, label: string) {
+  function endLeave(staffId: string) {
     setError(null);
     startTransition(async () => {
-      const res = await fn();
+      const res = await returnFromLeave(staffId);
       if (!res.ok) {
         setError(res.error ?? "Алдаа гарлаа.");
         return;
       }
-      toast.success(label, { description: `${res.done ?? 0} сэжим шилжлээ${res.error ? " (зарим нь алгасагдсан)" : ""}.` });
+      toast.success("Чөлөө дууслаа");
+      setLeave(null);
       router.refresh();
     });
   }
@@ -130,7 +132,7 @@ export function StaffShell({
 
       {canEdit ? (
         <Button
-          size="sm"
+          size="touch"
           disabled={addable.length === 0}
           onClick={() =>
             setDraft({
@@ -156,7 +158,11 @@ export function StaffShell({
                   <th className="px-5 py-2.5 font-medium">Дүр</th>
                   <th className="px-5 py-2.5 font-medium">Салбар / Баг</th>
                   <th className="px-5 py-2.5 font-medium">Төлөв</th>
-                  {canEdit ? <th className="px-5 py-2.5" /> : null}
+                  {canEdit ? (
+                    <th className="px-5 py-2.5">
+                      <span className="sr-only">Үйлдэл</span>
+                    </th>
+                  ) : null}
                 </tr>
               </thead>
               <tbody>
@@ -204,7 +210,7 @@ export function StaffShell({
                       <td className="px-5 py-2.5 text-right">
                         <div className="flex justify-end gap-1">
                           <Button
-                            size="sm"
+                            size="touch"
                             variant="ghost"
                             aria-label="Засах"
                             onClick={() =>
@@ -222,7 +228,7 @@ export function StaffShell({
                           </Button>
                           {canManageLeave && s.is_active && !s.offboarding ? (
                             <Button
-                              size="sm"
+                              size="touch"
                               variant="ghost"
                               aria-label="Чөлөө"
                               title="Чөлөө, түр хүлээлцэх"
@@ -242,7 +248,7 @@ export function StaffShell({
                           ) : null}
                           {s.is_active && !s.offboarding ? (
                             <Button
-                              size="sm"
+                              size="touch"
                               variant="ghost"
                               aria-label="Гарах урсгал эхлүүлэх"
                               disabled={pending}
@@ -253,7 +259,7 @@ export function StaffShell({
                           ) : null}
                           {s.is_active ? (
                             <Button
-                              size="sm"
+                              size="touch"
                               variant="ghost"
                               aria-label="Идэвхгүй болгох"
                               disabled={pending}
@@ -262,7 +268,7 @@ export function StaffShell({
                               <UserMinus className="size-4" />
                             </Button>
                           ) : (
-                            <Button size="sm" variant="ghost" disabled={pending} onClick={() => act(() => reactivateStaff(s.id))}>
+                            <Button size="touch" variant="ghost" disabled={pending} onClick={() => act(() => reactivateStaff(s.id))}>
                               Сэргээх
                             </Button>
                           )}
@@ -295,8 +301,8 @@ export function StaffShell({
         {draft ? (
           <div className="space-y-3">
             {!draft.id ? (
-              <Field label="Хэрэглэгч">
-                <Select value={draft.profileId} onChange={(e) => setDraft({ ...draft, profileId: e.target.value })}>
+              <Field label="Хэрэглэгч" htmlFor={`${fid}-user`}>
+                <Select id={`${fid}-user`} value={draft.profileId} onChange={(e) => setDraft({ ...draft, profileId: e.target.value })}>
                   {addable.map((c) => (
                     <option key={c.profileId} value={c.profileId}>
                       {c.name}
@@ -306,11 +312,12 @@ export function StaffShell({
               </Field>
             ) : null}
             <Field label="Дүрүүд" hint="Нэг хүн олон дүртэй байж болно (ж: CEO + Системийн админ)">
-              <div className="flex flex-wrap gap-1.5">
+              <div role="group" aria-label="Дүрүүд" className="flex flex-wrap gap-1.5">
                 {CRM_ROLES.map((r) => (
                   <button
                     key={r}
                     type="button"
+                    aria-pressed={draft.roles.includes(r)}
                     onClick={() =>
                       setDraft({
                         ...draft,
@@ -319,8 +326,8 @@ export function StaffShell({
                     }
                     className={
                       draft.roles.includes(r)
-                        ? "rounded-full border border-brand-200 bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700"
-                        : "rounded-full border border-line px-2.5 py-1 text-xs text-muted hover:bg-surface-2"
+                        ? "inline-flex min-h-11 items-center rounded-full border border-brand-200 bg-brand-50 px-3 text-xs font-semibold text-brand-700 sm:min-h-8"
+                        : "inline-flex min-h-11 items-center rounded-full border border-line px-3 text-xs text-muted hover:bg-surface-2 sm:min-h-8"
                     }
                   >
                     {CRM_ROLE_LABEL[r]}
@@ -328,9 +335,10 @@ export function StaffShell({
                 ))}
               </div>
             </Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Салбар">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Салбар" htmlFor={`${fid}-branch`}>
                 <Select
+                  id={`${fid}-branch`}
                   value={draft.branchId ?? ""}
                   onChange={(e) => setDraft({ ...draft, branchId: e.target.value || null })}
                 >
@@ -342,8 +350,8 @@ export function StaffShell({
                   ))}
                 </Select>
               </Field>
-              <Field label="Баг">
-                <Select value={draft.teamId ?? ""} onChange={(e) => setDraft({ ...draft, teamId: e.target.value || null })}>
+              <Field label="Баг" htmlFor={`${fid}-team`}>
+                <Select id={`${fid}-team`} value={draft.teamId ?? ""} onChange={(e) => setDraft({ ...draft, teamId: e.target.value || null })}>
                   <option value="">Сонгоогүй</option>
                   {teams
                     .filter((t) => !draft.branchId || t.branch_id === draft.branchId)
@@ -357,9 +365,11 @@ export function StaffShell({
             </div>
             <Field
               label="Панелийн админ"
+              htmlFor={`${fid}-panel`}
               hint="Тийм бол CRM-ээс гадуурх оффисын хуудсуудад бичих эрхтэй хэвээр үлдэнэ"
             >
               <Select
+                id={`${fid}-panel`}
                 value={draft.panelAdmin ? "yes" : "no"}
                 onChange={(e) => setDraft({ ...draft, panelAdmin: e.target.value === "yes" })}
               >
@@ -367,7 +377,11 @@ export function StaffShell({
                 <option value="yes">Тийм — оффисын бүрэн админ</option>
               </Select>
             </Field>
-            {error ? <p className="text-xs text-danger">{error}</p> : null}
+            {error ? (
+              <p role="alert" className="text-xs text-danger">
+                {error}
+              </p>
+            ) : null}
           </div>
         ) : null}
       </Modal>
@@ -390,20 +404,19 @@ export function StaffShell({
         {leave ? (
           <div className="space-y-3">
             <p className="text-sm text-muted">
-              Чөлөөний хугацаанд ажилтанд шинэ сэжим оноогдохгүй. «Түр хүлээлцэх» нь нээлттэй сэжмийг орлон ажиллагчид
-              түүхтэйгээр шилжүүлж, буцаж ирэхэд «Буцаан хүлээлцэх»-ээр анхны агентад нь буцаана. Огноог хоосон болговол
-              чөлөө цуцлагдана.
+              Чөлөөний хугацаа ба орлон ажиллагчийг тэмдэглэнэ. Нээлттэй Staff хэлцлийг шилжүүлэх нь хэлцлийн хуудаснаас
+              хийгдэнэ. Огноог хоосон болговол чөлөө цуцлагдана.
             </p>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Эхлэх">
-                <Input type="date" value={leave.from} onChange={(e) => setLeave({ ...leave, from: e.target.value })} />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Эхлэх" htmlFor={`${fid}-from`}>
+                <Input id={`${fid}-from`} type="date" value={leave.from} onChange={(e) => setLeave({ ...leave, from: e.target.value })} />
               </Field>
-              <Field label="Дуусах">
-                <Input type="date" value={leave.to} onChange={(e) => setLeave({ ...leave, to: e.target.value })} />
+              <Field label="Дуусах" htmlFor={`${fid}-to`}>
+                <Input id={`${fid}-to`} type="date" value={leave.to} onChange={(e) => setLeave({ ...leave, to: e.target.value })} />
               </Field>
             </div>
-            <Field label="Орлон ажиллагч">
-              <Select value={leave.substituteId} onChange={(e) => setLeave({ ...leave, substituteId: e.target.value })}>
+            <Field label="Орлон ажиллагч" htmlFor={`${fid}-sub`}>
+              <Select id={`${fid}-sub`} value={leave.substituteId} onChange={(e) => setLeave({ ...leave, substituteId: e.target.value })}>
                 <option value="">Сонгоогүй</option>
                 {staff
                   .filter((x) => x.is_active && !x.offboarding && x.id !== leave.staffId)
@@ -414,28 +427,14 @@ export function StaffShell({
                   ))}
               </Select>
             </Field>
-            <Field label="Тайлбар">
-              <Input value={leave.note} onChange={(e) => setLeave({ ...leave, note: e.target.value })} />
+            <Field label="Тайлбар" htmlFor={`${fid}-note`}>
+              <Input id={`${fid}-note`} value={leave.note} onChange={(e) => setLeave({ ...leave, note: e.target.value })} />
             </Field>
             <div className="flex flex-wrap gap-2 border-t border-line pt-3">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={pending}
-                onClick={() => leaveAction(() => handoverForLeave(leave.staffId), "Түр хүлээлцлээ")}
-              >
-                Түр хүлээлцэх
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={pending}
-                onClick={() => leaveAction(() => returnFromLeave(leave.staffId), "Буцаан хүлээлцлээ")}
-              >
-                Буцаан хүлээлцэх
+              <Button size="touch" variant="outline" disabled={pending} onClick={() => endLeave(leave.staffId)}>
+                Чөлөөг дуусгах
               </Button>
             </div>
-            <p className="text-xs text-subtle">Түр хүлээлцэхийн өмнө чөлөөний огноо, орлон ажиллагчийг хадгална уу.</p>
             {error ? <p className="text-xs text-danger">{error}</p> : null}
           </div>
         ) : null}

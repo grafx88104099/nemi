@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 
-import { deleteProject } from "@/lib/actions/crm";
+import { deleteProject } from "@/lib/actions/agent-projects";
 
 export function DeleteProjectButton({ id }: { id: string }) {
   const [pending, start] = useTransition();

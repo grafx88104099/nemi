@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+import { CRM_REDIRECTS } from "./lib/crm-redirects";
+
 const nextConfig: NextConfig = {
   images: {
     // Зарын зургийн эх сурвалжууд (seed: unsplash, агент upload: Supabase storage)
@@ -7,6 +9,10 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "images.unsplash.com" },
       { protocol: "https", hostname: "**.supabase.co" },
     ],
+  },
+  // Хуучин CRM-ийн устгасан хуудас → шинэ CRM (lib/crm-redirects.ts).
+  async redirects() {
+    return CRM_REDIRECTS;
   },
   // CRM PWA: service worker-ийг кэшлэхгүй (шинэ хувилбар шууд үйлчилнэ), зөвхөн өөрийн домэйны скрипт.
   async headers() {

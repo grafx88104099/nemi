@@ -43,9 +43,6 @@ const fields = {
   allDay: z.boolean(),
   isPrivate: z.boolean(),
   attendeeIds: z.array(z.uuid("Урьсан хүн буруу байна")).max(50, "Урих хүн 50-аас олонгүй"),
-  leadId: z.uuid().nullable(),
-  contactId: z.uuid().nullable(),
-  opportunityId: z.uuid().nullable(),
 };
 
 const createSchema = z
@@ -55,9 +52,6 @@ const createSchema = z
     allDay: fields.allDay.default(false),
     isPrivate: fields.isPrivate.default(false),
     attendeeIds: fields.attendeeIds.default([]),
-    leadId: fields.leadId.optional(),
-    contactId: fields.contactId.optional(),
-    opportunityId: fields.opportunityId.optional(),
   })
   .strict()
   .refine(rangeOk, { message: RANGE_ERR })
@@ -83,9 +77,6 @@ const updateSchema = z
     allDay: fields.allDay.optional(),
     isPrivate: fields.isPrivate.optional(),
     attendeeIds: fields.attendeeIds.optional(),
-    leadId: fields.leadId.optional(),
-    contactId: fields.contactId.optional(),
-    opportunityId: fields.opportunityId.optional(),
   })
   .strict()
   .refine((v) => (v.startsAt === undefined) === (v.endsAt === undefined), {

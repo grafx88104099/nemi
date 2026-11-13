@@ -1,8 +1,6 @@
 /**
- * Долоо хоногийн цонх ба хуваарь (U7 — PRO-001 v2.1 §6.19, §6.22, §6.24, §6.30).
+ * Улаанбаатарын огноо ба долоо хоногийн цонх (календарь, багийн хяналт).
  * Долоо хоног = Даваа 00:00 – Ням 24:00, Улаанбаатарын цагаар (UTC+8).
- * Хурлын цаг, түгжих мөч бүгд тохиргооноос (crm_settings 'weekly_cycle') ирнэ;
- * энд байгаа анхдагч утга нь тохиргоо уншигдаагүй үеийн нөөц (миграцитай ижил).
  * Цэвэр функц — DB-гүй, unit тестийн бай.
  */
 
@@ -90,30 +88,7 @@ export function weekShortLabel(week: string): string {
   return m1 === m2 ? `${m1}-р сарын ${d1}–${d2}` : `${m1}-р сарын ${d1} – ${m2}-р сарын ${d2}`;
 }
 
-// ── Хуваарь ───────────────────────────────────────────────
-
-export type WeekSlot = { weekday: number; time: string };
-
-export type WeeklySchedule = {
-  /** Даваагийн борлуулалтын хурал (§6.20, §9.5). */
-  meeting: WeekSlot & { durationMin: number };
-  /** Баасан гарагийн дүн шинжилгээ — урьдчилсан гүйцэтгэл энэ мөчид (Ш8). */
-  review: WeekSlot;
-  /** Эцсийн түгжээ: Ням 24:00-ээс хойш (+) эсвэл өмнө (−) цаг (Ш8: 0). */
-  finalLockOffsetHours: number;
-  /** Төлөвлөгөө бөглөөгүй агентад хурлаас хэдэн цагийн өмнө сануулах. */
-  planReminderHours: number;
-  /** Хурлын сануулга хэдэн минутын өмнө. */
-  meetingReminderMin: number;
-};
-
-export const DEFAULT_WEEKLY_SCHEDULE: WeeklySchedule = {
-  meeting: { weekday: 1, time: "10:00", durationMin: 60 },
-  review: { weekday: 5, time: "16:00" },
-  finalLockOffsetHours: 0,
-  planReminderHours: 16,
-  meetingReminderMin: 30,
-};
+// ── Цаг ───────────────────────────────────────────────────
 
 /** "HH:MM" → минут (00:00–24:00). Буруу бол null. */
 export function parseHmMinutes(s: unknown): number | null {
@@ -126,103 +101,8 @@ export function parseHmMinutes(s: unknown): number | null {
   return h * 60 + min;
 }
 
-function num(v: unknown, fallback: number, min: number, max: number): number {
-  const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(max, Math.max(min, n));
-}
-
-function slot(raw: unknown, fallback: WeekSlot): WeekSlot {
-  const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  const weekday = Math.round(num(o.weekday, fallback.weekday, 1, 7));
-  const time = parseHmMinutes(o.time) != null ? String(o.time).trim() : fallback.time;
-  return { weekday, time };
-}
-
-export function normalizeWeeklySchedule(raw: unknown): WeeklySchedule {
-  const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  const d = DEFAULT_WEEKLY_SCHEDULE;
-  const meetingRaw = (o.meeting && typeof o.meeting === "object" ? o.meeting : {}) as Record<string, unknown>;
-  return {
-    meeting: {
-      ...slot(o.meeting, d.meeting),
-      durationMin: Math.round(num(meetingRaw.duration_min ?? meetingRaw.durationMin, d.meeting.durationMin, 15, 240)),
-    },
-    review: slot(o.review, d.review),
-    finalLockOffsetHours: num(o.final_lock_offset_hours ?? o.finalLockOffsetHours, d.finalLockOffsetHours, -72, 72),
-    planReminderHours: num(o.plan_reminder_hours ?? o.planReminderHours, d.planReminderHours, 0, 96),
-    meetingReminderMin: num(o.meeting_reminder_min ?? o.meetingReminderMin, d.meetingReminderMin, 0, 240),
-  };
-}
-
 /** УБ-ын тухайн өдөр, цагийн бодит мөч (UTC Date). "24:00" = дараагийн өдрийн 00:00. */
 export function ubDateTime(iso: string, hm: string): Date {
   const minutes = parseHmMinutes(hm) ?? 0;
   return new Date(parseIso(iso).getTime() + minutes * 60_000 - UB_OFFSET_MS);
-}
-
-/** Долоо хоногийн тухайн гаригийн огноо (1 = Даваа). */
-export function slotDate(week: string, weekday: number): string {
-  return addDays(week, Math.min(7, Math.max(1, weekday)) - 1);
-}
-
-export function meetingAt(week: string, s: WeeklySchedule = DEFAULT_WEEKLY_SCHEDULE): Date {
-  return ubDateTime(slotDate(week, s.meeting.weekday), s.meeting.time);
-}
-
-export function reviewAt(week: string, s: WeeklySchedule = DEFAULT_WEEKLY_SCHEDULE): Date {
-  return ubDateTime(slotDate(week, s.review.weekday), s.review.time);
-}
-
-/** Эцсийн түгжээ = Ням 24:00 (УБ) + offset. */
-export function finalLockAt(week: string, s: WeeklySchedule = DEFAULT_WEEKLY_SCHEDULE): Date {
-  return new Date(ubDateTime(addDays(week, 7), "00:00").getTime() + s.finalLockOffsetHours * 3600_000);
-}
-
-export function planReminderAt(week: string, s: WeeklySchedule = DEFAULT_WEEKLY_SCHEDULE): Date {
-  return new Date(meetingAt(week, s).getTime() - s.planReminderHours * 3600_000);
-}
-
-export type WeekPhase = {
-  week: string;
-  isCurrent: boolean;
-  isPast: boolean;
-  isFuture: boolean;
-  /** Даваагийн хурал болсон эсэх. */
-  meetingPassed: boolean;
-  /** Баасан гарагийн урьдчилсан гүйцэтгэлийн мөч өнгөрсөн. */
-  preliminary: boolean;
-  /** Эцсийн түгжээ — гүйцэтгэл, дүн шинжилгээ засагдахгүй. */
-  finalLocked: boolean;
-};
-
-export function weekPhase(week: string, now: Date = new Date(), s: WeeklySchedule = DEFAULT_WEEKLY_SCHEDULE): WeekPhase {
-  const cur = currentWeekStart(now);
-  const t = now.getTime();
-  const locked = t >= finalLockAt(week, s).getTime();
-  return {
-    week,
-    isCurrent: week === cur,
-    isPast: week < cur,
-    isFuture: week > cur,
-    meetingPassed: t >= meetingAt(week, s).getTime(),
-    preliminary: t >= reviewAt(week, s).getTime() && !locked,
-    finalLocked: locked,
-  };
-}
-
-/** Ням 24:00 хүртэл хэдэн цаг үлдсэн (сөрөг = түгжигдсэн). */
-export function hoursUntilLock(week: string, now: Date = new Date(), s: WeeklySchedule = DEFAULT_WEEKLY_SCHEDULE): number {
-  return Math.floor((finalLockAt(week, s).getTime() - now.getTime()) / 3600_000);
-}
-
-/** Даваагийн хурал болох мөчийн шошго: «Даваа 10:00». */
-const WEEKDAY_LABEL = ["", "Даваа", "Мягмар", "Лхагва", "Пүрэв", "Баасан", "Бямба", "Ням"];
-
-export function weekdayLabel(weekday: number): string {
-  return WEEKDAY_LABEL[Math.min(7, Math.max(1, Math.round(weekday)))];
-}
-
-export function slotLabel(s: WeekSlot): string {
-  return `${weekdayLabel(s.weekday)} ${s.time}`;
 }

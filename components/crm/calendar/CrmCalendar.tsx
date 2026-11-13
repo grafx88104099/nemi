@@ -13,12 +13,11 @@ import {
   CALENDAR_VIEWS,
   autoCalendarViews,
   calendarDraftItem,
-  calendarHref,
   calendarPeopleParam,
   calendarSearch,
   calendarShortcut,
-  calendarViewRange,
-  calendarViewTitle,
+  calendarRange,
+  calendarTitle,
   defaultCreateRange,
   dropAllowed,
   itemDays,
@@ -50,18 +49,14 @@ import { TimeGrid } from "./TimeGrid";
 import { rectOf, useMediaQuery, type AnchorRect } from "./use-pointer-gesture";
 
 /**
- * CRM календарь (Google Calendar маяг) — өөрийн үйл явдал, даалгавар, дараагийн
- * үйлдэл, үзлэг, боломжийн уулзалт, сайтын үзлэгийг нэг дор. Өгөгдлийг сервер
- * (CrmCalendarSection) URL-ийн ?view=&date=&people=-ээр уншина; энд харагдац,
- * чирэлт (optimistic, алдаа гарвал буцаана), popover, товчлолыг удирдана.
- *
- * pinned — 7 хоногийн төлөвлөгөөнд суулгасан тогтмол 7 хоног: URL-ийг өөрчлөхгүй,
- * «Өнөөдөр», өмнөх/дараах, хүн сонгогчгүй; 7 хоног ↔ жагсаалт дотроо солигдоно;
- * өдөр нээвэл бүтэн календарь (basePath/calendar) руу шилжинэ.
+ * CRM календарь (Google Calendar маяг) — өөрийн үйл явдал, даалгавар, Staff-ийн
+ * үзүүлэлт, сайтын үзлэгийг нэг дор. Өгөгдлийг сервер (CrmCalendarSection) URL-ийн
+ * ?view=&date=&people=-ээр уншина; энд харагдац, чирэлт (optimistic, алдаа гарвал
+ * буцаана), popover, товчлолыг удирдана.
  */
 
 export type CrmCalendarProps = {
-  /** CRM-ийн үндсэн зам — бүтэн календарийн холбоос (calendarHref.calendar). */
+  /** CRM-ийн үндсэн зам ("/agent/crm" | "/office/crm"). */
   basePath: "/agent/crm" | "/office/crm";
   /** getCalendarFeed()-ийн зүйлс (calendarFetchRange(view, date) мужид). */
   items: CalendarItem[];
@@ -84,11 +79,9 @@ export type CrmCalendarProps = {
   sidebar?: boolean;
   /** Google маягийн товчлол (t, d/w/m/a, ←/→, j/k, c). */
   shortcuts?: boolean;
-  /** Тогтмол 7 хоног (date = тэр 7 хоногийн аль нэг өдөр) — дээрх тайлбарыг үз. */
-  pinned?: boolean;
   /** false = шинэ үйл явдал үүсгэхгүй (бусдын календарийг харах үед). Зөөх эрх — зүйл бүрт. */
   canCreate?: boolean;
-  /** Толгойн доорх нэмэлт мөр (жишээ нь харагдаж буй 7 хоногийн картын төлөв). */
+  /** Толгойн доорх нэмэлт мөр. */
   toolbar?: React.ReactNode;
   className?: string;
 };
@@ -121,11 +114,6 @@ function editValues(item: CalendarItem): EventFormValues | null {
     isPrivate: e.isPrivate,
     times: rangeToFormTimes(item, item.allDay),
     attendees: e.attendees,
-    link: e.leadId
-      ? { kind: "lead", id: e.leadId, label: e.linkLabel ?? "Холбосон сэжим" }
-      : e.contactId
-        ? { kind: "contact", id: e.contactId, label: e.linkLabel ?? "Холбосон харилцагч" }
-        : null,
   };
 }
 
@@ -138,12 +126,10 @@ function createValues(range: TimeRange, allDay: boolean, attendees: Attendee[] =
     isPrivate: false,
     times: rangeToFormTimes(range, allDay),
     attendees,
-    link: null,
   };
 }
 
 export function CrmCalendar({
-  basePath,
   items,
   view,
   date,
@@ -155,7 +141,6 @@ export function CrmCalendar({
   gridHeight = DEFAULT_GRID_HEIGHT,
   sidebar = true,
   shortcuts = true,
-  pinned = false,
   canCreate = true,
   toolbar = null,
   className,
@@ -166,9 +151,7 @@ export function CrmCalendar({
   const [navPending, startNav] = useTransition();
   const [, startMutation] = useTransition();
   const [nav, setNav] = useOptimistic({ view, date, people: selectedPeople });
-  // Тогтмол 7 хоногт харагдацыг URL-д бичихгүй (төлөвлөгөөний хуудасны URL хэвээр).
-  const [pinnedView, setPinnedView] = useState<CalendarView | null>(view);
-  const navView = pinned ? pinnedView : nav.view;
+  const navView = nav.view;
   const [shownItems, patchItems] = useOptimistic(items, applyPatch);
   const [pop, setPop] = useState<Popover | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<CalendarItem | null>(null);
@@ -188,25 +171,24 @@ export function CrmCalendar({
     urlView ??
     (autoViews.phone === autoViews.wide ? autoViews.wide : phone === null ? null : phone ? autoViews.phone : autoViews.wide);
   const effective = active ?? autoViews.wide;
-  const range = useMemo(() => calendarViewRange(effective, nav.date, pinned), [effective, nav.date, pinned]);
+  const range = useMemo(() => calendarRange(effective, nav.date), [effective, nav.date]);
   const viewDays = useMemo(
     () =>
-      Object.fromEntries(CALENDAR_VIEWS.map((v) => [v, calendarViewRange(v, nav.date, pinned).days])) as Record<
+      Object.fromEntries(CALENDAR_VIEWS.map((v) => [v, calendarRange(v, nav.date).days])) as Record<
         CalendarView,
         string[]
       >,
-    [nav.date, pinned]
+    [nav.date]
   );
 
-  const canPickPeople = !pinned && people.length > 1;
+  const canPickPeople = people.length > 1;
   const byPerson = nav.people.length > 1;
   // Өнгө сонгосон хүмүүсийн дотор байрлалаар (жагсаалтын дарааллаар) — 8 хүртэл давхцахгүй.
   const colorOrder = useMemo(
     () => people.map((p) => p.profileId).filter((id) => nav.people.includes(id)),
     [people, nav.people]
   );
-  // Суулгасан календарь нэг хүнийх (хэсгийн гарчигт нэр нь) — зүйл бүрт нэр давтахгүй.
-  const showPerson = byPerson || (!pinned && nav.people.some((id) => id !== viewerId));
+  const showPerson = byPerson || nav.people.some((id) => id !== viewerId);
   const viewerShown = nav.people.includes(viewerId);
 
   const colorOfPerson = useCallback(
@@ -250,26 +232,12 @@ export function CrmCalendar({
   }, [shownItems]);
 
   // ── Навигаци (URL) ──
-  /** Бүтэн календарийн хуудас руу (суулгасан календариас өдөр, огноо нээх). */
-  function openFull(next: { view: CalendarView | null; date: string }) {
-    const href = calendarHref.calendar(basePath, next.date, {
-      view: next.view,
-      people: calendarPeopleParam(nav.people, viewerId),
-    });
-    startNav(() => router.push(href));
-  }
-
   function go(patch: { view?: CalendarView; date?: string; people?: string[] }) {
     const next = {
       view: patch.view ?? active ?? navView,
       date: patch.date ?? nav.date,
       people: patch.people ?? nav.people,
     };
-    if (pinned) {
-      if (patch.date === undefined && patch.people === undefined) setPinnedView(next.view);
-      else openFull(next);
-      return;
-    }
     const search = calendarSearch(window.location.search, {
       view: next.view,
       date: next.date,
@@ -295,8 +263,7 @@ export function CrmCalendar({
   };
   const openDay = (day: string) => {
     setPop(null);
-    if (pinned) openFull({ view: "day", date: day });
-    else go({ view: views.includes("day") ? "day" : effective, date: day });
+    go({ view: views.includes("day") ? "day" : effective, date: day });
   };
   const openCreate = (anchor: AnchorRect | null = null) => {
     if (!canCreate) return;
@@ -404,7 +371,7 @@ export function CrmCalendar({
         colorOf={colorOf}
         showPerson={showPerson}
         height={gridHeight}
-        containScroll={!pinned}
+        containScroll
         {...handlers}
       />
     );
@@ -461,20 +428,20 @@ export function CrmCalendar({
 
       <div className="min-w-0 space-y-3">
         <CalendarHeader
-          title={active ? calendarViewTitle(active, nav.date, pinned) : null}
+          title={active ? calendarTitle(active, nav.date) : null}
           autoTitles={{
-            phone: calendarViewTitle(autoViews.phone, nav.date, pinned),
-            wide: calendarViewTitle(autoViews.wide, nav.date, pinned),
+            phone: calendarTitle(autoViews.phone, nav.date),
+            wide: calendarTitle(autoViews.wide, nav.date),
           }}
           activeView={active}
           autoViews={autoViews}
           views={views}
           pending={navPending}
-          navigation={!pinned}
+          navigation
           onToday={goToday}
           onShift={shift}
           onView={goView}
-          onTitleClick={pinned ? undefined : (anchor) => setPop({ kind: "jump", anchor })}
+          onTitleClick={(anchor) => setPop({ kind: "jump", anchor })}
           extra={
             <div className={cn("flex items-center gap-2", sidebar && "lg:hidden")}>
               {canPickPeople ? (

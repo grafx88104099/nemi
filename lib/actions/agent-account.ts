@@ -5,15 +5,14 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendAgentInvite } from "@/lib/email/resend";
-import { getOffboardingBlockers } from "@/lib/queries-crm-ownership";
-import { offboardingBlockMessage } from "@/lib/validation/crm-ownership";
+import { getOffboardingBlockers, offboardingBlockMessage } from "@/lib/crm2/offboarding";
 
 /**
- * CRM-ийн хүлээлцэх шалгалт (§6.28.11, §6.32): CRM-д нээлттэй эзэмшилтэй
- * эсвэл батлагдсан хүлээлцэх актгүй ажилтны нэвтрэлтийг хаахгүй, бүрэн устгахгүй.
+ * CRM-ийн хүлээлцэх шалгалт: нээлттэй Staff хэлцэл эсвэл Staff хөрөнгийн үүрэгтэй
+ * ажилтны нэвтрэлтийг хаахгүй; CRM-д бүртгэлтэй ажилтныг бүрэн устгахгүй.
  */
 async function crmOffboardingGuard(profileId: string, action: "disable" | "delete"): Promise<string | null> {
-  const b = await getOffboardingBlockers(profileId);
+  const b = await getOffboardingBlockers(createAdminClient(), profileId);
   if ("error" in b) return b.error;
   return offboardingBlockMessage(b, action);
 }

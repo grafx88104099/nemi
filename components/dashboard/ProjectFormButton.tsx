@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Pencil, Loader2 } from "lucide-react";
 
-import { createProject, updateProject, type ProjectInput } from "@/lib/actions/crm";
+import { createProject, updateProject, type ProjectInput } from "@/lib/actions/agent-projects";
 import { Modal } from "@/components/ui/modal";
 import {
   PROJECT_TYPES, PROJECT_TYPE_LABEL,

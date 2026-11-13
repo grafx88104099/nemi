@@ -56,8 +56,6 @@ const COLOR_KEYS: CalendarColorKey[] = [
   "personal",
   "other",
   "task",
-  "next_step",
-  "opportunity_meeting",
   "viewing",
   "busy",
 ];
@@ -284,12 +282,10 @@ describe("цагийн торд зөөх", () => {
     expect(dragMoveTimed(short, DAY, 5, "2026-11-12", 5)).toEqual({ start: ub(DAY, "23:00"), end: ub("2026-11-12", "00:10") });
   });
 
-  it("өдрөөр зөөх ба сэжмийн алхмын хориг", () => {
+  it("өдрөөр зөөх", () => {
     expect(shiftByDays(allDayRange(DAY), DAY, "2026-11-13")).toEqual(allDayRange("2026-11-13"));
     expect(shiftByDays(origin, DAY, DAY)).toEqual(origin);
-    const step = { source: "next_step" as const, canMove: true };
-    expect(dropAllowed(step, allDayRange("2026-11-10"), DAY)).toBe(false);
-    expect(dropAllowed(step, allDayRange(DAY), DAY)).toBe(true);
+    expect(dropAllowed({ source: "task", canMove: true }, allDayRange("2026-11-10"), DAY)).toBe(true);
     expect(dropAllowed({ source: "event", canMove: true }, allDayRange("2026-11-01"), DAY)).toBe(true);
     expect(dropAllowed({ source: "event", canMove: false }, allDayRange(DAY), DAY)).toBe(false);
   });

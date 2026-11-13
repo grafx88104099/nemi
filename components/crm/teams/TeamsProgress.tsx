@@ -86,7 +86,7 @@ export async function TeamsProgress({
       {canManage ? <BackLink href={teamsPath} label="Багууд" /> : null}
       <h1 className="text-2xl font-extrabold text-ink">Бүх багийн явц</h1>
       <p className="mt-1 text-sm text-muted">
-        Баг бүр болон багт хуваарилагдаагүй агентуудын бүртгэсэн сэжим, холболт, дараагийн үйлдэл, боломж. Тоо
+        Баг бүр болон багт хуваарилагдаагүй агентуудын Staff хөрөнгө, хэлцэл, дуудлага, үзүүлэлт. Тоо
         CRM-ийн бүртгэлээс автоматаар гарна.
       </p>
 

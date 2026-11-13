@@ -6,7 +6,6 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CRM_ROLES, type CrmRole } from "@/lib/constants-crm";
-import { createHandoverAct } from "@/lib/actions/crm-post-sale";
 
 /**
  * CRM ажилтны удирдлага (§1.1). Бичих эрх: sysadmin (RLS давхар шалгана;
@@ -163,9 +162,8 @@ export async function upsertStaff(raw: StaffInput): Promise<{ id?: string; error
 }
 
 /**
- * Гарах урсгал эхлүүлэх (§6.28.11, §6.32): offboarding=true + хүлээлцэх актыг
- * автоматаар үүсгэнэ (нээлттэй сэжим, боломж, үл хөдлөхийн үүрэг), удирдлагад
- * мэдэгдэл, хүлээлцэх даалгавар. Акт батлагдахаас өмнө идэвхгүй болгохгүй.
+ * Гарах урсгал эхлүүлэх: offboarding=true, хүлээлцэх даалгавар (нээлттэй Staff
+ * хэлцэл, Staff хөрөнгийн үүргийг шилжүүлэх), ажилтанд мэдэгдэл.
  */
 export async function startOffboarding(staffId: string): Promise<{ ok: boolean; error?: string }> {
   const supabase = await createClient();
@@ -195,36 +193,17 @@ export async function startOffboarding(staffId: string): Promise<{ ok: boolean; 
     return { ok: false, error: SAVE_ERR };
   }
 
-  // Хүлээлцэх даалгавар (Д-11 эхлэл) — tasks модулиар; rule_runs-д лог.
-  try {
-    const { data: task } = await supabase
-      .from("tasks")
-      .insert({
-        office_id: ctx.officeId,
-        created_by: ctx.userId,
-        responsible_id: ctx.userId,
-        title: "Гарах ажилтны хүлээлцэх",
-        description: "Гарах төлөвт орсон ажилтны нээлттэй сэжим, боломж, үл хөдлөхийг шилжүүлж, хүлээлцэх актыг батална.",
-        priority: "high",
-      })
-      .select("id")
-      .single();
-    const admin = createAdminClient();
-    await admin.from("crm_rule_runs").insert({
-      office_id: ctx.officeId,
-      rule_code: "D-11",
-      entity: "crm_staff",
-      entity_id: staffId,
-      status: "ok",
-      result: task?.id ? { task_id: task.id } : null,
-    });
-  } catch {
-    // даалгавар/лог амжилтгүй ч offboarding төлөв хадгалагдсан
-  }
-
-  // Хүлээлцэх акт (багцын жагсаалт автомат) — алдаа гарвал гараар үүсгэнэ.
-  const act = await createHandoverAct(staffId);
-  if (act.error && !act.id) console.error("startOffboarding act:", act.error);
+  // Хүлээлцэх даалгавар — tasks модулиар.
+  const { error: taskError } = await supabase.from("tasks").insert({
+    office_id: ctx.officeId,
+    created_by: ctx.userId,
+    responsible_id: ctx.userId,
+    title: "Гарах ажилтны хүлээлцэх",
+    description: "Гарах төлөвт орсон ажилтны нээлттэй Staff хэлцлийг өөр агентад шилжүүлж, Staff хөрөнгийн үүрэгт агентыг солино.",
+    priority: "high",
+  });
+  // даалгавар амжилтгүй ч offboarding төлөв хадгалагдсан
+  if (taskError) console.error("startOffboarding task:", taskError.message);
 
   await notify([staff.profile_id], "crm_offboarding", "Гарах урсгал", "Таны CRM бүртгэлд гарах урсгал эхэллээ.");
   revalidateStaffPaths();
@@ -232,8 +211,8 @@ export async function startOffboarding(staffId: string): Promise<{ ok: boolean; 
 }
 
 /**
- * Ажилтныг идэвхгүй болгох — нээлттэй эзэмшилтэй бичлэгтэй бол DB trigger
- * (crm_staff_deactivate_guard) хориглоно; алдааг ойлгомжтой буцаана.
+ * Ажилтныг идэвхгүй болгох — нээлттэй Staff хэлцэл эсвэл хөрөнгийн үүрэгтэй бол DB
+ * trigger (crm_staff_deactivate_guard) хориглоно; алдааг ойлгомжтой буцаана.
  */
 export async function deactivateStaff(staffId: string): Promise<{ ok: boolean; error?: string }> {
   const supabase = await createClient();
@@ -254,13 +233,13 @@ export async function deactivateStaff(staffId: string): Promise<{ ok: boolean; e
     if (error.message.includes("батлагдсан хүлээлцэх акт")) {
       return {
         ok: false,
-        error: "Батлагдсан хүлээлцэх акт шаардлагатай — гарах урсгал эхлүүлж, актыг Борлуулалт хариуцсан захирлаар батлуулна уу.",
+        error: "Батлагдсан хүлээлцэх акт шаардлагатай — CRM-ийн удирдлагад хандана уу.",
       };
     }
     if (error.message.includes("хүлээлцэх дуусаагүй")) {
       return {
         ok: false,
-        error: "Хүлээлцэх дуусаагүй — энэ ажилтанд нээлттэй сэжим, боломж эсвэл үл хөдлөхийн үүрэг байна. Эхлээд шилжүүлнэ үү.",
+        error: "Хүлээлцэх дуусаагүй — энэ ажилтанд нээлттэй Staff хэлцэл эсвэл Staff хөрөнгийн үүрэг байна. Эхлээд шилжүүлнэ үү.",
       };
     }
     return { ok: false, error: SAVE_ERR };

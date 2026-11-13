@@ -5,6 +5,8 @@ import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+import { dialogOpener, focusDialogStart, trapTab } from "./dialog-focus";
+
 /**
  * Баруун талын drawer — Modal-ын хүртээмжийн хэв маягаар (Escape, focus trap,
  * фокус буцаалт), Radix-гүй гар хийц.
@@ -35,15 +37,8 @@ export function Drawer({
 
   useEffect(() => {
     if (!open) return;
-    prevFocus.current = document.activeElement as HTMLElement | null;
-
-    const focusables = () =>
-      Array.from(
-        panelRef.current?.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
-        ) ?? []
-      );
-    (focusables()[0] ?? panelRef.current)?.focus();
+    prevFocus.current = dialogOpener(panelRef.current);
+    focusDialogStart(panelRef.current);
 
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
@@ -51,27 +46,16 @@ export function Drawer({
         onCloseRef.current();
         return;
       }
-      if (e.key === "Tab") {
-        const items = focusables();
-        if (items.length === 0) {
-          e.preventDefault();
-          return;
-        }
-        const first = items[0];
-        const last = items[items.length - 1];
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault();
-          last.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault();
-          first.focus();
-        }
-      }
+      if (e.key === "Tab") trapTab(e, panelRef.current);
     }
     document.addEventListener("keydown", onKey);
+    // Ард талын хуудас гар утсан дээр гүйлгэгдэхгүй (Modal-тай ижил).
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onKey);
-      prevFocus.current?.focus();
+      document.body.style.overflow = prevOverflow;
+      if (prevFocus.current?.isConnected) prevFocus.current.focus({ preventScroll: true });
     };
   }, [open]);
 
@@ -93,7 +77,7 @@ export function Drawer({
         aria-labelledby={titleId}
         tabIndex={-1}
         className={cn(
-          "relative flex h-full w-full flex-col border-l border-line bg-surface shadow-xl",
+          "relative flex h-full w-full flex-col border-l border-line bg-surface shadow-xl outline-none",
           widthClassName
         )}
       >
@@ -104,8 +88,9 @@ export function Drawer({
           <button
             type="button"
             onClick={onClose}
-            className="flex size-9 items-center justify-center rounded-lg text-muted transition hover:bg-surface-2 hover:text-ink"
+            className="-mr-2 flex size-11 items-center justify-center rounded-lg text-muted transition hover:bg-surface-2 hover:text-ink"
             aria-label="Хаах"
+            data-dialog-close
           >
             <X className="size-4" />
           </button>

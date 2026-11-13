@@ -6,10 +6,15 @@ import { Bell } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { markNotificationsRead } from "@/lib/actions/notifications";
+import { panelLink } from "@/lib/crm/notify";
 
 type Note = { id: string; title: string | null; body: string | null; link: string | null; read_at: string | null; created_at: string };
 
-export function NotificationBell({ initial }: { initial: Note[] }) {
+/**
+ * `panel="office"` — CRM-ийн холбоосыг (DB нь /agent/crm/... гэж бичдэг) оффисын
+ * панелийн ижил хуудас руу тааруулна.
+ */
+export function NotificationBell({ initial, panel }: { initial: Note[]; panel?: "office" }) {
   const [notes, setNotes] = useState<Note[]>(initial);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -73,7 +78,7 @@ export function NotificationBell({ initial }: { initial: Note[] }) {
             {notes.slice(0, 15).map((n) => (
               <Link
                 key={n.id}
-                href={n.link ?? "#"}
+                href={n.link ? (panel === "office" ? panelLink(n.link, "office_admin") : n.link) : "#"}
                 onClick={() => setOpen(false)}
                 className="block border-b border-line px-4 py-2.5 last:border-0 hover:bg-surface-2"
               >

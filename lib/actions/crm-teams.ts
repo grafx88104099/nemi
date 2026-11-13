@@ -29,13 +29,9 @@ type Team = Awaited<ReturnType<typeof loadTeam>>;
 function revalidateTeamPaths() {
   revalidatePath("/office/crm");
   revalidatePath("/office/crm/teams");
-  revalidatePath("/office/crm/leads");
-  revalidatePath("/office/crm/vitals");
   revalidatePath("/office/crm/settings/staff");
-  revalidatePath("/office/crm/settings/zones");
   revalidatePath("/agent/crm");
-  revalidatePath("/agent/crm/team");
-  revalidatePath("/agent/crm/leads");
+  revalidatePath("/agent/crm/team/monitor");
 }
 
 function firstIssue(err: z.ZodError): string {
@@ -114,7 +110,7 @@ async function notifyNewLead(roster: Roster, team: Team, profileId: string) {
     [{ id: profileId, userRole: roster.get(profileId)?.user_role }],
     "crm_team_lead",
     "Багийн ахлагч",
-    `Таныг ${teamOf(team)} ахлагчаар томиллоо. Гишүүдийнхээ сэжим, явцыг хянах боломжтой боллоо.`,
+    `Таныг ${teamOf(team)} ахлагчаар томиллоо. Гишүүдийнхээ Staff ажлын явцыг хянах боломжтой боллоо.`,
     AGENT_TEAM_LINK
   );
 }

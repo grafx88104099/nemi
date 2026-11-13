@@ -92,17 +92,18 @@ export default async function ProjectDetailPage({
           <h2 className="mb-2 flex items-center gap-2 font-bold text-ink"><Users className="size-4" /> Лидүүд ({leads.length})</h2>
           <div className="space-y-2">
             {leads.map((l) => (
-              <Link key={l.id} href={`/agent/leads/${l.id}`} className="block rounded-xl border border-line bg-surface p-3 hover:bg-surface-2">
+              // Хуучин лидийн дэлгэрэнгүй хуудас хасагдсан — зөвхөн мэдээллийг харуулна.
+              <div key={l.id} className="rounded-xl border border-line bg-surface p-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-semibold text-ink">{l.name}</span>
                   <Badge tone="neutral">{stageLabel(l.stage)}</Badge>
                 </div>
                 {l.phone && <div className="mt-0.5 text-xs text-muted">{l.phone}</div>}
-              </Link>
+              </div>
             ))}
             {leads.length === 0 && (
               <p className="rounded-xl border border-dashed border-line p-4 text-center text-xs text-muted">
-                Холбоотой лид алга. Лид засах үед энэ төслийг сонгож холбоно.
+                Холбоотой лид алга.
               </p>
             )}
           </div>

@@ -1,15 +1,15 @@
 import type { MetadataRoute } from "next";
 
 /**
- * PWA manifest (R4): агентын CRM-ийг утсанд апп хэлбэрээр суулгана.
- * Нүүр дэлгэцээс нээхэд «Өнөөдөр» дэлгэц.
+ * PWA manifest: агентын CRM-ийг утсанд апп хэлбэрээр суулгана. id/start_url
+ * хэвээр (суулгасан апп нэг апп хэвээр); нээхэд Staff жагсаалт руу чиглэнэ.
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/agent/crm",
     name: "Nemi CRM",
     short_name: "Nemi CRM",
-    description: "Үл хөдлөхийн агентын CRM — өнөөдрийн ажил, сэжим, мэдэгдэл.",
+    description: "Үл хөдлөхийн агентын CRM — Staff хөрөнгө, харилцагч, хэлцэл, мэдэгдэл.",
     lang: "mn",
     start_url: "/agent/crm",
     scope: "/",
@@ -24,9 +24,9 @@ export default function manifest(): MetadataRoute.Manifest {
       { src: "/icons/maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
     shortcuts: [
-      { name: "Өнөөдөр", url: "/agent/crm", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
-      { name: "Шинэ сэжим", url: "/agent/crm/leads?new=1", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
-      { name: "Ажлын жагсаалт", url: "/agent/crm/worklists", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
+      { name: "Шинэ хөрөнгө", url: "/agent/crm/staff/new", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
+      { name: "Харилцагчид", url: "/agent/crm/contacts", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
+      { name: "Staff", url: "/agent/crm/staff", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
     ],
   };
 }

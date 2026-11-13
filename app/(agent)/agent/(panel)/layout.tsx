@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCrmStaffContext } from "@/lib/queries-crm-core";
 import { Topbar } from "@/components/layout/Topbar";
-import { AgentMobileChrome } from "@/components/crm/mobile/AgentMobileChrome";
+import { ServiceWorkerRegister } from "@/components/crm2/shell/ServiceWorkerRegister";
 
 export default async function DashboardLayout({
   children,
@@ -16,14 +16,14 @@ export default async function DashboardLayout({
   } = await supabase.auth.getUser();
   if (!user) redirect("/agent/login?next=/agent");
 
-  // CRM ажилтанд: гар утасны доод цэс, Ctrl+K хайлт, PWA (UX-6, R4, R29).
+  // CRM ажилтанд: service worker (push мэдэгдэл, нүүр дэлгэцэд суулгах). CRM цэс нь /agent/crm layout-д.
   const crm = await getCrmStaffContext();
 
   return (
     <>
       <Topbar />
       <main className="flex-1 bg-bg">{children}</main>
-      {crm ? <AgentMobileChrome roles={crm.roles} /> : null}
+      {crm ? <ServiceWorkerRegister /> : null}
     </>
   );
 }

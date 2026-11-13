@@ -1,4 +1,6 @@
-import type { AdminClient } from "@/lib/crm/rules";
+import type { createAdminClient } from "@/lib/supabase/admin";
+
+type AdminClient = ReturnType<typeof createAdminClient>;
 
 /**
  * Web Push суваг (R4 сервер тал, §6.4/§6.28) — VAPID түлхүүрээр
@@ -40,7 +42,7 @@ export function isPushConfigured(env: PushEnv = process.env as PushEnv): boolean
 export type PushPayload = {
   title: string;
   body: string;
-  /** Дарахад нээгдэх апп доторх зам ('/agent/crm/leads/…'). */
+  /** Дарахад нээгдэх апп доторх зам ('/agent/crm/staff/…'). */
   url?: string;
   /** Ижил tag-тай мэдэгдэл төхөөрөмж дээр солигдоно (давхардал багасгана). */
   tag?: string;

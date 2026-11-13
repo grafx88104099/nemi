@@ -10,9 +10,9 @@ import { Button, ButtonLink } from "@/components/ui/button";
  *
  *   <EmptyState
  *     icon={Users}
- *     title="Сэжим алга"
- *     description="Шинэ сэжим бүртгэхэд энд харагдана."
- *     action={{ label: "Сэжим бүртгэх", href: "/agent/crm/leads?new=1" }}
+ *     title="Харилцагч алга"
+ *     description="Шинэ харилцагч бүртгэхэд энд харагдана."
+ *     action={{ label: "Харилцагч нэмэх", href: "/agent/crm/contacts" }}
  *   />
  *
  * compact — карт/жагсаалт доторх жижиг хувилбар.

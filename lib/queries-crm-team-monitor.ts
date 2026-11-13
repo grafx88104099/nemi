@@ -1,23 +1,24 @@
 import { createClient } from "@/lib/supabase/server";
-import { getLeadCardSettings } from "@/lib/queries-crm-leads";
-import { personAvatar } from "@/lib/crm/avatar";
-import { isOpenLeadStatus, parseListingSnapshot } from "@/lib/crm/lead-listing";
+import { personAvatar } from "@/lib/avatar";
 import {
-  countMemberLeads,
-  countMemberOpportunities,
+  countMemberMetrics,
   groupTeamProgress,
   inTeamProgressScope,
-  isNextStepOverdue,
+  memberPropertyIds,
   monitorPeriods,
+  type MemberPropertyIds,
+  type MonitorActivity,
+  type MonitorDeal,
   type MonitorMetrics,
-  type MonitorOwnedLead,
+  type MonitorProperty,
+  type MonitorTask,
   type ProgressGroup,
 } from "@/lib/crm/team-monitor";
-import type { CrmLifecycle, CrmRole, LeadGrade } from "@/lib/constants-crm";
+import type { CrmRole } from "@/lib/constants-crm";
 
 /**
- * Багийн гишүүдийн сэжим, явцын хяналт — хэрэглэгчийн өөрийн эрхээр (RLS):
- * ахлагч зөвхөн өөрийн багийн гишүүдийн, удирдлага оффисын сэжмийг харна.
+ * Багийн гишүүдийн Staff ажлын хяналт — хэрэглэгчийн өөрийн эрхээр (RLS):
+ * ахлагч өөрийн багийн гишүүдийн, удирдлага оффисын хэлцэл, дуудлага, үзүүлэлтийг харна.
  */
 
 export type TeamMonitorMember = MonitorMetrics & {
@@ -29,6 +30,8 @@ export type TeamMonitorMember = MonitorMetrics & {
   initials: string;
   isLead: boolean;
   lastActivityAt: string | null;
+  /** Багийн нийтэд Staff хөрөнгийг давхардалгүй тоолоход. */
+  propertyIds: MemberPropertyIds;
 };
 
 export type TeamMonitorData = {
@@ -40,39 +43,24 @@ export type TeamMonitorData = {
   truncated: boolean;
 };
 
-export type TeamMemberLead = {
+export type TeamMemberDeal = {
   id: string;
-  contactName: string;
-  status: CrmLifecycle;
-  grade: LeadGrade | null;
-  listingTitle: string | null;
-  lastContactAt: string | null;
-  nextStep: string | null;
-  nextStepDate: string | null;
-  nextStepOverdue: boolean;
-  /** false бол гишүүн бүртгэсэн ч өөр хүн эзэмшдэг эсвэл эзэмшигчгүй. */
-  ownedByMember: boolean;
-  ownerName: string | null;
-};
-
-export type TeamMemberOpportunity = {
-  id: string;
-  contactName: string;
-  stageName: string | null;
-  pipelineName: string | null;
-  nextStep: string | null;
-  nextStepDate: string | null;
-  nextStepOverdue: boolean;
+  code: string;
+  propertyId: string;
+  propertyCode: string | null;
+  propertyPlace: string | null;
+  contactName: string | null;
+  stage: string;
+  lastActivityAt: string | null;
 };
 
 export type TeamMemberDetail = {
-  leads: TeamMemberLead[];
-  opportunities: TeamMemberOpportunity[];
-  leadsTruncated: boolean;
+  deals: TeamMemberDeal[];
+  dealsTruncated: boolean;
   unavailable: boolean;
 };
 
-export const TEAM_MEMBER_LEADS_LIMIT = 300;
+export const TEAM_MEMBER_DEALS_LIMIT = 300;
 
 const PAGE_SIZE = 500;
 const MAX_ROWS = 20_000;
@@ -120,32 +108,25 @@ type RawMember = {
   profile: { full_name: string | null; avatar_url: string | null; role: string | null } | null;
 };
 
-const OWNED_LEAD_SELECT =
-  "id, owner_id, status, created_at, received_at, first_contact_at, first_contact_due_at, next_step, next_step_date";
-
-type OwnedLeadRow = MonitorOwnedLead & { owner_id: string };
-type RegisteredLeadRow = { created_by: string; created_at: string };
-type OppRow = { owner_id: string; state: string };
-
-/** «task» сувгийн бичлэг харилцагчтай холбогдсон үйл биш (эхний холболтын дүрэмтэй ижил). */
+/** Гишүүний хамгийн сүүлд бүртгэсэн дуудлага/үзүүлэлт. */
 async function latestActivity(supabase: ServerClient, profileId: string): Promise<{ at: string | null; failed: boolean }> {
   const { data, error } = await supabase
-    .from("crm_activities")
-    .select("occurred_at")
-    .eq("owner_id", profileId)
-    .neq("channel", "task")
-    .order("occurred_at", { ascending: false })
+    .from("crm2_activities")
+    .select("created_at")
+    .eq("agent_id", profileId)
+    .is("voided_at", null)
+    .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (error) console.error("latestActivity:", error.message);
-  return { at: data?.occurred_at ?? null, failed: !!error };
+  return { at: data?.created_at ?? null, failed: !!error };
 }
 
 type MembersProgress = Pick<TeamMonitorData, "members" | "unavailable" | "truncated">;
 
 /**
- * Гишүүдийн сэжим, боломжийг нэг удаа (хуудаслан) уншиж кодонд гишүүнээр бүлэглэнэ —
- * баг тус бүрээр давтан уншихгүй. isRecordedLead: өөрийн багийн ахлагчаар бичигдсэн эсэх.
+ * Гишүүдийн Staff хөрөнгө, хэлцэл, дуудлага/үзүүлэлт, ажлыг нэг удаа (хуудаслан) уншиж
+ * кодонд гишүүнээр бүлэглэнэ. isRecordedLead: өөрийн багийн ахлагчаар бичигдсэн эсэх.
  */
 async function readMembersProgress(
   label: string,
@@ -158,39 +139,80 @@ async function readMembersProgress(
   if (staff.length === 0) return { members: [], unavailable: false, truncated: false };
 
   const ids = staff.map((s) => s.profile_id);
+  const idList = ids.join(",");
   const periods = monitorPeriods(now);
-  const [agentsRes, settings, owned, registered, opps, activity] = await Promise.all([
+  const sinceIso = periods.since.toISOString();
+  const [agentsRes, properties, deals, activities, scheduled, tasks, activity] = await Promise.all([
     supabase.from("agents").select("profile_id, display_name, avatar, avatar_url").eq("office_id", officeId).in("profile_id", ids),
-    getLeadCardSettings(),
-    readAll<OwnedLeadRow>(`${label} owned`, (from, to) =>
-      supabase.from("crm_leads").select(OWNED_LEAD_SELECT).in("owner_id", ids).in("status", ["new", "active"]).order("id").range(from, to)
-    ),
-    readAll<RegisteredLeadRow>(`${label} registered`, (from, to) =>
+    readAll<MonitorProperty>(`${label} properties`, (from, to) =>
       supabase
-        .from("crm_leads")
-        .select("id, created_by, created_at")
-        .in("created_by", ids)
-        .gte("created_at", periods.since.toISOString())
+        .from("crm2_properties")
+        .select("id, status, listing_agent_id, contract_agent_id, photo_agent_id")
+        .in("status", ["active", "draft"])
+        .or(`listing_agent_id.in.(${idList}),contract_agent_id.in.(${idList}),photo_agent_id.in.(${idList})`)
         .order("id")
         .range(from, to)
     ),
-    readAll<OppRow>(`${label} opportunities`, (from, to) =>
-      supabase.from("crm_opportunities").select("id, owner_id, state").in("owner_id", ids).in("state", ["open", "won"]).order("id").range(from, to)
+    // Нээлттэй, эсвэл энэ хугацаанд баталгаажсан/цуцлагдсан хэлцэл.
+    readAll<MonitorDeal>(`${label} deals`, (from, to) =>
+      supabase
+        .from("crm2_deals")
+        .select("id, agent_id, is_open, confirmed_at, cancelled_at")
+        .in("agent_id", ids)
+        .or(`is_open.eq.true,confirmed_at.gte."${sinceIso}",cancelled_at.gte."${sinceIso}"`)
+        .order("id")
+        .range(from, to)
+    ),
+    readAll<MonitorActivity>(`${label} activities`, (from, to) =>
+      supabase
+        .from("crm2_activities")
+        .select("id, agent_id, kind, occurred_at, showing_status")
+        .in("agent_id", ids)
+        .is("voided_at", null)
+        .gte("occurred_at", sinceIso)
+        .order("id")
+        .range(from, to)
+    ),
+    readAll<MonitorActivity>(`${label} scheduled showings`, (from, to) =>
+      supabase
+        .from("crm2_activities")
+        .select("id, agent_id, kind, occurred_at, showing_status")
+        .in("agent_id", ids)
+        .eq("kind", "showing")
+        .eq("showing_status", "scheduled")
+        .is("voided_at", null)
+        .order("id")
+        .range(from, to)
+    ),
+    readAll<MonitorTask>(`${label} tasks`, (from, to) =>
+      supabase
+        .from("crm2_tasks")
+        .select("id, assignee_id, due_at")
+        .in("assignee_id", ids)
+        .eq("status", "open")
+        .lt("due_at", now.toISOString())
+        .order("id")
+        .range(from, to)
     ),
     Promise.all(ids.map((id) => latestActivity(supabase, id))),
   ]);
   if (agentsRes.error) console.error(`${label} agents:`, agentsRes.error.message);
 
   const agentByProfile = new Map((agentsRes.data ?? []).map((a) => [a.profile_id, a]));
-  const ownedByMember = groupBy(owned.rows, (l) => l.owner_id);
-  const registeredByMember = groupBy(registered.rows, (l) => l.created_by);
-  const oppsByMember = groupBy(opps.rows, (o) => o.owner_id);
+  const dealsByMember = groupBy(deals.rows, (d) => d.agent_id);
+  // Үзүүлсэн/дуудлага (энэ хугацаанд) + одоо товлогдсон — товлосон үзүүлэлтэд бодит цаг байхгүй тул давхцахгүй.
+  const activitiesByMember = groupBy(
+    [...activities.rows.filter((a) => a.showing_status !== "scheduled"), ...scheduled.rows],
+    (a) => a.agent_id
+  );
+  const tasksByMember = groupBy(tasks.rows, (t) => t.assignee_id);
 
   const members = staff
     .map((s, i): TeamMonitorMember => {
       const agent = agentByProfile.get(s.profile_id);
       const name = agent?.display_name || s.profile?.full_name || "Хэрэглэгч";
       const { src, initials } = personAvatar(agent?.avatar_url ?? agent?.avatar ?? s.profile?.avatar_url ?? null, name);
+      const propertyIds = memberPropertyIds(properties.rows, s.profile_id);
       return {
         profileId: s.profile_id,
         teamId: s.team_id,
@@ -198,23 +220,25 @@ async function readMembersProgress(
         avatarSrc: src,
         initials,
         isLead: isRecordedLead(s) && !!s.roles?.includes("team_lead"),
-        ...countMemberLeads(
-          ownedByMember.get(s.profile_id) ?? [],
-          registeredByMember.get(s.profile_id) ?? [],
+        ...countMemberMetrics({
+          propertyIds,
+          deals: dealsByMember.get(s.profile_id) ?? [],
+          activities: activitiesByMember.get(s.profile_id) ?? [],
+          tasks: tasksByMember.get(s.profile_id) ?? [],
           periods,
           now,
-          settings.noContactHours
-        ),
-        ...countMemberOpportunities(oppsByMember.get(s.profile_id) ?? []),
+        }),
+        propertyIds,
         lastActivityAt: activity[i].at,
       };
     })
     .sort((a, b) => Number(b.isLead) - Number(a.isLead) || a.name.localeCompare(b.name, "mn"));
 
+  const reads = [properties, deals, activities, scheduled, tasks];
   return {
     members,
-    unavailable: owned.failed || registered.failed || opps.failed || activity.some((a) => a.failed),
-    truncated: owned.truncated || registered.truncated || opps.truncated,
+    unavailable: reads.some((r) => r.failed) || activity.some((a) => a.failed),
+    truncated: reads.some((r) => r.truncated),
   };
 }
 
@@ -277,7 +301,7 @@ type RawProgressTeam = {
 
 /**
  * Оффисын бүх баг ба багт хуваарилагдаагүй агентуудын явц — getTeamMonitor-той ижил
- * тодорхойлолт, сэжим, боломжийг нэг удаа уншина. Дуудах хуудас эрхийг шалгана.
+ * тодорхойлолт, мөрүүдийг нэг удаа уншина. Дуудах хуудас эрхийг шалгана.
  */
 export async function getOfficeTeamsProgress(officeId: string, now: Date = new Date()): Promise<OfficeTeamsProgress> {
   const supabase = await createClient();
@@ -327,101 +351,47 @@ export async function getOfficeTeamsProgress(officeId: string, now: Date = new D
   };
 }
 
-const DETAIL_LEAD_SELECT =
-  "id, status, grade, owner_id, last_contact_at, next_step, next_step_date, listing_snapshot, " +
-  "live_listing:listings!crm_leads_listing_id_fkey(status, title), " +
-  "owner:profiles!crm_leads_owner_id_fkey(full_name), " +
-  "contact:crm_contacts!crm_leads_contact_id_fkey(display_name)";
+const DETAIL_DEAL_SELECT =
+  "id, code, property_id, stage, last_activity_at, " +
+  "property:crm2_properties!crm2_deals_property_id_office_id_fkey(code, location_text), " +
+  "contact:crm2_contacts!crm2_deals_contact_id_office_id_fkey(full_name)";
 
-type RawDetailLead = {
+type RawDetailDeal = {
   id: string;
-  status: CrmLifecycle;
-  grade: LeadGrade | null;
-  owner_id: string | null;
-  last_contact_at: string | null;
-  next_step: string | null;
-  next_step_date: string | null;
-  listing_snapshot: unknown;
-  live_listing: { status: string; title: string } | null;
-  owner: { full_name: string | null } | null;
-  contact: { display_name: string } | null;
+  code: string;
+  property_id: string;
+  stage: string;
+  last_activity_at: string | null;
+  property: { code: string; location_text: string | null } | null;
+  contact: { full_name: string } | null;
 };
 
-const DETAIL_OPP_SELECT =
-  "id, next_step, next_step_date, " +
-  "contact:crm_contacts!crm_opportunities_contact_id_fkey(display_name), " +
-  "stage:crm_stages!crm_opportunities_stage_id_fkey(name), " +
-  "pipeline:crm_pipelines!crm_opportunities_pipeline_id_fkey(name)";
-
-type RawDetailOpp = {
-  id: string;
-  next_step: string | null;
-  next_step_date: string | null;
-  contact: { display_name: string } | null;
-  stage: { name: string } | null;
-  pipeline: { name: string } | null;
-};
-
-const CONTACT_FALLBACK = "Нэргүй харилцагч";
-
-/** Гишүүний бүртгэсэн эсвэл эзэмшдэг сэжим, нээлттэй боломж. */
-export async function getTeamMemberDetail(profileId: string, now: Date = new Date()): Promise<TeamMemberDetail> {
+/** Гишүүний хариуцсан нээлттэй хэлцлүүд (хөрөнгө × харилцагч), сүүлийн үйлдлээр. */
+export async function getTeamMemberDetail(profileId: string): Promise<TeamMemberDetail> {
   const supabase = await createClient();
-  const { todayIso } = monitorPeriods(now);
-  const [leadsRes, oppsRes] = await Promise.all([
-    supabase
-      .from("crm_leads")
-      .select(DETAIL_LEAD_SELECT)
-      .or(`owner_id.eq.${profileId},created_by.eq.${profileId}`)
-      .order("created_at", { ascending: false })
-      .limit(TEAM_MEMBER_LEADS_LIMIT),
-    supabase
-      .from("crm_opportunities")
-      .select(DETAIL_OPP_SELECT)
-      .eq("owner_id", profileId)
-      .eq("state", "open")
-      .order("stage_entered_at", { ascending: false })
-      .limit(TEAM_MEMBER_LEADS_LIMIT),
-  ]);
-  if (leadsRes.error) console.error("getTeamMemberDetail leads:", leadsRes.error.message);
-  if (oppsRes.error) console.error("getTeamMemberDetail opportunities:", oppsRes.error.message);
+  const { data, error } = await supabase
+    .from("crm2_deals")
+    .select(DETAIL_DEAL_SELECT)
+    .eq("agent_id", profileId)
+    .eq("is_open", true)
+    .order("last_activity_at", { ascending: false, nullsFirst: false })
+    .limit(TEAM_MEMBER_DEALS_LIMIT);
+  if (error) console.error("getTeamMemberDetail deals:", error.message);
 
-  const rawLeads = (leadsRes.data ?? []) as unknown as RawDetailLead[];
-  const leads = rawLeads
-    .map((l): TeamMemberLead => ({
-      id: l.id,
-      contactName: l.contact?.display_name ?? CONTACT_FALLBACK,
-      status: l.status,
-      grade: l.grade,
-      listingTitle:
-        (l.live_listing?.status === "active" ? l.live_listing.title : null) ??
-        parseListingSnapshot(l.listing_snapshot)?.title ??
-        null,
-      lastContactAt: l.last_contact_at,
-      nextStep: l.next_step,
-      nextStepDate: l.next_step_date,
-      nextStepOverdue: isNextStepOverdue(l, todayIso),
-      ownedByMember: l.owner_id === profileId,
-      ownerName: l.owner?.full_name ?? null,
-    }))
-    .sort((a, b) => Number(isOpenLeadStatus(b.status)) - Number(isOpenLeadStatus(a.status)));
-
-  const opportunities = ((oppsRes.data ?? []) as unknown as RawDetailOpp[]).map(
-    (o): TeamMemberOpportunity => ({
-      id: o.id,
-      contactName: o.contact?.display_name ?? CONTACT_FALLBACK,
-      stageName: o.stage?.name ?? null,
-      pipelineName: o.pipeline?.name ?? null,
-      nextStep: o.next_step,
-      nextStepDate: o.next_step_date,
-      nextStepOverdue: !!o.next_step_date && o.next_step_date < todayIso,
-    })
-  );
-
+  const raw = (data ?? []) as unknown as RawDetailDeal[];
   return {
-    leads,
-    opportunities,
-    leadsTruncated: rawLeads.length >= TEAM_MEMBER_LEADS_LIMIT,
-    unavailable: !!leadsRes.error || !!oppsRes.error,
+    deals: raw.map((d) => ({
+      id: d.id,
+      code: d.code,
+      propertyId: d.property_id,
+      propertyCode: d.property?.code ?? null,
+      propertyPlace: d.property?.location_text ?? null,
+      // Харилцагчийг харах эрхгүй бол RLS embed-ийг хоосон буцаана.
+      contactName: d.contact?.full_name ?? null,
+      stage: d.stage,
+      lastActivityAt: d.last_activity_at,
+    })),
+    dealsTruncated: raw.length >= TEAM_MEMBER_DEALS_LIMIT,
+    unavailable: !!error,
   };
 }

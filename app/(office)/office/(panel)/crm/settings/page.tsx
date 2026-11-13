@@ -1,104 +1,107 @@
 import Link from "next/link";
-import {
-  GitBranch,
-  Gauge,
-  Percent,
-  Map,
-  Workflow,
-  BellRing,
-  ListTree,
-  Users2,
-  PiggyBank,
-  ChevronRight,
-} from "lucide-react";
+import { redirect } from "next/navigation";
+import { Bell, ChevronRight, GitBranch, SlidersHorizontal, UserCog, UsersRound, type LucideIcon } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Card, CardBody } from "@/components/ui/card";
-import { requireSettingsAccess } from "./_lib/guard";
+import { getCrm2Context } from "@/lib/crm2/context";
+import { getCrmStaffContext } from "@/lib/queries-crm-core";
+import { canManageTeams, hasTeamProgressRole } from "@/lib/queries-crm-teams";
+import { SETTINGS_VIEW_ROLES } from "./_lib/guard";
 
 export const metadata = { title: "CRM тохиргоо — Оффис" };
 
-const SECTIONS = [
-  {
-    href: "/office/crm/settings/pipelines",
-    icon: GitBranch,
-    title: "Урсгал, шат, шилжих шалгуур",
-    desc: "Борлуулалтын урсгал, шатны магадлал, шилжилтийн дүрэм, шилжих шалгуурын шаардлага",
-  },
-  {
-    href: "/office/crm/settings/scoring",
-    icon: Gauge,
-    title: "Оноо, жин, босго",
-    desc: "Сэжимийн оноо, тохируулгын жин, ангиллын босго (хувилбартай)",
-  },
-  {
-    href: "/office/crm/settings/commissions",
-    icon: Percent,
-    title: "Шимтгэлийн журам",
-    desc: "5 журмын хувилбар, түрээсийн хөлсний шатлал, ханшийн хүснэгт",
-  },
-  {
-    href: "/office/crm/settings/zones",
-    icon: Map,
-    title: "Бүс, салбар, баг",
-    desc: "Бүсийн лавлах, салбар, багийн бүтэц",
-  },
-  {
-    href: "/office/crm/settings/rules",
-    icon: Workflow,
-    title: "Автомат дүрэм, SLA, хуанли",
-    desc: "Автомат дүрмийн идэвх, туршилтын горим, SLA босго, ажлын өдрийн хуанли",
-  },
-  {
-    href: "/office/crm/settings/notifications",
-    icon: BellRing,
-    title: "Мэдэгдлийн матриц",
-    desc: "Мэдэгдэл бүрийн хүлээн авагч дүр, суваг, заавал ангилал",
-  },
-  {
-    href: "/office/crm/settings/lookups",
-    icon: ListTree,
-    title: "Лавлах жагсаалтууд",
-    desc: "Эх сурвалж, алдсан шалтгаан, шошго, засварын ангилал…",
-  },
-  {
-    href: "/office/crm/settings/staff",
-    icon: Users2,
-    title: "Ажилтан, дүр",
-    desc: "CRM-ийн ажилтны бүртгэл, дүрийн оноолт, гарах урсгал",
-  },
-  {
-    href: "/office/crm/settings/budget",
-    icon: PiggyBank,
-    title: "Төсөв, KPI жишиг",
-    desc: "Сар, салбарын төсөв, KPI-ийн жишиг, чанарын аудит, аяны зардал",
-  },
-];
+type Section = { href: string | null; icon: LucideIcon; title: string; desc: string };
 
-export default async function CrmSettingsIndexPage() {
-  await requireSettingsAccess();
+/**
+ * CRM тохиргооны нүүр: Staff-ийн дүрэм (crm2), агент ба эрх, баг, салбар, мэдэгдэл. Хэсэг бүр өөрийн
+ * хуудсандаа эрхийг давхар шалгана; энд зөвхөн харах эрхтэйг жагсаана.
+ */
+export default async function CrmSettingsPage() {
+  const [ctx, canManage, ctx2] = await Promise.all([getCrmStaffContext(), canManageTeams(), getCrm2Context()]);
+  if (!ctx) redirect("/office");
+
+  const settingsRole = ctx.roles.some((r) => (SETTINGS_VIEW_ROLES as readonly string[]).includes(r));
+  // crm2-ийн бизнес дүрэм: удирдлага, тохиргоо удирдагч харна (засах эрхийг хуудас өөрөө шалгана).
+  const policiesRole = !!ctx2?.isMember && (ctx2.canManageSettings || ctx2.isManager || ctx2.isOfficeAdmin);
+  const sections: Section[] = [
+    ...(policiesRole
+      ? [
+          {
+            href: "/office/crm/settings/policies",
+            icon: SlidersHorizontal,
+            title: "Staff-ийн дүрэм, анхдагч утга",
+            desc: "Ангилал, гэрээ батлагч, эрх, сануулгын хугацаа, архивын дүрэм, файлын хязгаар",
+          },
+        ]
+      : []),
+    ...(settingsRole
+      ? [
+          {
+            href: "/office/crm/settings/staff",
+            icon: UserCog,
+            title: "Агент, хэрэглэгчийн эрх",
+            desc: "CRM-ийн дүр, салбар, баг, панелийн админ, чөлөө, гарах урсгал",
+          },
+        ]
+      : []),
+    ...(canManage || hasTeamProgressRole(ctx.roles)
+      ? [
+          {
+            href: "/office/crm/teams",
+            icon: UsersRound,
+            title: "Багууд",
+            desc: "Багийн бүрэлдэхүүн, ахлагч томилох, батлах, бүх багийн явц",
+          },
+        ]
+      : []),
+    ...(settingsRole
+      ? [
+          {
+            href: "/office/crm/settings/branches",
+            icon: GitBranch,
+            title: "Салбар",
+            desc: "Багуудын харьяалах салбарын жагсаалт",
+          },
+        ]
+      : []),
+    {
+      href: "/office/crm/notifications",
+      icon: Bell,
+      title: "Мэдэгдэл",
+      desc: "Танд ирсэн CRM-ийн бүх мэдэгдэл",
+    },
+  ];
+
   return (
-    <div className="p-8">
+    <div className="mx-auto w-full max-w-5xl p-4 sm:p-8">
       <h1 className="text-2xl font-extrabold text-ink">CRM тохиргоо</h1>
-      <p className="text-sm text-muted">
-        Бүх параметр хувилбартай хадгалагдана — өөрчлөлт зөвхөн урагш үйлчилнэ, хуучин тооцоо өөрчлөгдөхгүй.
-      </p>
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {SECTIONS.map((s) => (
-          <Link key={s.href} href={s.href} className="group">
-            <Card className="h-full transition group-hover:border-brand-200 group-hover:shadow">
-              <CardBody className="flex items-start gap-4">
-                <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
-                  <s.icon className="size-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold text-ink">{s.title}</p>
-                  <p className="mt-0.5 text-sm text-muted">{s.desc}</p>
-                </div>
-                <ChevronRight className="mt-1 size-4 shrink-0 text-subtle" />
-              </CardBody>
+      <p className="text-sm text-muted">Өөрчлөлт бүр аудитад бүртгэгдэнэ.</p>
+      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {sections.map((s) => {
+          const body = (
+            <CardBody className="flex min-h-full items-start gap-3 p-4">
+              <s.icon className="mt-0.5 size-5 shrink-0 text-brand-600" aria-hidden />
+              <div className="min-w-0 flex-1">
+                <p className="flex flex-wrap items-center gap-2 font-semibold text-ink">
+                  {s.title}
+                  {s.href ? null : <Badge tone="neutral">удахгүй</Badge>}
+                </p>
+                <p className="mt-0.5 text-sm text-muted">{s.desc}</p>
+              </div>
+              {s.href ? <ChevronRight className="mt-0.5 size-4 shrink-0 text-subtle" aria-hidden /> : null}
+            </CardBody>
+          );
+          return s.href ? (
+            <Link key={s.title} href={s.href} className="block rounded-2xl transition hover:shadow-md">
+              <Card className="h-full">{body}</Card>
+            </Link>
+          ) : (
+            <Card key={s.title} className="h-full opacity-80">
+              {body}
             </Card>
-          </Link>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

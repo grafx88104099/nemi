@@ -1,37 +1,38 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, Crown, Flame, Home, KanbanSquare, UsersRound } from "lucide-react";
+import { AlertTriangle, Building2, Crown, Handshake, UsersRound } from "lucide-react";
 
 import { Avatar } from "@/components/ui/avatar";
 import { BackLink } from "@/components/ui/back-link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { CRM_LIFECYCLE_LABEL, LEAD_GRADE_LABEL, OPP_STATE_LABEL } from "@/lib/constants-crm";
 import type { MonitorMetrics } from "@/lib/crm/team-monitor";
-import { fmtDateNum, fmtDateTime } from "@/lib/format";
+import { DEAL_STAGE_LABEL, DEAL_STAGE_TONE } from "@/lib/crm2/labels";
+import type { Crm2DealStage } from "@/lib/crm2/types";
+import { fmtDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
-  TEAM_MEMBER_LEADS_LIMIT,
+  TEAM_MEMBER_DEALS_LIMIT,
   getTeamMemberDetail,
   getTeamMonitor,
-  type TeamMemberLead,
-  type TeamMemberOpportunity,
+  type TeamMemberDeal,
   type TeamMonitorMember,
 } from "@/lib/queries-crm-team-monitor";
 
 type Warn = "rose" | "amber";
 
 const METRICS: { key: keyof MonitorMetrics; label: string; warn?: Warn }[] = [
-  { key: "registeredWeek", label: "Энэ 7 хоногт бүртгэсэн" },
-  { key: "registeredMonth", label: "Энэ сард бүртгэсэн" },
-  { key: "openOwned", label: "Нээлттэй сэжим" },
-  { key: "newUncontacted", label: "Шинэ, холбогдоогүй", warn: "amber" },
-  { key: "firstContactOverdue", label: "Эхний холболт хэтэрсэн", warn: "rose" },
-  { key: "nextStepOverdue", label: "Дараагийн үйлдэл хэтэрсэн", warn: "rose" },
-  { key: "noNextStep", label: "Дараагийн үйлдэлгүй", warn: "amber" },
-  { key: "openOpps", label: "Нээлттэй боломж" },
-  { key: "wonOpps", label: OPP_STATE_LABEL.won.label },
+  { key: "staffActive", label: "Идэвхтэй Staff" },
+  { key: "staffDraft", label: "Ноорог Staff", warn: "amber" },
+  { key: "openDeals", label: "Нээлттэй хэлцэл" },
+  { key: "callsWeek", label: "Энэ 7 хоногийн дуудлага" },
+  { key: "callsMonth", label: "Энэ сарын дуудлага" },
+  { key: "showingsScheduled", label: "Товлосон үзүүлэлт" },
+  { key: "showingsShownMonth", label: "Энэ сард үзүүлсэн" },
+  { key: "confirmedMonth", label: "Энэ сард баталгаажсан" },
+  { key: "cancelledMonth", label: "Энэ сард цуцлагдсан" },
+  { key: "overdueTasks", label: "Хугацаа хэтэрсэн ажил", warn: "rose" },
 ];
 
 function metricClass(value: number, warn?: Warn): string {
@@ -60,7 +61,7 @@ function MemberName({ member, href }: { member: TeamMonitorMember; href: string 
 /** Гишүүний эсвэл баг, оффисын нийт үзүүлэлт. */
 export function MetricTiles({ values, wide = false }: { values: MonitorMetrics; wide?: boolean }) {
   return (
-    <dl className={wide ? "grid grid-cols-3 gap-2 sm:grid-cols-5 xl:grid-cols-9" : "grid grid-cols-3 gap-2"}>
+    <dl className={wide ? "grid grid-cols-2 gap-2 sm:grid-cols-5 xl:grid-cols-10" : "grid grid-cols-2 gap-2 sm:grid-cols-3"}>
       {METRICS.map((m) => (
         <div key={m.key} className="flex min-w-0 flex-col-reverse justify-end rounded-lg bg-surface-2 px-2 py-1.5">
           <dt className="break-words text-[11px] leading-tight text-muted">{m.label}</dt>
@@ -89,7 +90,7 @@ export function MembersTable({
 }) {
   return (
     <div className={cn("overflow-x-auto overscroll-x-contain rounded-2xl border border-line bg-surface", className)}>
-      <table className="w-full min-w-[60rem] text-sm">
+      <table className="w-full min-w-[64rem] text-sm">
         <thead>
           <tr className="border-b border-line text-left text-xs text-muted">
             <th scope="col" className={cn("px-3 py-2 align-bottom font-medium", STICKY_NAME_CELL)}>
@@ -150,64 +151,30 @@ function MembersSummary({ members, monitorPath }: { members: TeamMonitorMember[]
   );
 }
 
-function NextStep({ text, date, overdue }: { text: string | null; date: string | null; overdue: boolean }) {
-  return (
-    <div className="flex min-w-0 flex-wrap gap-x-1">
-      <dt className="text-muted">Дараагийн үйлдэл:</dt>
-      <dd className={`min-w-0 break-words ${overdue ? "font-semibold text-rose-600" : "text-ink"}`}>
-        {text || date ? [text, date ? fmtDateNum(date) : null].filter(Boolean).join(" · ") : "Төлөвлөөгүй"}
-      </dd>
-    </div>
-  );
-}
-
-function LeadItem({ lead, basePath }: { lead: TeamMemberLead; basePath: string }) {
-  const status = CRM_LIFECYCLE_LABEL[lead.status];
-  const grade = lead.grade ? LEAD_GRADE_LABEL[lead.grade] : null;
+function DealItem({ deal, basePath }: { deal: TeamMemberDeal; basePath: string }) {
+  const place = [deal.propertyCode, deal.propertyPlace].filter(Boolean).join(" · ") || "Staff хөрөнгө";
   return (
     <li className="py-3">
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-        <Link href={`${basePath}/leads/${lead.id}`} className="min-w-0 break-words font-semibold text-brand-700 hover:underline">
-          {lead.contactName}
+        <Link
+          href={`${basePath}/staff/${deal.propertyId}/deals/${deal.id}`}
+          className="min-w-0 break-words font-semibold text-brand-700 hover:underline"
+        >
+          {deal.code || "Хэлцэл"} · {deal.contactName ?? "Харилцагч"}
         </Link>
-        <Badge tone={status.tone}>{status.label}</Badge>
-        {grade ? <Badge tone={grade.tone}>{grade.label}</Badge> : null}
+        <Badge tone={DEAL_STAGE_TONE[deal.stage as Crm2DealStage] ?? "neutral"}>
+          {DEAL_STAGE_LABEL[deal.stage as Crm2DealStage] ?? deal.stage}
+        </Badge>
       </div>
-      {!lead.ownedByMember ? (
-        <p className="mt-0.5 text-xs text-muted">Бүртгэсэн · Эзэмшигч: {lead.ownerName ?? "хуваарилагдаагүй"}</p>
-      ) : null}
-      {lead.listingTitle ? (
-        <p className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-muted">
-          <Home className="size-3 shrink-0" aria-hidden />
-          <span className="truncate" title={lead.listingTitle}>
-            {lead.listingTitle}
-          </span>
-        </p>
-      ) : null}
-      <dl className="mt-1 grid grid-cols-1 gap-x-4 gap-y-0.5 text-xs sm:grid-cols-2">
-        <div className="flex min-w-0 flex-wrap gap-x-1">
-          <dt className="text-muted">Сүүлийн холболт:</dt>
-          <dd className="text-ink">{lead.lastContactAt ? fmtDateTime(lead.lastContactAt) : "Холбогдоогүй"}</dd>
-        </div>
-        <NextStep text={lead.nextStep} date={lead.nextStepDate} overdue={lead.nextStepOverdue} />
-      </dl>
-    </li>
-  );
-}
-
-function OpportunityItem({ opp, oppBase }: { opp: TeamMemberOpportunity; oppBase: string }) {
-  return (
-    <li className="py-3">
-      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-        <Link href={`${oppBase}/${opp.id}`} className="min-w-0 break-words font-semibold text-brand-700 hover:underline">
-          {opp.contactName}
-        </Link>
-        {opp.stageName ? <Badge tone="blue">{opp.stageName}</Badge> : null}
-      </div>
-      {opp.pipelineName ? <p className="mt-0.5 text-xs text-muted">{opp.pipelineName}</p> : null}
-      <dl className="mt-1 text-xs">
-        <NextStep text={opp.nextStep} date={opp.nextStepDate} overdue={opp.nextStepOverdue} />
-      </dl>
+      <p className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-muted">
+        <Building2 className="size-3 shrink-0" aria-hidden />
+        <span className="truncate" title={place}>
+          {place}
+        </span>
+      </p>
+      <p className="mt-0.5 text-xs text-muted">
+        Сүүлийн үйлдэл: {deal.lastActivityAt ? fmtDateTime(deal.lastActivityAt) : "Бүртгэлгүй"}
+      </p>
     </li>
   );
 }
@@ -221,7 +188,7 @@ export const ReadError = () => (
   />
 );
 
-/** Нэг гишүүний сэжим, нээлттэй боломж (?member=). Дуудах хуудас эрхийг шалгана. */
+/** Нэг гишүүний үзүүлэлт ба нээлттэй хэлцэл (?member=). Дуудах хуудас эрхийг шалгана. */
 export async function TeamMemberView({
   member,
   contextLabel,
@@ -239,7 +206,6 @@ export async function TeamMemberView({
   backLabel: string;
 }) {
   const detail = await getTeamMemberDetail(member.profileId);
-  const oppBase = basePath.startsWith("/office") ? `${basePath}/deals` : `${basePath}/pipeline`;
   return (
     <div className="min-w-0">
       <BackLink href={backHref} label={backLabel} />
@@ -271,61 +237,40 @@ export async function TeamMemberView({
       {detail.unavailable ? (
         <ReadError />
       ) : (
-        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <Card className="min-w-0">
-            <CardBody className="p-4 sm:p-5">
-              <h2 className="text-sm font-bold text-ink">Сэжим ({detail.leads.length})</h2>
-              {detail.leads.length === 0 ? (
-                <EmptyState
-                  compact
-                  icon={Flame}
-                  title="Сэжим алга"
-                  description="Энэ гишүүний бүртгэсэн эсвэл эзэмшдэг сэжим энд харагдана."
-                />
-              ) : (
-                <ul className="divide-y divide-line">
-                  {detail.leads.map((lead) => (
-                    <LeadItem key={lead.id} lead={lead} basePath={basePath} />
-                  ))}
-                </ul>
-              )}
-              {detail.leadsTruncated ? (
-                <p className="mt-2 text-xs text-subtle">Хамгийн сүүлийн {TEAM_MEMBER_LEADS_LIMIT} сэжим харагдаж байна.</p>
-              ) : null}
-            </CardBody>
-          </Card>
-          <Card className="min-w-0">
-            <CardBody className="p-4 sm:p-5">
-              <h2 className="text-sm font-bold text-ink">Нээлттэй боломж ({detail.opportunities.length})</h2>
-              {detail.opportunities.length === 0 ? (
-                <EmptyState
-                  compact
-                  icon={KanbanSquare}
-                  title="Нээлттэй боломж алга"
-                  description="Энэ гишүүний эзэмшдэг нээлттэй боломж энд харагдана."
-                />
-              ) : (
-                <ul className="divide-y divide-line">
-                  {detail.opportunities.map((opp) => (
-                    <OpportunityItem key={opp.id} opp={opp} oppBase={oppBase} />
-                  ))}
-                </ul>
-              )}
-            </CardBody>
-          </Card>
-        </div>
+        <Card className="mt-4 min-w-0">
+          <CardBody className="p-4 sm:p-5">
+            <h2 className="text-sm font-bold text-ink">Нээлттэй хэлцэл ({detail.deals.length})</h2>
+            {detail.deals.length === 0 ? (
+              <EmptyState
+                compact
+                icon={Handshake}
+                title="Нээлттэй хэлцэл алга"
+                description="Энэ гишүүний хариуцсан хөрөнгө × харилцагчийн нээлттэй хэлцэл энд харагдана."
+              />
+            ) : (
+              <ul className="divide-y divide-line">
+                {detail.deals.map((deal) => (
+                  <DealItem key={deal.id} deal={deal} basePath={basePath} />
+                ))}
+              </ul>
+            )}
+            {detail.dealsTruncated ? (
+              <p className="mt-2 text-xs text-subtle">Хамгийн сүүлийн {TEAM_MEMBER_DEALS_LIMIT} хэлцэл харагдаж байна.</p>
+            ) : null}
+          </CardBody>
+        </Card>
       )}
     </div>
   );
 }
 
-/** Сэжим харах дүргүй хэрэглэгчид тоог 0 гэж харуулахын оронд. */
+/** Багийн явц харах дүргүй хэрэглэгчид тоог 0 гэж харуулахын оронд. */
 export function TeamProgressNoAccess({ backHref, backLabel }: { backHref: string; backLabel: string }) {
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
       <EmptyState
         title="Багийн явцыг харах эрх алга"
-        description="Гишүүдийн сэжим харахад CRM-д «Борлуулалт хариуцсан захирал», «Үйл ажиллагаа-ЧМТ» эсвэл «CEO» дүр шаардлагатай."
+        description="Гишүүдийн Staff ажлыг харахад CRM-д «Борлуулалт хариуцсан захирал», «Үйл ажиллагаа-ЧМТ» эсвэл «CEO» дүр шаардлагатай."
         action={{ label: backLabel, href: backHref }}
       />
     </div>
@@ -376,7 +321,7 @@ export async function TeamMonitor({
       <BackLink href={backHref} label={backLabel} />
       <h1 className="break-words text-2xl font-extrabold text-ink">{data.team.name}</h1>
       <p className="mt-1 text-sm text-muted">
-        Гишүүн бүрийн бүртгэсэн сэжим, холболт, дараагийн үйлдэл, боломж. Тоо CRM-ийн бүртгэлээс автоматаар гарна.
+        Гишүүн бүрийн Staff хөрөнгө, хэлцэл, дуудлага, үзүүлэлт. Тоо CRM-ийн бүртгэлээс автоматаар гарна.
       </p>
       {data.unavailable ? (
         <ReadError />

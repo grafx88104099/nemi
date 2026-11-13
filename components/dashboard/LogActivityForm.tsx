@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Loader2 } from "lucide-react";
 
-import { logActivity } from "@/lib/actions/crm";
+import { logActivity } from "@/lib/actions/agent-projects";
 import { ACTIVITY_KINDS, ACTIVITY_KIND_LABEL, type ActivityKind } from "@/lib/constants";
 
 /** datetime-local-д тохирох орон нутгийн «одоо» утга. */

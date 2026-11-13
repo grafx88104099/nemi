@@ -5,8 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendOfficeApproved } from "@/lib/email/resend";
-import { getOffboardingBlockers } from "@/lib/queries-crm-ownership";
-import { offboardingBlockMessage } from "@/lib/validation/crm-ownership";
+import { getOffboardingBlockers, offboardingBlockMessage } from "@/lib/crm2/offboarding";
 
 async function requireRole(role: "admin" | "office_admin" | "any") {
   const supabase = await createClient();
@@ -272,12 +271,12 @@ export async function setVerified(
 export async function setAgentStatus(agentId: string, status: "active" | "rejected") {
   const ctx = await requireRole("office_admin");
   if ("error" in ctx) return ctx;
-  // CRM-ийн хүлээлцэх шалгалт (§6.28.11): нээлттэй эзэмшилтэй эсвэл батлагдсан
-  // хүлээлцэх актгүй ажилтныг CRM-ээс гадуурх замаар идэвхгүй болгохгүй.
+  // CRM-ийн хүлээлцэх шалгалт: нээлттэй Staff хэлцэл эсвэл Staff хөрөнгийн үүрэгтэй
+  // ажилтныг CRM-ээс гадуурх замаар идэвхгүй болгохгүй.
   if (status === "rejected") {
     const { data: target } = await ctx.supabase.from("agents").select("profile_id").eq("id", agentId).maybeSingle();
     if (target?.profile_id) {
-      const b = await getOffboardingBlockers(target.profile_id);
+      const b = await getOffboardingBlockers(createAdminClient(), target.profile_id);
       const blocked = "error" in b ? b.error : offboardingBlockMessage(b, "disable");
       if (blocked) return { error: blocked };
     }

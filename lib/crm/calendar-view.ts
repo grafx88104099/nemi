@@ -34,7 +34,7 @@ export const VIEWING_BLOCK_MINUTES = 60;
 
 // ── Төрөл ─────────────────────────────────────────────────
 
-export const CALENDAR_SOURCES = ["event", "task", "next_step", "showing", "opportunity_meeting", "viewing"] as const;
+export const CALENDAR_SOURCES = ["event", "task", "showing", "viewing"] as const;
 export type CalendarSource = (typeof CALENDAR_SOURCES)[number];
 
 export const CALENDAR_EVENT_KINDS = ["meeting", "call", "showing", "personal", "other"] as const;
@@ -43,9 +43,7 @@ export type CalendarEventKind = (typeof CALENDAR_EVENT_KINDS)[number];
 export const CALENDAR_SOURCE_LABEL: Record<CalendarSource, string> = {
   event: "Үйл явдал",
   task: "Даалгавар",
-  next_step: "Дараагийн үйлдэл",
-  showing: "Үзлэг",
-  opportunity_meeting: "Өмчлөгчтэй уулзалт",
+  showing: "Үзүүлэлт",
   viewing: "Сайтын үзлэг",
 };
 
@@ -75,11 +73,6 @@ export type CalendarEventDetail = {
   attendeeIds: string[];
   /** Урилгатай хүмүүсийн нэр (attendeeIds-ийн дарааллаар). */
   attendees: { profileId: string; name: string }[];
-  leadId: string | null;
-  contactId: string | null;
-  opportunityId: string | null;
-  /** Холбосон сэжим/харилцагчийн нэр (харилцагчийн display_name; эрхгүй бол null). */
-  linkLabel: string | null;
 };
 
 export type CalendarItem = {
@@ -95,7 +88,7 @@ export type CalendarItem = {
   /** ISO агшин, хамаарахгүй (exclusive). Бүтэн өдрийнх бол сүүлийн өдрийн дараах УБ 00:00. */
   end: string;
   allDay: boolean;
-  /** Календарийн эзэн: үйл явдлын эзэн, даалгаврын хариуцагч, сэжим/боломжийн эзэмшигч, агент. */
+  /** Календарийн эзэн: үйл явдлын эзэн, даалгаврын хариуцагч, үзүүлэлтийн агент. */
   personId: string;
   personName: string | null;
   /**
@@ -104,7 +97,7 @@ export type CalendarItem = {
    */
   personIds: string[];
   colorKey: CalendarColorKey;
-  /** Зүйлийн хуудас (үйл явдалд — холбосон сэжим/боломж/харилцагч, эсвэл null → цонхоор нээнэ). */
+  /** Зүйлийн хуудас (даалгавар, Staff хэлцэл, зар); үйл явдалд null → цонхоор нээнэ. */
   href: string | null;
   /** Чирж цагийг өөрчлөх боломжтой эсэх (rescheduleItem/updateEvent). */
   canMove: boolean;
@@ -114,7 +107,7 @@ export type CalendarItem = {
   lockedReason: string | null;
   /** Хувийн үйл явдлыг «Завгүй» болгож нуусан. */
   masked: boolean;
-  /** Эх сурвалжийн төлөв (даалгавар, үзлэг, боломжийн state г.м.). */
+  /** Эх сурвалжийн төлөв (даалгавар, үзүүлэлт, сайтын үзлэг). */
   status: string | null;
   /** Дууссан/хийгдсэн — UI бүдгэрүүлнэ. */
   done: boolean;
@@ -296,32 +289,6 @@ export function calendarFetchRange(
   return rangeOfDays(consecutiveDays(first, daysBetween(first, last) + 1));
 }
 
-/**
- * 7 хоногийн төлөвлөгөөнд суулгасан (тогтмол 7 хоногийн) календарийн харагдацууд:
- * 7 хоног ба тухайн 7 хоногийн жагсаалт. Бусдыг хасна; юу ч үлдэхгүй бол 7 хоног.
- */
-export function pinnedCalendarViews(views?: readonly CalendarView[]): CalendarView[] {
-  const allowed = (views ?? (["week", "agenda"] as const)).filter((v) => v === "week" || v === "agenda");
-  return allowed.length ? [...new Set(allowed)] : ["week"];
-}
-
-/** Календарьт харагдаж буй 7 хоногийн Даваа (төлөвлөгөөний төлөвт); сарын харагдацад null. */
-export function calendarPlanWeek(view: CalendarView | null, day: string): string | null {
-  return view === "month" ? null : weekStartOf(day);
-}
-
-/**
- * Харагдацын өдрүүд ба муж. pinned (7 хоногийн төлөвлөгөөнд суулгасан) үед жагсаалт
- * ч тэр 7 хоногийг (Даваа–Ням) харуулна — сервер зөвхөн 7 хоногийг уншдаг.
- */
-export function calendarViewRange(view: CalendarView, day: string, pinned: boolean = false): CalendarRange {
-  return calendarRange(pinned && view === "agenda" ? "week" : view, day);
-}
-
-/** Толгойн гарчиг; pinned үед жагсаалтад ч 7 хоногийн шошго. */
-export function calendarViewTitle(view: CalendarView, day: string, pinned: boolean = false): string {
-  return calendarTitle(pinned && view === "agenda" ? "week" : view, day);
-}
 
 /** URL-ийн ?people=: зөвхөн өөрийгөө харж байвал хасна (null). */
 export function calendarPeopleParam(people: readonly string[], viewerId: string): string[] | null {
@@ -671,12 +638,6 @@ export function canViewCalendar(
   return person.isActive !== false && isTeamOf(viewer, person.teamId);
 }
 
-/** crm_leads_update / crm_opportunities_update: эзэн, түүний багийн ахлагч, менежер. */
-export function canEditOwnedRecord(viewer: CalendarViewer, ownerId: string | null, ownerTeamId: string | null): boolean {
-  if (!ownerId) return false;
-  return ownerId === viewer.profileId || isCalendarManager(viewer.roles) || isTeamOf(viewer, ownerTeamId);
-}
-
 /** can_edit_task(): үүсгэгч, хариуцагч, оффисын админ, платформын админ. */
 export function canEditTask(viewer: CalendarViewer, task: { created_by: string; responsible_id: string }): boolean {
   return (
@@ -692,10 +653,7 @@ export const CALENDAR_LOCK_REASON = {
   notOwner: "Зөвхөн үүсгэсэн хүн өөрчилнө",
   noRights: "Танд өөрчлөх эрх алга",
   taskDone: "Дууссан даалгаврын хугацааг өөрчлөхгүй",
-  leadClosed: "Идэвхгүй сэжмийн алхмыг өөрчлөхгүй",
-  oppClosed: "Хаагдсан боломжийн уулзалтыг өөрчлөхгүй",
-  noPlace: "Уулзах газаргүй — боломжийн картаас товлоно уу",
-  showing: "Үзлэгийн цагийг үзлэгийн картаас (цуцалж, шинээр товлож) өөрчилнө",
+  showing: "Үзүүлэлтийн цагийг Staff хэлцлийн хуудаснаас өөрчилнө",
   viewing: "Сайтын үзлэгийн цагийг календарьаас өөрчлөхгүй",
 } as const;
 
@@ -720,35 +678,14 @@ export function taskMovability(viewer: CalendarViewer, t: { created_by: string; 
   return canEditTask(viewer, t) ? MOVABLE : LOCKED(CALENDAR_LOCK_REASON.noRights);
 }
 
-/** Сэжмийн дараагийн үйлдлийн огноо: updateLead (шинэ/идэвхтэй, засах эрхтэй). */
-export function leadStepMovability(
-  viewer: CalendarViewer,
-  l: { owner_id: string | null; status: string },
-  ownerTeamId: string | null
-): Movability {
-  if (l.status !== "new" && l.status !== "active") return LOCKED(CALENDAR_LOCK_REASON.leadClosed);
-  return canEditOwnedRecord(viewer, l.owner_id, ownerTeamId) ? MOVABLE : LOCKED(CALENDAR_LOCK_REASON.noRights);
-}
-
-/** Боломжийн уулзалт: scheduleOwnerMeeting (нээлттэй, газартай, засах эрхтэй). */
-export function meetingMovability(
-  viewer: CalendarViewer,
-  o: { owner_id: string | null; state: string; meeting_place: string | null },
-  ownerTeamId: string | null
-): Movability {
-  if (o.state !== "open") return LOCKED(CALENDAR_LOCK_REASON.oppClosed);
-  if ((o.meeting_place ?? "").trim().length < 2) return LOCKED(CALENDAR_LOCK_REASON.noPlace);
-  return canEditOwnedRecord(viewer, o.owner_id, ownerTeamId) ? MOVABLE : LOCKED(CALENDAR_LOCK_REASON.noRights);
-}
-
 /**
- * Зөөх газар зөвшөөрөгдөх эсэх (UI-д урьдчилж): сэжмийн алхам өнгөрсөн
- * огноо руу орохгүй (updateLead-ийн дүрэм). todayIso — УБ-ын өнөөдөр.
+ * Зөөх газар зөвшөөрөгдөх эсэх (UI-д урьдчилж). Одоогийн эх сурвалжуудад өдрийн
+ * хязгаар байхгүй; day, todayIso (УБ-ын өнөөдөр) нь дараа нэмэгдэх дүрэмд.
  */
 export function canDropOnDay(item: Pick<CalendarItem, "source" | "canMove">, day: string, todayIso: string): boolean {
-  if (!item.canMove) return false;
-  if (item.source === "next_step") return day >= todayIso;
-  return true;
+  void day;
+  void todayIso;
+  return item.canMove;
 }
 
 // ── Холбоос ───────────────────────────────────────────────
@@ -759,46 +696,20 @@ function isOffice(basePath: string): boolean {
 }
 
 export const calendarHref = {
-  lead: (basePath: string, id: string) => `${basePath}/leads/${id}`,
   contact: (basePath: string, id: string) => `${basePath}/contacts/${id}`,
-  property: (basePath: string, id: string) => `${basePath}/properties/${id}`,
-  opportunity: (basePath: string, id: string) => `${basePath}/${isOffice(basePath) ? "deals" : "pipeline"}/${id}`,
+  /** Staff хөрөнгийн карт. */
+  property: (basePath: string, id: string) => `${basePath}/staff/${id}`,
+  /** Хөрөнгө × харилцагчийн хэлцэл. */
+  deal: (basePath: string, propertyId: string, dealId: string) => `${basePath}/staff/${propertyId}/deals/${dealId}`,
   task: (basePath: string, id: string) => `${isOffice(basePath) ? "/office" : "/agent"}/tasks/${id}`,
   viewing: (listingId: string) => `/listings/${listingId}`,
-  /**
-   * Календарийн хуудас (мэдэгдлийн холбоос, revalidate). opts — тодорхой харагдац,
-   * хүмүүстэй нээх (7 хоногийн төлөвлөгөөнөөс «Календарь дээр харах»).
-   */
+  /** Календарийн хуудас (мэдэгдлийн холбоос, revalidate). opts — тодорхой харагдац, хүмүүстэй нээх. */
   calendar: (
     basePath: string,
     day?: string | null,
     opts: { view?: CalendarView | null; people?: readonly string[] | null } = {}
   ) => `${basePath}/calendar${calendarSearch("", { view: opts.view ?? null, date: day ?? null, people: opts.people ?? null })}`,
-  /**
-   * Тухайн 7 хоногийн төлөвлөгөөний карт: агентын панельд өөрийнх нь /week/<огноо>,
-   * бусдынх (ахлагч, удирдлага) /team/<id>, оффисын панельд /office/crm/week/<id>.
-   * Картгүй эсвэл үзэх эрхгүй бол null.
-   */
-  weekPlan: (
-    basePath: string,
-    p: { week: string; planId: string | null; isSelf: boolean; canLead: boolean }
-  ): string | null => {
-    if (isOffice(basePath)) return p.planId && p.canLead ? `${basePath}/week/${p.planId}` : null;
-    if (p.isSelf) return `${basePath}/week/${p.week}`;
-    return p.planId && p.canLead ? `${basePath}/team/${p.planId}` : null;
-  },
 };
-
-/** Үйл явдлын холбосон бүртгэлийн хуудас: боломж → сэжим → харилцагч. */
-export function eventHref(
-  basePath: string,
-  e: { opportunity_id: string | null; lead_id: string | null; contact_id: string | null }
-): string | null {
-  if (e.opportunity_id) return calendarHref.opportunity(basePath, e.opportunity_id);
-  if (e.lead_id) return calendarHref.lead(basePath, e.lead_id);
-  if (e.contact_id) return calendarHref.contact(basePath, e.contact_id);
-  return null;
-}
 
 // ── Нэгтгэл ───────────────────────────────────────────────
 

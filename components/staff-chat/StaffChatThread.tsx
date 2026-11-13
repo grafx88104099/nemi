@@ -9,7 +9,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { toast } from "@/components/ui/toast";
 import { markChatRead, sendStaffMessage } from "@/lib/actions/staff-chat";
-import { personAvatar } from "@/lib/crm/avatar";
+import { personAvatar } from "@/lib/avatar";
 import { fmtTime } from "@/lib/format";
 import { getStaffChatMessages, getStaffChatMessagesAfter, getStaffChatPeople } from "@/lib/queries-staff-chat";
 import {

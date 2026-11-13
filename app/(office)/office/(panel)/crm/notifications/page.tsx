@@ -11,13 +11,14 @@ import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { CRM_EVENT_LABEL, type CrmEventCode } from "@/lib/constants-crm";
+import { LoadErrorState } from "@/components/crm2/ui/empty";
+import { fmtDayWithWeekday, fmtTime, ubParts } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /**
- * Удирдлагын мэдэгдлийн хуудас (§6.28): SLA зөрчил, 48 цагт холбогдоогүй
- * сэжим, халуун сэжим идэвхгүй, үзлэгийн хариу, саналын хугацаа г.м. бүх
- * мэдэгдэл нэг дор — уншаагүй/бүгд шүүлт, хуудаслалттай.
+ * Оффисын мэдэгдлийн хуудас: Staff-ийн гэрээ батлах, хүсэлт, шилжүүлэг,
+ * багийн ахлагчийн санал г.м. бүх мэдэгдэл нэг дор — уншаагүй/бүгд шүүлт,
+ * хуудаслалттай.
  */
 
 export const metadata = { title: "Мэдэгдэл — CRM" };
@@ -36,24 +37,36 @@ type NoteRow = {
   created_at: string;
 };
 
-/** notifications.type ('crm_<event>' / 'crm_<event>_esc') → монгол ангилал. */
-function eventLabel(type: string | null): { label: string; escalated: boolean } | null {
-  if (!type || !type.startsWith("crm_")) return null;
-  const escalated = type.endsWith("_esc");
-  const code = type.slice(4, escalated ? -4 : undefined) as CrmEventCode;
-  const label = CRM_EVENT_LABEL[code];
-  return label ? { label, escalated } : { label: "CRM", escalated };
+/** CRM-ийн мэдэгдлийн төрөл → монгол ангилал (хуучин crm_* төрөл бүгд «CRM»). */
+const EVENT_LABEL: Record<string, string> = {
+  crm2_brokerage_pending: "Зуучлалын гэрээ батлах",
+  crm2_brokerage_decided: "Зуучлалын гэрээний шийдвэр",
+  crm2_brokerage_expiring: "Зуучлалын гэрээ дуусах гэж буй",
+  crm2_property_ended: "Хөрөнгийн гэрээ дууссан",
+  crm2_request: "Хүсэлт",
+  crm2_request_decided: "Хүсэлтийн шийдвэр",
+  crm2_request_call: "Дуудлагатай шилжүүлэх хүсэлт",
+  crm2_request_call_unrecorded: "Харилцагч өөр агенттай холбогдсон",
+  crm2_request_call_skipped: "Хадгалсан дуудлага бүртгэгдсэнгүй",
+  crm2_contact_transferred: "Харилцагч шилжсэн",
+  crm2_deal_transferred: "Хэлцэл шилжсэн",
+  crm_team_lead: "Багийн ахлагч",
+  crm_team_lead_proposal: "Ахлагчийн санал",
+  crm_team_lead_approved: "Ахлагч батлагдсан",
+  crm_team_lead_rejected: "Ахлагчийн санал татгалзсан",
+  crm_offboarding: "Гарах ажилтан",
+};
+
+function eventLabel(type: string | null): string | null {
+  if (!type || !type.startsWith("crm")) return null;
+  return EVENT_LABEL[type] ?? "CRM";
 }
 
-const UB_DAY = new Intl.DateTimeFormat("mn-MN", {
-  timeZone: "Asia/Ulaanbaatar",
-  year: "numeric",
-  month: "long",
-  day: "numeric",
-  weekday: "long",
-});
-const UB_TIME = new Intl.DateTimeFormat("mn-MN", { timeZone: "Asia/Ulaanbaatar", hour: "2-digit", minute: "2-digit" });
-const UB_KEY = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ulaanbaatar" });
+/** Улаанбаатарын өдрийн түлхүүр (бүлэглэлд). */
+function ubDayKey(iso: string): string {
+  const u = ubParts(iso);
+  return `${u.y}-${u.mo}-${u.d}`;
+}
 
 async function markAllRead() {
   "use server";
@@ -79,7 +92,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
     .order("created_at", { ascending: false })
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
   if (unreadOnly) q = q.is("read_at", null);
-  if (crmOnly) q = q.like("type", "crm_%");
+  if (crmOnly) q = q.like("type", "crm%");
   const [{ data, count, error }, { count: unreadCount }] = await Promise.all([
     q,
     supabase
@@ -96,11 +109,10 @@ export default async function NotificationsPage({ searchParams }: { searchParams
   // Өдрөөр бүлэглэнэ (УБ цагаар).
   const groups: { key: string; label: string; rows: NoteRow[] }[] = [];
   for (const r of rows) {
-    const d = new Date(r.created_at);
-    const key = UB_KEY.format(d);
+    const key = ubDayKey(r.created_at);
     const last = groups[groups.length - 1];
     if (last && last.key === key) last.rows.push(r);
-    else groups.push({ key, label: UB_DAY.format(d), rows: [r] });
+    else groups.push({ key, label: fmtDayWithWeekday(r.created_at), rows: [r] });
   }
 
   const href = (patch: Record<string, string | undefined>) => {
@@ -128,7 +140,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
         </div>
         {unreadCount ? (
           <form action={markAllRead}>
-            <Button type="submit" variant="outline" size="sm">
+            <Button type="submit" variant="outline" size="touch">
               <CheckCheck className="size-4" /> Бүгдийг уншсан болгох
             </Button>
           </form>
@@ -151,13 +163,19 @@ export default async function NotificationsPage({ searchParams }: { searchParams
         </Link>
       </div>
 
-      {rows.length === 0 ? (
+      {error ? (
+        <Card>
+          <CardBody>
+            <LoadErrorState retryHref={href({ page: sp.page })} />
+          </CardBody>
+        </Card>
+      ) : rows.length === 0 ? (
         <Card>
           <CardBody>
             <EmptyState
               icon={Bell}
               title={unreadOnly ? "Уншаагүй мэдэгдэл алга" : "Мэдэгдэл алга"}
-              description="SLA-ийн зөрчил, хугацаа хэтэрсэн дараагийн үйлдэл, халуун сэжим идэвхгүй болох зэрэг сануулга энд ирнэ."
+              description="Гэрээ батлах, хүсэлт, шилжүүлэг, багийн ахлагчийн санал зэрэг мэдэгдэл энд ирнэ."
               action={unreadOnly ? { label: "Бүх мэдэгдлийг харах", href: href({ filter: undefined }) } : undefined}
             />
           </CardBody>
@@ -176,19 +194,20 @@ export default async function NotificationsPage({ searchParams }: { searchParams
                       <div className="flex gap-3 px-4 py-3">
                         <span
                           className={cn("mt-1.5 size-2 shrink-0 rounded-full", n.read_at ? "bg-transparent" : "bg-brand-500")}
-                          aria-label={n.read_at ? undefined : "Уншаагүй"}
+                          aria-hidden
                         />
+                        {n.read_at ? null : <span className="sr-only">Уншаагүй</span>}
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span className={cn("text-sm text-ink", n.read_at ? "font-medium" : "font-bold")}>
                               {n.title ?? "Мэдэгдэл"}
                             </span>
-                            {ev ? <Badge tone={ev.escalated ? "rose" : "neutral"}>{ev.escalated ? `Эскалаци · ${ev.label}` : ev.label}</Badge> : null}
+                            {ev ? <Badge tone="neutral">{ev}</Badge> : null}
                           </div>
                           {n.body ? <p className="mt-0.5 text-sm text-muted">{n.body}</p> : null}
                         </div>
                         <time className="shrink-0 text-xs text-subtle" dateTime={n.created_at}>
-                          {UB_TIME.format(new Date(n.created_at))}
+                          {fmtTime(n.created_at)}
                         </time>
                       </div>
                     );

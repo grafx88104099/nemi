@@ -1,16 +1,78 @@
 import Link from "next/link";
-import { Building2, Users, CalendarDays, Star, Clock, Plus, UserCircle, ArrowRight, AlertCircle } from "lucide-react";
+import { Building2, Users, CalendarDays, Star, Clock, Plus, UserCircle, ArrowRight, AlertCircle, Eye } from "lucide-react";
 
+import { createClient } from "@/lib/supabase/server";
 import { getMyAgent, getAgentOverview } from "@/lib/queries-agent";
 import { getCrmStaffContext } from "@/lib/queries-crm-core";
-import { getMyLeadSummary } from "@/lib/queries-crm-leads";
-import { LEAD_GRADE_LABEL, CRM_LIFECYCLE_LABEL } from "@/lib/constants-crm";
-import { fmtDate, fmtDayWithWeekday, fmtShortDateTime } from "@/lib/format";
+import { fmtDayWithWeekday, fmtShortDateTime } from "@/lib/format";
 import { DashboardNav } from "@/components/dashboard/DashboardNav";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { PremierUpgrade } from "@/components/dashboard/PremierUpgrade";
+
+const STAFF_HREF = "/agent/crm/staff";
+const SHOWINGS_DAYS = 7;
+const SHOWINGS_LIMIT = 5;
+
+type UpcomingShowing = {
+  id: string;
+  deal_id: string;
+  property_id: string;
+  scheduled_at: string;
+  property: { code: string; location_text: string | null } | null;
+};
+
+type Crm2Summary = {
+  /** null = уншиж чадсангүй. */
+  openDeals: number | null;
+  showingsCount: number | null;
+  showings: UpcomingShowing[];
+  openTasks: number | null;
+};
+
+/** Агентын Staff ажлын товч (хэрэглэгчийн өөрийн эрхээр, RLS). */
+async function getMyCrm2Summary(profileId: string, now: Date): Promise<Crm2Summary> {
+  const supabase = await createClient();
+  const until = new Date(now.getTime() + SHOWINGS_DAYS * 86_400_000).toISOString();
+  const [deals, showings, tasks] = await Promise.all([
+    supabase
+      .from("crm2_deals")
+      .select("id", { count: "exact", head: true })
+      .eq("agent_id", profileId)
+      .eq("is_open", true),
+    supabase
+      .from("crm2_activities")
+      .select(
+        "id, deal_id, property_id, scheduled_at, property:crm2_properties!crm2_activities_property_id_office_id_fkey(code, location_text)",
+        { count: "exact" }
+      )
+      .eq("agent_id", profileId)
+      .eq("kind", "showing")
+      .eq("showing_status", "scheduled")
+      .is("voided_at", null)
+      .gte("scheduled_at", now.toISOString())
+      .lt("scheduled_at", until)
+      .order("scheduled_at")
+      .limit(SHOWINGS_LIMIT),
+    supabase
+      .from("crm2_tasks")
+      .select("id", { count: "exact", head: true })
+      .eq("assignee_id", profileId)
+      .eq("status", "open"),
+  ]);
+  if (deals.error) console.error("getMyCrm2Summary deals:", deals.error.message);
+  if (showings.error) console.error("getMyCrm2Summary showings:", showings.error.message);
+  if (tasks.error) console.error("getMyCrm2Summary tasks:", tasks.error.message);
+  return {
+    openDeals: deals.error ? null : (deals.count ?? 0),
+    showingsCount: showings.error ? null : (showings.count ?? 0),
+    showings: showings.error ? [] : ((showings.data ?? []) as unknown as UpcomingShowing[]),
+    openTasks: tasks.error ? null : (tasks.count ?? 0),
+  };
+}
+
+const countText = (n: number | null | undefined) => (n == null ? "—" : String(n));
 
 export default async function AgentOverview() {
   const agent = await getMyAgent();
@@ -29,8 +91,8 @@ export default async function AgentOverview() {
     getAgentOverview(agent.id as string),
     getCrmStaffContext(),
   ]);
-  // §6.1: агентын албан бүртгэл = CRM-ийн сэжим (хуучин лидийн хүснэгт биш).
-  const crm = crmCtx ? await getMyLeadSummary(crmCtx.profileId) : null;
+  // Агентын албан бүртгэл = CRM-ийн Staff (хөрөнгө × харилцагчийн хэлцэл, дуудлага, үзүүлэлт).
+  const crm = crmCtx ? await getMyCrm2Summary(crmCtx.profileId, new Date()) : null;
 
   // Профайл гүйцэд байдал
   const checks = [
@@ -44,10 +106,10 @@ export default async function AgentOverview() {
     { icon: Building2, label: "Идэвхтэй зар", value: stats.active, tone: "text-brand-600" },
     {
       icon: Users,
-      label: "Шинэ сэжим",
-      value: crm ? crm.newCount : "—",
+      label: "Нээлттэй хэлцэл",
+      value: crm ? countText(crm.openDeals) : "—",
       tone: "text-sky-600",
-      hint: crm ? `идэвхтэй ${crm.activeCount}` : "CRM-д бүртгэгдээгүй",
+      hint: crm ? "Staff" : "CRM-д бүртгэгдээгүй",
     },
     { icon: CalendarDays, label: "Өнөөдрийн үзлэг", value: stats.todayViewings, tone: "text-amber-600" },
     { icon: Star, label: "Үнэлгээ", value: agent.rating ?? "—", tone: "text-emerald-600", hint: `${agent.reviews_count ?? 0} сэтгэгдэл` },
@@ -71,7 +133,7 @@ export default async function AgentOverview() {
           {isActive && (
             <>
               <ButtonLink href="/agent/listings/new" size="sm"><Plus className="size-4" /> Шинэ зар</ButtonLink>
-              <ButtonLink href="/agent/crm" size="sm" variant="outline"><Users className="size-4" /> CRM</ButtonLink>
+              <ButtonLink href={STAFF_HREF} size="sm" variant="outline"><Users className="size-4" /> CRM</ButtonLink>
             </>
           )}
         </div>
@@ -117,30 +179,29 @@ export default async function AgentOverview() {
         </Link>
       )}
 
-      {/* CRM — миний сэжим (§6.1) */}
+      {/* CRM — миний Staff ажил */}
       <Card className="mt-6">
         <CardBody>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-bold text-ink">CRM — миний сэжим</h2>
-            <Link href="/agent/crm" className="text-sm text-brand-600 hover:underline">Өдрийн самбар →</Link>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 className="font-bold text-ink">CRM — миний Staff ажил</h2>
+            <Link href={STAFF_HREF} className="shrink-0 text-sm text-brand-600 hover:underline">Staff →</Link>
           </div>
           {crm ? (
-            <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
+            <div className="grid grid-cols-1 gap-2 text-center sm:grid-cols-3">
               {[
-                { label: "Шинэ", value: crm.newCount, href: "/agent/crm/leads?status=new" },
-                { label: "Идэвхтэй", value: crm.activeCount, href: "/agent/crm/leads?status=active" },
-                { label: "Үйлдэл хэтэрсэн", value: crm.overdueCount, href: "/agent/crm/leads?overdue=1" },
-                { label: "Холбогдоогүй", value: crm.noContactCount, href: "/agent/crm/leads?nocontact=1" },
+                { label: "Нээлттэй хэлцэл", value: crm.openDeals, href: STAFF_HREF },
+                { label: `Ойрын ${SHOWINGS_DAYS} хоногийн үзүүлэлт`, value: crm.showingsCount, href: "/agent/crm/calendar" },
+                { label: "Нээлттэй ажил", value: crm.openTasks, href: "/agent/crm/my-work" },
               ].map((k) => (
                 <Link key={k.label} href={k.href} className="rounded-xl bg-surface-2 px-3 py-3 hover:bg-surface">
-                  <div className="text-lg font-extrabold text-ink">{k.value}</div>
+                  <div className="text-lg font-extrabold text-ink">{countText(k.value)}</div>
                   <div className="text-xs text-muted">{k.label}</div>
                 </Link>
               ))}
             </div>
           ) : (
             <p className="text-sm text-muted">
-              Та CRM-д бүртгэгдээгүй байна — оффисын админ таныг CRM-ийн ажилтнаар нэмсний дараа сэжим энд харагдана.
+              Та CRM-д бүртгэгдээгүй байна — оффисын админ таныг CRM-ийн ажилтнаар нэмсний дараа Staff-ийн ажил энд харагдана.
             </p>
           )}
         </CardBody>
@@ -148,36 +209,37 @@ export default async function AgentOverview() {
 
       {!(agent.premier as boolean) && <div className="mt-6"><PremierUpgrade /></div>}
 
-      {/* Сүүлийн лид + Удахгүй үзлэг */}
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+      {/* Staff-ийн ойрын үзүүлэлт + сайтын үзлэг */}
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
           <CardBody>
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-bold text-ink">Анхаарал шаардсан сэжим</h2>
-              <Link href="/agent/crm/leads" className="text-sm text-brand-600 hover:underline">Бүгд →</Link>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 font-bold text-ink">
+                <Eye className="size-4" /> Ойрын Staff үзүүлэлт
+              </h2>
+              <Link href="/agent/crm/calendar" className="shrink-0 text-sm text-brand-600 hover:underline">Календарь →</Link>
             </div>
             <div className="space-y-2">
-              {(crm?.recent ?? []).map((l) => (
+              {(crm?.showings ?? []).map((s) => (
                 <Link
-                  key={l.id}
-                  href={`/agent/crm/leads/${l.id}`}
-                  className="flex items-center justify-between rounded-lg bg-surface-2 px-3 py-2 hover:bg-surface"
+                  key={s.id}
+                  href={`${STAFF_HREF}/${s.property_id}/deals/${s.deal_id}`}
+                  className="flex items-center justify-between gap-2 rounded-lg bg-surface-2 px-3 py-2 hover:bg-surface"
                 >
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-ink">{l.name}</div>
-                    <div className="truncate text-xs text-muted">
-                      {l.next_step ?? "Дараагийн үйлдэлгүй"}
-                      {l.next_step_date ? ` · ${fmtDate(l.next_step_date)}` : ""}
-                    </div>
+                    <div className="truncate text-sm font-medium text-ink">{s.property?.code ?? "Staff хөрөнгө"}</div>
+                    {s.property?.location_text ? (
+                      <div className="truncate text-xs text-muted">{s.property.location_text}</div>
+                    ) : null}
                   </div>
-                  {l.grade ? (
-                    <Badge tone={LEAD_GRADE_LABEL[l.grade].tone}>{l.grade.toUpperCase()}</Badge>
-                  ) : (
-                    <Badge tone={CRM_LIFECYCLE_LABEL[l.status].tone}>{CRM_LIFECYCLE_LABEL[l.status].label}</Badge>
-                  )}
+                  <div className="shrink-0 text-xs text-muted">{fmtShortDateTime(s.scheduled_at)}</div>
                 </Link>
               ))}
-              {(crm?.recent ?? []).length === 0 && <p className="text-sm text-muted">Нээлттэй сэжим алга.</p>}
+              {(crm?.showings ?? []).length === 0 && (
+                <p className="text-sm text-muted">
+                  {crm ? `Ойрын ${SHOWINGS_DAYS} хоногт товлосон үзүүлэлт алга.` : "CRM-д бүртгэгдсэний дараа харагдана."}
+                </p>
+              )}
             </div>
           </CardBody>
         </Card>

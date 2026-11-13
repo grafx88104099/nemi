@@ -1,32 +1,25 @@
 import { cache } from "react";
 
 import { createClient } from "@/lib/supabase/server";
-import { getCrmStaffContext } from "@/lib/queries-crm-core";
-import { getNameMap } from "@/lib/queries-crm-reports";
+import { getCrmStaffContext, getNameMap } from "@/lib/queries-crm-core";
 import {
   CALENDAR_BUSY_TITLE,
   CALENDAR_LOCK_REASON,
   MAX_RANGE_DAYS,
-  MEETING_BLOCK_MINUTES,
   SHOWING_DEFAULT_MINUTES,
   TASK_BLOCK_MINUTES,
   VIEWING_BLOCK_MINUTES,
-  allDayRange,
   blockEnd,
   calendarHref,
   canViewCalendar,
   eventColorKey,
-  eventHref,
   eventMovability,
   isCalendarEventKind,
-  leadStepMovability,
   lockedMovability,
-  meetingMovability,
   overlapsRange,
   personIdsIn,
   sortCalendarItems,
   taskMovability,
-  ubDay,
   type CalendarItem,
   type CalendarPerson,
   type CalendarViewer,
@@ -36,15 +29,13 @@ import {
  * CRM календарийн уншилт — бүгд хэрэглэгчийн өөрийн эрхээр (RLS, definer RPC).
  * Эх сурвалж бүрийг мужаар НЭГ удаа уншиж CalendarItem болгон нэгтгэнэ:
  * үйл явдал (crm_calendar_events RPC — хувийнхыг «Завгүй» болгож нууна),
- * даалгавар, сэжмийн дараагийн үйлдэл, үзлэг, боломжийн уулзалт, сайтын үзлэг.
+ * даалгавар, Staff-ийн үзүүлэлт (crm2_activities), сайтын үзлэг.
  * Хүмүүсийн хүрээ crm_calendar_can_view()-тэй ижил (өөрөө / баг / бүгд).
  */
 
 const MIN_MS = 60_000;
 const DAY_MS = 86_400_000;
 const SOURCE_LIMIT = 1000;
-/** crm_showings.duration_min-ийн дээд хэмжээ (validateShowingSchedule). */
-const SHOWING_MAX_MINUTES = 600;
 
 const staffContext = cache(getCrmStaffContext);
 
@@ -88,8 +79,6 @@ export const getCalendarPeople = cache(async (): Promise<CalendarPerson[]> => {
 
 // ── Эх сурвалжийн мөрүүд ──────────────────────────────────
 
-type ContactLite = { display_name: string | null } | null;
-
 type RawTask = {
   id: string;
   title: string;
@@ -99,35 +88,16 @@ type RawTask = {
   responsible_id: string;
 };
 
-type RawLead = {
-  id: string;
-  status: string;
-  owner_id: string;
-  next_step: string | null;
-  next_step_date: string;
-  contact: ContactLite;
-};
-
+/** Staff-ийн үзүүлэлт (crm2_activities, kind = showing). */
 type RawShowing = {
   id: string;
-  status: string;
-  scheduled_at: string;
-  duration_min: number | null;
-  agent_id: string;
-  opportunity_id: string | null;
+  deal_id: string;
   property_id: string;
-  meeting_point: string | null;
-  contact: ContactLite;
-  property: { name: string | null; number: string | null } | null;
-};
-
-type RawOpp = {
-  id: string;
-  state: string;
-  owner_id: string;
-  meeting_at: string;
-  meeting_place: string | null;
-  contact: ContactLite;
+  agent_id: string;
+  scheduled_at: string;
+  occurred_at: string | null;
+  showing_status: string | null;
+  property: { code: string; location_text: string | null } | null;
 };
 
 type RawViewing = {
@@ -140,14 +110,9 @@ type RawViewing = {
 };
 
 const TASK_SELECT = "id, title, status, deadline, created_by, responsible_id";
-const LEAD_SELECT =
-  "id, status, owner_id, next_step, next_step_date, contact:crm_contacts!crm_leads_contact_id_fkey(display_name)";
 const SHOWING_SELECT =
-  "id, status, scheduled_at, duration_min, agent_id, opportunity_id, property_id, meeting_point, " +
-  "contact:crm_contacts!crm_showings_contact_id_fkey(display_name), " +
-  "property:crm_properties!crm_showings_property_id_fkey(name, number)";
-const OPP_SELECT =
-  "id, state, owner_id, meeting_at, meeting_place, contact:crm_contacts!crm_opportunities_contact_id_fkey(display_name)";
+  "id, deal_id, property_id, agent_id, scheduled_at, occurred_at, showing_status, " +
+  "property:crm2_properties!crm2_activities_property_id_office_id_fkey(code, location_text)";
 const VIEWING_SELECT = "id, status, scheduled_at, agent_id, listing_id, listing:listings!viewings_listing_id_fkey(title)";
 
 function iso(v: string | number): string {
@@ -211,12 +176,9 @@ export async function getCalendarFeed(query: CalendarFeedQuery): Promise<Calenda
     teamId: ctx.teamId,
     userRole: profileRes.data?.role ?? null,
   };
-  const teamOf = (id: string | null) => (id ? (personById.get(id)?.teamId ?? null) : null);
   const since = (minutes: number) => iso(f - minutes * MIN_MS);
-  const fromDay = ubDay(f);
-  const lastDay = ubDay(t - 1);
 
-  const [eventsRes, tasksRes, leadsRes, showingsRes, oppsRes, agentsRes] = await Promise.all([
+  const [eventsRes, tasksRes, showingsRes, agentsRes] = await Promise.all([
     supabase.rpc("crm_calendar_events", { p_from: from, p_to: to, p_people: people }),
     supabase
       .from("tasks")
@@ -226,28 +188,16 @@ export async function getCalendarFeed(query: CalendarFeedQuery): Promise<Calenda
       .lt("deadline", to)
       .order("deadline")
       .limit(SOURCE_LIMIT),
+    // Товлосон ба үзүүлсэн үзүүлэлт (хүчингүй болсныг хасна) — RLS-ээр харах эрхтэйг л.
     supabase
-      .from("crm_leads")
-      .select(LEAD_SELECT)
-      .in("owner_id", people)
-      .in("status", ["new", "active"])
-      .gte("next_step_date", fromDay)
-      .lte("next_step_date", lastDay)
-      .limit(SOURCE_LIMIT),
-    supabase
-      .from("crm_showings")
+      .from("crm2_activities")
       .select(SHOWING_SELECT)
+      .eq("kind", "showing")
       .in("agent_id", people)
-      .in("status", ["scheduled", "done"])
-      .gte("scheduled_at", since(SHOWING_MAX_MINUTES))
+      .in("showing_status", ["scheduled", "shown"])
+      .is("voided_at", null)
+      .gte("scheduled_at", since(SHOWING_DEFAULT_MINUTES))
       .lt("scheduled_at", to)
-      .limit(SOURCE_LIMIT),
-    supabase
-      .from("crm_opportunities")
-      .select(OPP_SELECT)
-      .in("owner_id", people)
-      .gte("meeting_at", since(MEETING_BLOCK_MINUTES))
-      .lt("meeting_at", to)
       .limit(SOURCE_LIMIT),
     // viewings.agent_id → agents.id; хүн нь agents.profile_id.
     supabase.from("agents").select("id, profile_id").in("profile_id", people),
@@ -266,13 +216,9 @@ export async function getCalendarFeed(query: CalendarFeedQuery): Promise<Calenda
   const missing = new Set<string>();
   for (const e of events) for (const id of [e.owner_id, ...(e.attendee_ids ?? [])]) if (!names.has(id)) missing.add(id);
 
-  // Холбосон сэжим/харилцагчийн нэр (засах маягтад) — хэрэглэгчийн эрхээр.
-  const shownEvents = events.filter((e) => !e.masked);
-  const linkLeadIds = [...new Set(shownEvents.flatMap((e) => (e.lead_id ? [e.lead_id] : [])))];
-  const linkContactIds = [...new Set(shownEvents.flatMap((e) => (!e.lead_id && e.contact_id ? [e.contact_id] : [])))];
   const none = { data: [], error: null };
 
-  const [viewingsRes, extraNames, linkLeadsRes, linkContactsRes] = await Promise.all([
+  const [viewingsRes, extraNames] = await Promise.all([
     agentProfile.size
       ? supabase
           .from("viewings")
@@ -284,25 +230,9 @@ export async function getCalendarFeed(query: CalendarFeedQuery): Promise<Calenda
           .limit(SOURCE_LIMIT)
       : Promise.resolve(none),
     missing.size ? getNameMap([...missing]) : Promise.resolve(new Map<string, string>()),
-    linkLeadIds.length
-      ? supabase
-          .from("crm_leads")
-          .select("id, contact:crm_contacts!crm_leads_contact_id_fkey(display_name)")
-          .in("id", linkLeadIds)
-      : Promise.resolve(none),
-    linkContactIds.length
-      ? supabase.from("crm_contacts").select("id, display_name").in("id", linkContactIds)
-      : Promise.resolve(none),
   ]);
   for (const [id, n] of extraNames) names.set(id, n);
   const nameOf = (id: string | null) => (id ? (names.get(id) ?? null) : null);
-  const linkLabels = new Map<string, string>();
-  for (const r of rows<{ id: string; contact: ContactLite }>("event leads", linkLeadsRes)) {
-    if (r.contact?.display_name) linkLabels.set(`lead:${r.id}`, r.contact.display_name);
-  }
-  for (const r of rows<{ id: string; display_name: string | null }>("event contacts", linkContactsRes)) {
-    if (r.display_name) linkLabels.set(`contact:${r.id}`, r.display_name);
-  }
 
   const items: CalendarItem[] = [];
   const base = {
@@ -335,7 +265,7 @@ export async function getCalendarFeed(query: CalendarFeedQuery): Promise<Calenda
       personName: ownerShown ? nameOf(e.owner_id) : nameOf(personIds[0] ?? null),
       personIds,
       colorKey: eventColorKey(kind, e.masked),
-      href: e.masked ? null : eventHref(basePath, e),
+      href: null,
       ...eventMovability(e),
       masked: e.masked,
       event: e.masked
@@ -349,14 +279,6 @@ export async function getCalendarFeed(query: CalendarFeedQuery): Promise<Calenda
             ownerName: nameOf(e.owner_id),
             attendeeIds,
             attendees: attendeeIds.map((id) => ({ profileId: id, name: nameOf(id) ?? "Нэргүй" })),
-            leadId: e.lead_id,
-            contactId: e.contact_id,
-            opportunityId: e.opportunity_id,
-            linkLabel: e.lead_id
-              ? (linkLabels.get(`lead:${e.lead_id}`) ?? null)
-              : e.contact_id
-                ? (linkLabels.get(`contact:${e.contact_id}`) ?? null)
-                : null,
           },
     });
   }
@@ -381,70 +303,28 @@ export async function getCalendarFeed(query: CalendarFeedQuery): Promise<Calenda
     });
   }
 
-  for (const r of rows<RawLead>("leads", leadsRes)) {
-    const range = allDayRange(r.next_step_date.slice(0, 10));
-    items.push({
-      ...base,
-      key: `next_step:${r.id}`,
-      source: "next_step",
-      id: r.id,
-      title: r.next_step?.trim() || "Дараагийн үйлдэл",
-      subtitle: r.contact?.display_name ?? null,
-      start: range.start,
-      end: range.end,
-      allDay: true,
-      personId: r.owner_id,
-      personName: nameOf(r.owner_id),
-      personIds: [r.owner_id],
-      colorKey: "next_step",
-      href: calendarHref.lead(basePath, r.id),
-      ...leadStepMovability(viewer, r, teamOf(r.owner_id)),
-      status: r.status,
-    });
-  }
-
   for (const r of rows<RawShowing>("showings", showingsRes)) {
-    const place = r.property?.name || r.property?.number || "үл хөдлөх";
+    const shown = r.showing_status === "shown";
+    // Үзүүлсэн бол бодит цагаар, эс бөгөөс товлосон цагаар (товлосон цаг өнгөрсөн ч «үзүүлсэн» биш).
+    const at = shown && r.occurred_at ? r.occurred_at : r.scheduled_at;
+    const place = [r.property?.code, r.property?.location_text].filter(Boolean).join(" · ") || "Staff хөрөнгө";
     items.push({
       ...base,
       key: `showing:${r.id}`,
       source: "showing",
       id: r.id,
-      title: `Үзлэг: ${place}`,
-      subtitle: [r.contact?.display_name, r.meeting_point].filter(Boolean).join(" · ") || null,
-      start: iso(r.scheduled_at),
-      end: plus(r.scheduled_at, r.duration_min && r.duration_min > 0 ? r.duration_min : SHOWING_DEFAULT_MINUTES),
+      title: `Үзүүлэлт: ${place}`,
+      subtitle: shown ? "Үзүүлсэн" : "Товлосон",
+      start: iso(at),
+      end: plus(at, SHOWING_DEFAULT_MINUTES),
       personId: r.agent_id,
       personName: nameOf(r.agent_id),
       personIds: [r.agent_id],
       colorKey: "showing",
-      href: r.opportunity_id
-        ? calendarHref.opportunity(basePath, r.opportunity_id)
-        : calendarHref.property(basePath, r.property_id),
+      href: calendarHref.deal(basePath, r.property_id, r.deal_id),
       ...lockedMovability(CALENDAR_LOCK_REASON.showing),
-      status: r.status,
-      done: r.status === "done",
-    });
-  }
-
-  for (const r of rows<RawOpp>("opportunities", oppsRes)) {
-    items.push({
-      ...base,
-      key: `opportunity_meeting:${r.id}`,
-      source: "opportunity_meeting",
-      id: r.id,
-      title: `Уулзалт: ${r.contact?.display_name ?? "өмчлөгч"}`,
-      subtitle: r.meeting_place,
-      start: iso(r.meeting_at),
-      end: blockEnd(r.meeting_at, MEETING_BLOCK_MINUTES),
-      personId: r.owner_id,
-      personName: nameOf(r.owner_id),
-      personIds: [r.owner_id],
-      colorKey: "opportunity_meeting",
-      href: calendarHref.opportunity(basePath, r.id),
-      ...meetingMovability(viewer, r, teamOf(r.owner_id)),
-      status: r.state,
-      done: r.state !== "open",
+      status: r.showing_status,
+      done: shown,
     });
   }
 

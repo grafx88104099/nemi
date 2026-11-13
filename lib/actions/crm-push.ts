@@ -9,7 +9,7 @@ import { isPushConfigured, parsePushSubscription, sendPushToProfiles, upsertPush
 
 /**
  * Web Push захиалга (R4 клиент): төхөөрөмж бүрийн захиалгыг хадгалж,
- * сэжимтэй холбоотой гол мэдэгдлүүдэд хувийн сонголтод «push» сувгийг
+ * CRM-ийн гол мэдэгдлүүдэд хувийн сонголтод «push» сувгийг
  * нэмнэ (тохиргоо 'push_defaults'). Заавал ангиллын мэдэгдэл матрицаар
  * аль хэдийн push-аар очдог.
  */

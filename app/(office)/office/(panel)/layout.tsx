@@ -49,7 +49,7 @@ export default async function OfficePanelLayout({
   return (
     <div className="flex min-h-screen bg-bg">
       <OfficeSidebar officeName={officeName} email={email} unread={unread ?? 0} hasCrm={hasCrm} />
-      <main className="min-w-0 flex-1 overflow-x-hidden">
+      <main className="min-w-0 flex-1 overflow-x-clip">
         <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-line bg-surface/90 px-3 backdrop-blur md:px-6">
           <OfficeMobileNav officeName={officeName} email={email} unread={unread ?? 0} hasCrm={hasCrm} />
           <div className="ml-auto flex items-center gap-1">
@@ -61,7 +61,7 @@ export default async function OfficePanelLayout({
                 Бүх мэдэгдэл
               </Link>
             ) : null}
-            <NotificationBell initial={notes ?? []} />
+            <NotificationBell initial={notes ?? []} panel="office" />
           </div>
         </header>
         {children}

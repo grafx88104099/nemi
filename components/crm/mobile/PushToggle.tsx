@@ -68,7 +68,7 @@ export function PushToggle({ compact = false, className }: { compact?: boolean; 
           return;
         }
         setState("on");
-        toast.success("Мэдэгдэл асаалаа", { description: "Шинэ сэжим, хугацааны сануулга энэ төхөөрөмжид ирнэ." });
+        toast.success("Мэдэгдэл асаалаа", { description: "CRM-ийн сануулга энэ төхөөрөмжид ирнэ." });
       } catch (e) {
         console.error("push enable:", e instanceof Error ? e.message : e);
         toast.error("Мэдэгдлийг асааж чадсангүй. Хөтчийн тохиргоог шалгана уу.");

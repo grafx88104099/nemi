@@ -2,27 +2,19 @@ import { redirect } from "next/navigation";
 
 import { getCrmStaffContext } from "@/lib/queries-crm-core";
 import { canManageTeams, hasTeamProgressRole } from "@/lib/queries-crm-teams";
-import { CrmNav } from "@/components/crm/CrmNav";
+import { CrmShell } from "@/components/crm2/shell/CrmShell";
 
 /**
- * CRM guard (DESIGN §4.1): идэвхтэй crm_staff мөргүй хэрэглэгчийг /office руу
- * буцаана; дүрийн жагсаалтыг хоёрдогч цэсэнд дамжуулна. aml/settings хуудсууд
- * өөрийн дүрийн шалгалтыг серверт давхар хийнэ.
+ * Оффисын CRM: идэвхтэй crm_staff мөргүй хэрэглэгчийг /office руу буцаана;
+ * цэсийг эрхээр (crm2_my_context) шүүнэ. Хуудас бүр өөрийн эрхийг серверт давхар шалгана.
  */
-export default async function CrmLayout({ children }: { children: React.ReactNode }) {
+export default async function OfficeCrmLayout({ children }: { children: React.ReactNode }) {
   const [ctx, canManage] = await Promise.all([getCrmStaffContext(), canManageTeams()]);
   if (!ctx) redirect("/office");
 
   return (
-    <div className="flex min-h-full flex-col">
-      <div className="border-b border-line bg-surface px-8">
-        <CrmNav
-          roles={ctx.roles}
-          basePath="/office/crm"
-          canOpenTeams={canManage || hasTeamProgressRole(ctx.roles)}
-        />
-      </div>
-      <div className="flex-1">{children}</div>
-    </div>
+    <CrmShell panel="office" staff={ctx} canOpenTeam={canManage || hasTeamProgressRole(ctx.roles)}>
+      {children}
+    </CrmShell>
   );
 }

@@ -17,19 +17,9 @@ import { SOURCE_ICON, type ColorClasses } from "./colors";
 const OPEN_LABEL: Record<CalendarItem["source"], string> = {
   event: "Холбосон бүртгэлийг нээх",
   task: "Даалгаврыг нээх",
-  next_step: "Сэжмийг нээх",
-  showing: "Үзлэгийн хуудсыг нээх",
-  opportunity_meeting: "Боломжийг нээх",
+  showing: "Хэлцлийг нээх",
   viewing: "Зарыг нээх",
 };
-
-function eventLinkLabel(item: CalendarItem): string {
-  const e = item.event;
-  if (e?.opportunityId) return "Холбосон боломжийг нээх";
-  if (e?.leadId) return "Холбосон сэжмийг нээх";
-  if (e?.contactId) return "Холбосон харилцагчийг нээх";
-  return OPEN_LABEL.event;
-}
 
 /** Зүйлийн дэлгэрэнгүй (popover-ийн агуулга). Нуугдсан бол зөвхөн «Завгүй» ба цаг. */
 export function EventDetail({
@@ -110,7 +100,7 @@ export function EventDetail({
 
       {e?.location || (!e && item.subtitle) ? (
         <p className="flex items-start gap-3 text-sm text-ink">
-          {e || item.source === "opportunity_meeting" ? (
+          {e ? (
             <MapPin className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden />
           ) : (
             <AlignLeft className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden />
@@ -154,7 +144,7 @@ export function EventDetail({
           className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-1 text-sm font-semibold text-brand-700 hover:underline"
         >
           <ExternalLink className="size-4" aria-hidden />
-          {item.source === "event" ? eventLinkLabel(item) : OPEN_LABEL[item.source]}
+          {OPEN_LABEL[item.source]}
         </Link>
       ) : null}
     </div>

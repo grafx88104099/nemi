@@ -1,10 +1,10 @@
-import { leadSlaState } from "@/lib/crm/agent-core";
 import { ubTime } from "@/lib/crm/calendar";
-import { isOpenLeadStatus } from "@/lib/crm/lead-listing";
 import { currentWeekStart, ubDateIso } from "@/lib/crm/week";
-import type { CrmLifecycle } from "@/lib/constants-crm";
 
-/** Багийн хяналтын тоололт — цэвэр логик, цаг бүгд Улаанбаатарын цагаар. */
+/**
+ * Багийн хяналтын тоололт (Staff — CRM2) — цэвэр логик, цаг бүгд Улаанбаатарын цагаар.
+ * Дуудлага, үзүүлэлтийг үйл явдал бүрээр, хэлцлийг нэг удаа тоолно.
+ */
 
 export type MonitorPeriods = {
   weekStart: Date;
@@ -21,94 +21,129 @@ export function monitorPeriods(now: Date = new Date()): MonitorPeriods {
   return { weekStart, monthStart, since: weekStart < monthStart ? weekStart : monthStart, todayIso };
 }
 
-export type MonitorOwnedLead = {
-  status: CrmLifecycle;
-  created_at: string;
-  received_at: string | null;
-  first_contact_at: string | null;
-  first_contact_due_at: string | null;
-  next_step: string | null;
-  next_step_date: string | null;
+/** Гишүүн бүрийн (ба баг, оффисын нийт) үзүүлэлт. */
+export type MonitorMetrics = {
+  /** Идэвхтэй Staff хөрөнгө — гишүүн 3 үүргийн (листлэгч, гэрээ, зураг) аль нэгтэй. */
+  staffActive: number;
+  /** Ноорог Staff хөрөнгө (3 үүргийн аль нэгтэй). */
+  staffDraft: number;
+  /** Гишүүний хариуцсан нээлттэй хэлцэл. */
+  openDeals: number;
+  callsWeek: number;
+  callsMonth: number;
+  /** Одоо товлогдсон (үр дүн нь оруулаагүй) үзүүлэлт. */
+  showingsScheduled: number;
+  /** Энэ сард бодит «үзүүлсэн» гэж бүртгэгдсэн үзүүлэлт. */
+  showingsShownMonth: number;
+  confirmedMonth: number;
+  cancelledMonth: number;
+  /** Хугацаа хэтэрсэн нээлттэй ажил. */
+  overdueTasks: number;
 };
-
-export type MemberLeadCounts = {
-  registeredWeek: number;
-  registeredMonth: number;
-  openOwned: number;
-  newUncontacted: number;
-  firstContactOverdue: number;
-  nextStepOverdue: number;
-  noNextStep: number;
-};
-
-export function isNextStepOverdue(
-  lead: { status: CrmLifecycle; next_step_date: string | null },
-  todayIso: string
-): boolean {
-  return isOpenLeadStatus(lead.status) && !!lead.next_step_date && lead.next_step_date < todayIso;
-}
-
-/** Огноогүй алхам хэзээ ч хэтрэхгүй тул «алхамгүй»-д тооцно. */
-export function hasNoNextStep(lead: {
-  status: CrmLifecycle;
-  next_step: string | null;
-  next_step_date: string | null;
-}): boolean {
-  return isOpenLeadStatus(lead.status) && (!lead.next_step?.trim() || !lead.next_step_date);
-}
-
-/** owned: гишүүний эзэмшдэг мөрүүд; registered: гишүүний бүртгэсэн мөрүүд. */
-export function countMemberLeads(
-  owned: MonitorOwnedLead[],
-  registered: { created_at: string }[],
-  periods: MonitorPeriods,
-  now: Date,
-  noContactHours: number
-): MemberLeadCounts {
-  const open = owned.filter((l) => isOpenLeadStatus(l.status));
-  const registeredSince = (from: Date) => registered.filter((l) => Date.parse(l.created_at) >= from.getTime()).length;
-  return {
-    registeredWeek: registeredSince(periods.weekStart),
-    registeredMonth: registeredSince(periods.monthStart),
-    openOwned: open.length,
-    newUncontacted: open.filter((l) => l.status === "new" && !l.first_contact_at).length,
-    firstContactOverdue: open.filter((l) => {
-      const { kind } = leadSlaState(l, now, noContactHours);
-      return kind === "breached" || kind === "no_contact";
-    }).length,
-    nextStepOverdue: open.filter((l) => isNextStepOverdue(l, periods.todayIso)).length,
-    noNextStep: open.filter(hasNoNextStep).length,
-  };
-}
-
-/** Багийн хуудас ба бүх багийн тойм ижил үзүүлэлттэй — нийлбэр нь гишүүдийнх. */
-export type MonitorMetrics = MemberLeadCounts & { openOpps: number; wonOpps: number };
 
 const ZERO_METRICS: MonitorMetrics = {
-  registeredWeek: 0,
-  registeredMonth: 0,
-  openOwned: 0,
-  newUncontacted: 0,
-  firstContactOverdue: 0,
-  nextStepOverdue: 0,
-  noNextStep: 0,
-  openOpps: 0,
-  wonOpps: 0,
+  staffActive: 0,
+  staffDraft: 0,
+  openDeals: 0,
+  callsWeek: 0,
+  callsMonth: 0,
+  showingsScheduled: 0,
+  showingsShownMonth: 0,
+  confirmedMonth: 0,
+  cancelledMonth: 0,
+  overdueTasks: 0,
 };
 
 export const MONITOR_METRIC_KEYS = Object.keys(ZERO_METRICS) as (keyof MonitorMetrics)[];
 
-export function countMemberOpportunities(opps: { state: string }[]): Pick<MonitorMetrics, "openOpps" | "wonOpps"> {
+export type MonitorProperty = {
+  id: string;
+  status: string;
+  listing_agent_id: string | null;
+  contract_agent_id: string | null;
+  photo_agent_id: string | null;
+};
+
+export type MonitorDeal = {
+  agent_id: string;
+  is_open: boolean;
+  confirmed_at: string | null;
+  cancelled_at: string | null;
+};
+
+export type MonitorActivity = {
+  agent_id: string;
+  kind: string;
+  occurred_at: string | null;
+  showing_status: string | null;
+};
+
+export type MonitorTask = { assignee_id: string; due_at: string | null };
+
+/** Хөрөнгө дээр гишүүн 3 үүргийн аль нэгтэй эсэх. */
+export function holdsPropertyRole(p: MonitorProperty, profileId: string): boolean {
+  return p.listing_agent_id === profileId || p.contract_agent_id === profileId || p.photo_agent_id === profileId;
+}
+
+/** Гишүүний үүрэгтэй хөрөнгийн id (төлөвөөр) — багийн нийтэд давхар тоолохгүйн тулд. */
+export type MemberPropertyIds = { active: string[]; draft: string[] };
+
+export function memberPropertyIds(properties: readonly MonitorProperty[], profileId: string): MemberPropertyIds {
+  const mine = properties.filter((p) => holdsPropertyRole(p, profileId));
   return {
-    openOpps: opps.filter((o) => o.state === "open").length,
-    wonOpps: opps.filter((o) => o.state === "won").length,
+    active: mine.filter((p) => p.status === "active").map((p) => p.id),
+    draft: mine.filter((p) => p.status === "draft").map((p) => p.id),
   };
 }
 
-/** Сэжим бүр нэг эзэмшигч, нэг бүртгэгчтэй тул гишүүдийн нийлбэр давхар тоолохгүй. */
+const since = (at: string | null, from: Date) => !!at && Date.parse(at) >= from.getTime();
+
+/** Нэг гишүүний үзүүлэлт: өгсөн мөрүүд бүгд тэр гишүүнийх (хөрөнгөөс бусад нь шүүгдсэн). */
+export function countMemberMetrics(input: {
+  propertyIds: MemberPropertyIds;
+  deals: readonly MonitorDeal[];
+  activities: readonly MonitorActivity[];
+  tasks: readonly MonitorTask[];
+  periods: MonitorPeriods;
+  now: Date;
+}): MonitorMetrics {
+  const { deals, activities, tasks, periods, now } = input;
+  const calls = activities.filter((a) => a.kind === "call");
+  const showings = activities.filter((a) => a.kind === "showing");
+  return {
+    staffActive: input.propertyIds.active.length,
+    staffDraft: input.propertyIds.draft.length,
+    openDeals: deals.filter((d) => d.is_open).length,
+    callsWeek: calls.filter((a) => since(a.occurred_at, periods.weekStart)).length,
+    callsMonth: calls.filter((a) => since(a.occurred_at, periods.monthStart)).length,
+    showingsScheduled: showings.filter((a) => a.showing_status === "scheduled").length,
+    showingsShownMonth: showings.filter((a) => a.showing_status === "shown" && since(a.occurred_at, periods.monthStart))
+      .length,
+    confirmedMonth: deals.filter((d) => since(d.confirmed_at, periods.monthStart)).length,
+    cancelledMonth: deals.filter((d) => since(d.cancelled_at, periods.monthStart)).length,
+    overdueTasks: tasks.filter((t) => !!t.due_at && Date.parse(t.due_at) < now.getTime()).length,
+  };
+}
+
+/** Хэлцэл, дуудлага, ажил бүр нэг хариуцагчтай тул гишүүдийн нийлбэр давхар тоолохгүй. */
 export function sumMonitorMetrics(rows: readonly MonitorMetrics[]): MonitorMetrics {
   const total = { ...ZERO_METRICS };
   for (const row of rows) for (const key of MONITOR_METRIC_KEYS) total[key] += row[key];
+  return total;
+}
+
+/**
+ * Нийт дүн: нэг хөрөнгө дээр хэд хэдэн гишүүн үүрэгтэй байж болох тул Staff-ийн
+ * тоог давхардалгүй id-аар, бусдыг нийлбэрээр.
+ */
+export function totalMonitorMetrics(
+  rows: readonly (MonitorMetrics & { propertyIds?: MemberPropertyIds })[]
+): MonitorMetrics {
+  const total = sumMonitorMetrics(rows);
+  if (rows.every((r) => r.propertyIds)) {
+    total.staffActive = new Set(rows.flatMap((r) => r.propertyIds?.active ?? [])).size;
+    total.staffDraft = new Set(rows.flatMap((r) => r.propertyIds?.draft ?? [])).size;
+  }
   return total;
 }
 
@@ -131,7 +166,10 @@ export type ProgressGroup<M> = { members: M[]; totals: MonitorMetrics };
  * Гишүүдийг багаар бүлэглэж, баг бүрийн ба оффисын нийт дүнг гаргана. Бүртгэлтэй багт
  * хамаарахгүй гишүүн «хуваарилагдаагүй»-д орно. Багуудын болон гишүүдийн дараалал хадгалагдана.
  */
-export function groupTeamProgress<T extends { id: string }, M extends MonitorMetrics & { teamId: string | null }>(
+export function groupTeamProgress<
+  T extends { id: string },
+  M extends MonitorMetrics & { teamId: string | null; propertyIds?: MemberPropertyIds },
+>(
   teams: readonly T[],
   members: readonly M[]
 ): { teams: (ProgressGroup<M> & { team: T })[]; unassigned: ProgressGroup<M>; totals: MonitorMetrics } {
@@ -142,10 +180,10 @@ export function groupTeamProgress<T extends { id: string }, M extends MonitorMet
     if (list) list.push(member);
     else unassigned.push(member);
   }
-  const group = (list: M[]): ProgressGroup<M> => ({ members: list, totals: sumMonitorMetrics(list) });
+  const group = (list: M[]): ProgressGroup<M> => ({ members: list, totals: totalMonitorMetrics(list) });
   return {
     teams: teams.map((team) => ({ team, ...group(byTeam.get(team.id) ?? []) })),
     unassigned: group(unassigned),
-    totals: sumMonitorMetrics(members),
+    totals: totalMonitorMetrics(members),
   };
 }

@@ -20,7 +20,6 @@ import { cn } from "@/lib/utils";
 
 import { AttendeePicker, type Attendee } from "./AttendeePicker";
 import { COLOR_BY_KEY } from "./colors";
-import { LeadLinkPicker, type CalendarLink } from "./LeadLinkPicker";
 
 export type EventFormValues = {
   title: string;
@@ -30,7 +29,6 @@ export type EventFormValues = {
   isPrivate: boolean;
   times: EventFormTimes;
   attendees: Attendee[];
-  link: CalendarLink | null;
 };
 
 const TEXTAREA =
@@ -75,14 +73,6 @@ export function EventForm({
       return;
     }
     setError(null);
-    const linkChanged =
-      !eventId || initial.link?.id !== v.link?.id || initial.link?.kind !== v.link?.kind;
-    const links = linkChanged
-      ? {
-          leadId: v.link?.kind === "lead" ? v.link.id : null,
-          contactId: v.link?.kind === "contact" ? v.link.id : null,
-        }
-      : {};
     const common = {
       title,
       description: v.description.trim() || null,
@@ -93,7 +83,6 @@ export function EventForm({
       allDay: v.times.allDay,
       isPrivate: v.isPrivate,
       attendeeIds: v.attendees.map((a) => a.profileId),
-      ...links,
     };
     startTransition(async () => {
       if (eventId) {
@@ -253,11 +242,6 @@ export function EventForm({
       <div className="space-y-1">
         <p className="text-xs font-medium text-muted">Урих хүмүүс</p>
         <AttendeePicker value={v.attendees} onChange={(a) => set("attendees", a)} excludeId={viewerId} disabled={pending} />
-      </div>
-
-      <div className="space-y-1">
-        <p className="text-xs font-medium text-muted">Холбох сэжим (заавал биш)</p>
-        <LeadLinkPicker value={v.link} onChange={(l) => set("link", l)} disabled={pending} />
       </div>
 
       <label className="flex items-start gap-2 text-sm text-ink">

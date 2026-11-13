@@ -3,21 +3,14 @@ import { describe, expect, it } from "vitest";
 import {
   addWeeks,
   currentWeekStart,
-  finalLockAt,
-  hoursUntilLock,
   isIsoDate,
-  meetingAt,
   normalizeWeekParam,
-  normalizeWeeklySchedule,
   parseHmMinutes,
-  planReminderAt,
-  reviewAt,
   ubDateIso,
   ubDateTime,
   weekDays,
   weekEnd,
   weekLabel,
-  weekPhase,
   weekShortLabel,
   weekStartOf,
 } from "@/lib/crm/week";
@@ -65,44 +58,13 @@ describe("долоо хоногийн цонх (Даваа–Ням, УБ)", () 
   });
 });
 
-describe("хуваарь ба түгжээ (Ш8)", () => {
-  const s = normalizeWeeklySchedule(null);
-
+describe("HH:MM ба УБ-ын мөч", () => {
   it("HH:MM задлах, 24:00 = дараагийн өдрийн 00:00", () => {
     expect(parseHmMinutes("10:00")).toBe(600);
     expect(parseHmMinutes("24:00")).toBe(1440);
     expect(parseHmMinutes("24:30")).toBeNull();
     expect(parseHmMinutes("9:5")).toBeNull();
     expect(ubDateTime("2026-11-15", "24:00").toISOString()).toBe(ubDateTime("2026-11-16", "00:00").toISOString());
-  });
-
-  it("Даваа 10:00 УБ хурал, Баасан 16:00 урьдчилсан, Ням 24:00 эцсийн", () => {
-    expect(meetingAt("2026-11-09", s).toISOString()).toBe("2026-11-09T02:00:00.000Z");
-    expect(reviewAt("2026-11-09", s).toISOString()).toBe("2026-11-13T08:00:00.000Z");
-    expect(finalLockAt("2026-11-09", s).toISOString()).toBe("2026-11-15T16:00:00.000Z");
-    // 16 цагийн өмнөх сануулга = Ням 18:00 УБ
-    expect(planReminderAt("2026-11-09", s).toISOString()).toBe("2026-11-08T10:00:00.000Z");
-  });
-
-  it("тохиргоо: offset, буруу утгыг нөөцөөр", () => {
-    const c = normalizeWeeklySchedule({
-      meeting: { weekday: 1, time: "09:30", duration_min: 45 },
-      review: { weekday: 9, time: "xx" },
-      final_lock_offset_hours: -6,
-    });
-    expect(c.meeting).toEqual({ weekday: 1, time: "09:30", durationMin: 45 });
-    expect(c.review).toEqual({ weekday: 7, time: "16:00" });
-    expect(finalLockAt("2026-11-09", c).toISOString()).toBe("2026-11-15T10:00:00.000Z");
-  });
-
-  it("үе шат: явагдаж буй → урьдчилсан → түгжигдсэн", () => {
-    const wk = "2026-11-09";
-    const mon = weekPhase(wk, new Date("2026-11-09T01:00:00Z"), s);
-    expect(mon).toMatchObject({ isCurrent: true, meetingPassed: false, preliminary: false, finalLocked: false });
-    const fri = weekPhase(wk, new Date("2026-11-13T09:00:00Z"), s);
-    expect(fri).toMatchObject({ meetingPassed: true, preliminary: true, finalLocked: false });
-    const nextMon = weekPhase(wk, new Date("2026-11-15T16:00:00Z"), s);
-    expect(nextMon).toMatchObject({ isPast: true, preliminary: false, finalLocked: true });
-    expect(hoursUntilLock(wk, new Date("2026-11-15T13:00:00Z"), s)).toBe(3);
+    expect(ubDateTime("2026-11-09", "10:00").toISOString()).toBe("2026-11-09T02:00:00.000Z");
   });
 });

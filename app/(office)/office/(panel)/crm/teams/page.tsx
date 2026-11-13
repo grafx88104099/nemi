@@ -24,7 +24,7 @@ export default async function TeamsPage() {
         <EmptyState
           title="Багийн удирдлага оффисын админ, удирдлагад зориулагдсан"
           description="Танд баг удирдах эрх алга."
-          action={{ label: "CRM самбар", href: "/office/crm" }}
+          action={{ label: "Staff", href: "/office/crm/staff" }}
         />
       </div>
     );
@@ -38,7 +38,7 @@ export default async function TeamsPage() {
         <div className="min-w-0">
           <h1 className="text-2xl font-extrabold text-ink">Багууд</h1>
           <p className="text-sm text-muted">
-            Оффисын агентуудыг багт хуваарилж, ахлагч томилно. Ахлагч гишүүдийнхээ бүртгэсэн сэжим, явцыг хянана.
+            Оффисын агентуудыг багт хуваарилж, ахлагч томилно. Ахлагч гишүүдийнхээ Staff ажлын явцыг хянана.
           </p>
         </div>
         {canViewProgress ? (

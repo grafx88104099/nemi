@@ -212,7 +212,7 @@ export function TeamsManager({
       {activeBranches.length === 0 ? (
         <p className="mt-2 text-sm text-muted">
           Баг үүсгэхийн өмнө{" "}
-          <Link href="/office/crm/settings/zones" className="font-medium text-brand-700 hover:underline">
+          <Link href="/office/crm/settings/branches" className="font-medium text-brand-700 hover:underline">
             салбар бүртгэнэ үү
           </Link>
           .
@@ -338,7 +338,7 @@ export function TeamsManager({
                       href={`/office/crm/teams/${team.id}`}
                       className="inline-flex min-h-9 items-center gap-1 text-sm font-semibold text-brand-700 hover:underline"
                     >
-                      Сэжим, явц хянах <ChevronRight className="size-4" aria-hidden />
+                      Гишүүдийн явц хянах <ChevronRight className="size-4" aria-hidden />
                     </Link>
                   ) : null}
                 </div>

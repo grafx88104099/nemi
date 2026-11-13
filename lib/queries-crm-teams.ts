@@ -2,7 +2,7 @@ import { cache } from "react";
 
 import { createClient } from "@/lib/supabase/server";
 import { getBranches, type BranchRow } from "@/lib/queries-crm-core";
-import { personAvatar } from "@/lib/crm/avatar";
+import { personAvatar } from "@/lib/avatar";
 import { resolvePendingLead, type PendingLead } from "@/lib/crm/team-lead";
 import { isAgentStaff } from "@/lib/crm/team-monitor";
 import type { CrmRole } from "@/lib/constants-crm";
@@ -54,7 +54,7 @@ type RawTeam = {
   lead_proposed_at: string | null;
 };
 
-// crm_is_manager(): office_admin, sysadmin баг удирдаж чадах ч сэжим уншихгүй тул багийн явцыг харахгүй.
+// crm_is_manager(): office_admin, sysadmin баг удирдаж чадах ч гишүүдийн Staff ажлыг уншихгүй тул багийн явцыг харахгүй.
 const TEAM_PROGRESS_ROLES: CrmRole[] = ["sales_director", "ops_qc", "ceo"];
 
 /**

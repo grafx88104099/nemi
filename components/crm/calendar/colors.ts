@@ -1,4 +1,4 @@
-import { CalendarDays, Eye, Flag, Globe, Handshake, ListTodo, type LucideIcon } from "lucide-react";
+import { CalendarDays, Eye, Globe, ListTodo, type LucideIcon } from "lucide-react";
 
 import {
   CALENDAR_BUSY_TITLE,
@@ -24,8 +24,6 @@ export const COLOR_BY_KEY: Record<CalendarColorKey, ColorClasses> = {
   personal: { block: "border-pink-500 bg-pink-100 text-pink-950", dot: "bg-pink-500" },
   other: { block: "border-zinc-500 bg-zinc-100 text-zinc-900", dot: "bg-zinc-500" },
   task: { block: "border-amber-500 bg-amber-100 text-amber-950", dot: "bg-amber-500" },
-  next_step: { block: "border-orange-500 bg-orange-100 text-orange-950", dot: "bg-orange-500" },
-  opportunity_meeting: { block: "border-indigo-500 bg-indigo-100 text-indigo-950", dot: "bg-indigo-500" },
   viewing: { block: "border-teal-500 bg-teal-100 text-teal-950", dot: "bg-teal-500" },
   busy: { block: `border-slate-400 bg-slate-100 text-slate-600 ${STRIPES}`, dot: "bg-slate-400" },
 };
@@ -49,9 +47,7 @@ export function personColor(index: number): ColorClasses {
 export const SOURCE_ICON: Record<CalendarSource, LucideIcon> = {
   event: CalendarDays,
   task: ListTodo,
-  next_step: Flag,
   showing: Eye,
-  opportunity_meeting: Handshake,
   viewing: Globe,
 };
 
@@ -63,8 +59,6 @@ export const COLOR_LEGEND: { key: CalendarColorKey; label: string }[] = [
   { key: "personal", label: CALENDAR_EVENT_KIND_LABEL.personal },
   { key: "other", label: CALENDAR_EVENT_KIND_LABEL.other },
   { key: "task", label: CALENDAR_SOURCE_LABEL.task },
-  { key: "next_step", label: CALENDAR_SOURCE_LABEL.next_step },
-  { key: "opportunity_meeting", label: CALENDAR_SOURCE_LABEL.opportunity_meeting },
   { key: "viewing", label: CALENDAR_SOURCE_LABEL.viewing },
   { key: "busy", label: CALENDAR_BUSY_TITLE },
 ];

@@ -9,20 +9,16 @@ import {
   calendarRange,
   calendarTitle,
   canDropOnDay,
-  canEditOwnedRecord,
   canEditTask,
   canViewCalendar,
   daySegment,
   dragRange,
   eventColorKey,
-  eventHref,
   eventMovability,
   isAllDayLike,
   itemDays,
   layoutAllDay,
   layoutDay,
-  leadStepMovability,
-  meetingMovability,
   monthGrid,
   moveToDay,
   moveToSlot,
@@ -427,12 +423,7 @@ describe("эрх (DB-ийн толь)", () => {
     expect(canViewCalendar({ profileId: "me", roles: ["marketing", "finance"], teamId: null }, other)).toBe(false);
   });
 
-  it("canEditOwnedRecord ба canEditTask", () => {
-    expect(canEditOwnedRecord(agent, "me", "t1")).toBe(true);
-    expect(canEditOwnedRecord(agent, "p2", "t1")).toBe(false);
-    expect(canEditOwnedRecord(lead, "p2", "t1")).toBe(true);
-    expect(canEditOwnedRecord(manager, "p2", null)).toBe(true);
-    expect(canEditOwnedRecord(manager, null, null)).toBe(false);
+  it("canEditTask", () => {
     expect(canEditTask(agent, { created_by: "x", responsible_id: "me" })).toBe(true);
     expect(canEditTask(agent, { created_by: "me", responsible_id: "x" })).toBe(true);
     expect(canEditTask(lead, { created_by: "x", responsible_id: "p2" })).toBe(false);
@@ -451,42 +442,25 @@ describe("эрх (DB-ийн толь)", () => {
     expect(taskMovability(lead, { created_by: "x", responsible_id: "p2", status: "pending" }).lockedReason).toBe(
       CALENDAR_LOCK_REASON.noRights
     );
-
-    expect(leadStepMovability(agent, { owner_id: "me", status: "active" }, "t1")).toEqual({
-      canMove: true,
-      canResize: false,
-      lockedReason: null,
-    });
-    expect(leadStepMovability(agent, { owner_id: "me", status: "inactive" }, "t1").canMove).toBe(false);
-    expect(leadStepMovability(lead, { owner_id: "p2", status: "new" }, "t1").canMove).toBe(true);
-
-    const opp = { owner_id: "me", state: "open", meeting_place: "Оффис" };
-    expect(meetingMovability(agent, opp, "t1").canMove).toBe(true);
-    expect(meetingMovability(agent, { ...opp, state: "won" }, "t1").lockedReason).toBe(CALENDAR_LOCK_REASON.oppClosed);
-    expect(meetingMovability(agent, { ...opp, meeting_place: " " }, "t1").lockedReason).toBe(CALENDAR_LOCK_REASON.noPlace);
-    expect(meetingMovability(agent, { ...opp, owner_id: "p2" }, "t1").lockedReason).toBe(CALENDAR_LOCK_REASON.noRights);
   });
 
-  it("сэжмийн алхмыг өнгөрсөн өдөр рүү буулгахгүй", () => {
-    const step = { source: "next_step" as const, canMove: true };
-    expect(canDropOnDay(step, "2026-11-10", DAY)).toBe(false);
-    expect(canDropOnDay(step, DAY, DAY)).toBe(true);
+  it("зөөх боломжтой зүйлийг аль ч өдөр рүү буулгана", () => {
     expect(canDropOnDay({ source: "task", canMove: true }, "2026-11-01", DAY)).toBe(true);
+    expect(canDropOnDay({ source: "event", canMove: true }, "2026-11-10", DAY)).toBe(true);
     expect(canDropOnDay({ source: "showing", canMove: false }, DAY, DAY)).toBe(false);
   });
 });
 
 describe("холбоос ба нэгтгэл", () => {
   it("агент ба оффисын холбоос", () => {
-    expect(calendarHref.opportunity("/agent/crm", "o1")).toBe("/agent/crm/pipeline/o1");
-    expect(calendarHref.opportunity("/office/crm", "o1")).toBe("/office/crm/deals/o1");
+    expect(calendarHref.deal("/agent/crm", "p1", "d1")).toBe("/agent/crm/staff/p1/deals/d1");
+    expect(calendarHref.deal("/office/crm", "p1", "d1")).toBe("/office/crm/staff/p1/deals/d1");
+    expect(calendarHref.property("/agent/crm", "p1")).toBe("/agent/crm/staff/p1");
+    expect(calendarHref.contact("/office/crm", "c1")).toBe("/office/crm/contacts/c1");
     expect(calendarHref.task("/agent/crm", "t1")).toBe("/agent/tasks/t1");
     expect(calendarHref.task("/office/crm", "t1")).toBe("/office/tasks/t1");
-    expect(calendarHref.lead("/office/crm", "l1")).toBe("/office/crm/leads/l1");
     expect(calendarHref.calendar("/agent/crm", DAY)).toBe("/agent/crm/calendar?date=2026-11-11");
     expect(calendarHref.calendar("/office/crm")).toBe("/office/crm/calendar");
-    expect(eventHref("/agent/crm", { opportunity_id: null, lead_id: "l1", contact_id: "c1" })).toBe("/agent/crm/leads/l1");
-    expect(eventHref("/agent/crm", { opportunity_id: null, lead_id: null, contact_id: null })).toBeNull();
   });
 
   it("өнгө, хүмүүс, эрэмбэ", () => {
