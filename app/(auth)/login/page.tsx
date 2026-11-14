@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
+import { safeNext } from "@/lib/nav";
 import { Card, CardBody } from "@/components/ui/card";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { OAuthButtons } from "@/components/auth/OAuthButtons";
@@ -10,15 +11,19 @@ import { OAuthButtons } from "@/components/auth/OAuthButtons";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; error?: string }>;
 }) {
-  const { next = "/" } = await searchParams;
+  const { next: rawNext, error } = await searchParams;
+  // Зөвхөн дотоод зам — redirect болон нэвтэрсний дараах router.push хоёуланд.
+  const next = safeNext(rawNext, "/", "/");
 
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (user) redirect(next);
+  // Алдаатай ирсэн бол нэвтэрсэн хэрэглэгчийг ч дуугүй шилжүүлэхгүй — юу
+  // болсныг нь харуулна.
+  if (user && !error) redirect(next);
 
   return (
     <Card>
@@ -34,6 +39,14 @@ export default async function LoginPage({
           <h1 className="text-2xl font-extrabold text-ink">Тавтай морил</h1>
           <p className="text-sm text-muted">Нэми бүртгэлдээ нэвтэрнэ үү</p>
         </div>
+        {error === "auth" && (
+          <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+            Холбоос хүчингүй эсвэл хугацаа нь дууссан байна.{" "}
+            <Link href="/forgot-password" className="font-semibold underline">
+              Шинэ холбоос авах
+            </Link>
+          </p>
+        )}
         <OAuthButtons next={next} />
         <div className="flex items-center gap-3 text-xs text-subtle">
           <span className="h-px flex-1 bg-line" />

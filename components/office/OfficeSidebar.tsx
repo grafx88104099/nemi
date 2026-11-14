@@ -102,7 +102,10 @@ export function OfficeSidebar({ officeName, email, unread = 0, hasCrm = false }:
   return (
     <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-line bg-surface md:flex">
       <div className="flex h-14 items-center gap-2 border-b border-line px-5">
-        <Logo color="#0F172A" className="h-6 w-auto" />
+        {/* Лого дарвал нийтийн нүүр хуудас руу. */}
+        <Link href="/" aria-label="Нэми — нүүр хуудас" className="-mx-2 flex min-h-11 items-center rounded-lg px-2 transition hover:bg-surface-2">
+          <Logo color="#0F172A" className="h-6 w-auto" />
+        </Link>
       </div>
       <div className="border-b border-line px-5 py-3">
         <div className="text-xs text-subtle">Оффис</div>

@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
 
 export function ResetPasswordForm({ next }: { next?: string }) {
@@ -14,6 +14,9 @@ export function ResetPasswordForm({ next }: { next?: string }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  // Session хөтөч дээр байгаа эсэх — сервер cookie-г арай хожуу уншиж
+  // магадгүй тул энд (client дээр) шалгана.
+  const [ready, setReady] = useState<null | boolean>(null);
 
   const dest = next || "/login";
   const destLabel = dest.startsWith("/agent")
@@ -24,6 +27,11 @@ export function ResetPasswordForm({ next }: { next?: string }) {
         ? "Удирдлагын самбар"
         : "Нэвтрэх хуудас";
 
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data }) => setReady(!!data.session));
+  }, []);
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -33,7 +41,13 @@ export function ResetPasswordForm({ next }: { next?: string }) {
     const supabase = createClient();
     const { error } = await supabase.auth.updateUser({ password });
     if (error) {
-      setError("Холбоос хүчингүй эсвэл хугацаа дууссан байж магадгүй. Дахин оролдоно уу.");
+      setError(
+        /different from the old|same.*password/i.test(error.message)
+          ? "Шинэ нууц үг хуучнаасаа өөр байх ёстой."
+          : /weak|short|least/i.test(error.message)
+            ? "Нууц үг хэт энгийн байна. Урт болон тэмдэгт нэмнэ үү."
+            : "Хадгалж чадсангүй. Холбоосын хугацаа дууссан байж магадгүй — шинэ холбоос аваад дахин оролдоно уу."
+      );
       setLoading(false);
       return;
     }
@@ -56,13 +70,38 @@ export function ResetPasswordForm({ next }: { next?: string }) {
     );
   }
 
+  if (ready === null) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-6 text-center">
+        <div className="size-8 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+        <p className="text-sm text-muted">Шалгаж байна...</p>
+      </div>
+    );
+  }
+
+  if (!ready) {
+    return (
+      <div className="space-y-3 text-center">
+        <div className="text-4xl">⚠️</div>
+        <h2 className="text-lg font-bold text-ink">Холбоос хүчингүй байна</h2>
+        <p className="text-sm text-muted">
+          Нууц үг солих холбоосын хугацаа дууссан эсвэл аль хэдийн ашиглагдсан байна.
+          Шинэ холбоос аваад дахин оролдоно уу.
+        </p>
+        <ButtonLink href="/forgot-password" className="w-full">
+          Шинэ холбоос авах
+        </ButtonLink>
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <Field label="Шинэ нууц үг" htmlFor="pw" hint="Хамгийн багадаа 6 тэмдэгт">
-        <Input id="pw" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+        <Input id="pw" type="password" autoComplete="new-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
       </Field>
       <Field label="Нууц үг давтах" htmlFor="cf">
-        <Input id="cf" type="password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+        <Input id="cf" type="password" autoComplete="new-password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
       </Field>
       {error && <p className="text-sm text-danger">{error}</p>}
       <Button type="submit" disabled={loading} className="w-full">

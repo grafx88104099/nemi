@@ -18,4 +18,19 @@ describe("safeNext", () => {
     expect(safeNext("//evil.com", "/office", "/office")).toBe("/office");
     expect(safeNext("/admin/users", "/office", "/office")).toBe("/office");
   });
+  it("хөтчийн хэвийн болгодог хувилбаруудыг блоклоно", () => {
+    // Хөтөч `\`-ийг `/` болгодог тул эдгээр нь гадны хаяг болно.
+    expect(safeNext("/\\evil.com", "/", "/")).toBe("/");
+    expect(safeNext("\\\\evil.com", "/", "/")).toBe("/");
+    expect(safeNext("/\t/evil.com", "/", "/")).toBe("/");
+    expect(safeNext("javascript:alert(1)", "/", "/")).toBe("/");
+    expect(safeNext("https://evil.com/office/agents", "/office", "/office")).toBe("/office");
+  });
+  it("нийтийн нэвтрэх хуудсанд (prefix «/») дотоод замыг зөвшөөрнө", () => {
+    expect(safeNext("/account", "/", "/")).toBe("/account");
+    expect(safeNext("/agent/crm/staff", "/", "/")).toBe("/agent/crm/staff");
+    expect(safeNext("/listings?q=1#top", "/", "/")).toBe("/listings?q=1#top");
+    // Нэвтрэх хуудас руу буцаавал давталт үүснэ.
+    expect(safeNext("/login", "/", "/")).toBe("/");
+  });
 });
