@@ -16,6 +16,7 @@ import { AgreementTab } from "./tabs/AgreementTab";
 import { DealsTab } from "./tabs/DealsTab";
 import { HistoryTab } from "./tabs/HistoryTab";
 import { InfoTab } from "./tabs/InfoTab";
+import { PublishTab } from "./tabs/PublishTab";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -26,7 +27,7 @@ function requestNow(): number {
 
 /**
  * S03 — Staff хөрөнгийн карт (агент, оффис панелд ижил). Табууд ?tab=-аар:
- * Үндсэн мэдээлэл ¦ Зуучлалын гэрээ ¦ Дуудлага ¦ Үзүүлэлт ¦ Хэлцлүүд ¦ Өөрчлөлтийн түүх.
+ * Үндсэн мэдээлэл ¦ Зуучлалын гэрээ ¦ Зар ¦ Дуудлага ¦ Үзүүлэлт ¦ Хэлцлүүд ¦ Өөрчлөлтийн түүх.
  * Бүх үйлдэл хөрөнгийн id-тай; эрхийг DB (RLS, RPC) эцэслэн шалгана.
  */
 export async function PropertyCardPage({
@@ -137,6 +138,7 @@ export async function PropertyCardPage({
           {tab === "agreement" ? (
             <AgreementTab detail={detail} settings={settings} panel={panel} staff={brokerageStaff} names={names} now={now} />
           ) : null}
+          {tab === "publish" ? <PublishTab panel={panel} propertyId={p.id} /> : null}
           {tab === "calls" || tab === "showings" ? (
             <ActivitiesTab
               panel={panel}

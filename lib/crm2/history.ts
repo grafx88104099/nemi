@@ -48,6 +48,8 @@ export const HISTORY_ACTION_LABEL: Record<string, string> = {
   status: "Төлөв өөрчилсөн",
   delete: "Устгасан",
   reset: "Анхдагч руу буцаасан",
+  publish: "Нийтэд зарласан",
+  unpublish: "Зарнаас буцаасан",
 };
 
 /** Талбарын нэр (бүх entity-д нийтлэг; entity-ээс хамаарах цөөн нь доор). */
@@ -89,6 +91,7 @@ export const HISTORY_FIELD_LABEL: Record<string, string> = {
   advantages: "Давуу тал",
   features: "Онцлог",
   field_notes: "Талбарын тайлбар",
+  listing_id: "Нийтийн зар",
   owner_contact_id: "Эзэн",
   owner_note: "Эзний тэмдэглэл",
   showing_instructions: "Үзүүлэх заавар",

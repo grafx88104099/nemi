@@ -20,12 +20,13 @@ export function panelFromPathname(pathname: string | null | undefined): Crm2Pane
 }
 
 /** Хөрөнгийн картын табууд (?tab=...). */
-export const PROPERTY_TABS = ["info", "agreement", "calls", "showings", "deals", "history"] as const;
+export const PROPERTY_TABS = ["info", "agreement", "publish", "calls", "showings", "deals", "history"] as const;
 export type PropertyTab = (typeof PROPERTY_TABS)[number];
 
 export const PROPERTY_TAB_LABEL: Record<PropertyTab, string> = {
   info: "Үндсэн мэдээлэл",
   agreement: "Зуучлалын гэрээ",
+  publish: "Зар",
   calls: "Дуудлага",
   showings: "Үзүүлэлт",
   deals: "Хэлцлүүд",

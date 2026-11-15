@@ -191,6 +191,60 @@ export const verifySchema = z.object({ property_id: idSchema, note: optText(2000
 
 export const projectNameSchema = reqText(120, "Төслийн нэр");
 
+// ── Нийтийн зар ────────────────────────────────────────────────────────────
+
+/**
+ * Staff хөрөнгийг нийтэд зарлах. Нууцлалтай талбар (эзэн, үзүүлэх заавар,
+ * дэлгэрэнгүй хаяг, дотоод тэмдэглэл, код, үүрэгт агент) энд ОГТ байхгүй —
+ * зард гарах үзүүлэлтийг DB (crm2_listing_payload) хөрөнгөөс өөрөө авна.
+ * Агентынх зөвхөн гарчиг, зарлалын текст ба тамгатай зураг.
+ */
+
+/** Зөвхөн нийтийн `listings` bucket-ийн хаяг (DB-ийн шалгалттай ижил). */
+const LISTING_PHOTO_URL_RE = /^https:\/\/[^/]+\/storage\/v1\/object\/public\/listings\//;
+/** DB: crm2_set_listing_photos дээд тал нь 30 зураг. */
+export const MAX_LISTING_PHOTOS = 30;
+
+export const publishPropertySchema = z.object({
+  property_id: idSchema,
+  // Хоосон бол DB анхдагч гарчиг/текстийг (crm2_default_listing_*) ашиглана.
+  title: optText(160, "Зарын гарчиг"),
+  description: optText(4000, "Зарын тайлбар"),
+});
+export type PublishPropertyInput = z.input<typeof publishPropertySchema>;
+
+export const unpublishPropertySchema = z.object({
+  property_id: idSchema,
+  reason: optText(2000, "Шалтгаан"),
+});
+
+export const listingTextSchema = z.object({
+  property_id: idSchema,
+  title: reqText(160, "Зарын гарчиг"),
+  description: z
+    .string({ error: "Зарын тайлбар буруу." })
+    .trim()
+    .max(4000, "Зарын тайлбар 4000 тэмдэгтээс ихгүй."),
+});
+export type ListingTextInput = z.input<typeof listingTextSchema>;
+
+export const listingPhotosSchema = z.object({
+  property_id: idSchema,
+  urls: z
+    .array(
+      z
+        .string()
+        .trim()
+        .max(1000, "Зургийн хаяг хэт урт.")
+        .regex(LISTING_PHOTO_URL_RE, "Зөвшөөрөгдөөгүй зургийн хаяг.")
+    )
+    // Хоосон жагсаалт = «бүх зургийг устга». Санамсаргүйгээр зар зураггүй
+    // үлдэхээс сэргийлж энд зогсооно (DB мөн татгалзана).
+    .min(1, "Зар зураггүй үлдэхгүй — ядаж нэг зураг хэрэгтэй.")
+    .max(MAX_LISTING_PHOTOS, `Зар дээр ${MAX_LISTING_PHOTOS}-аас олон зураг тавихгүй.`),
+});
+export type ListingPhotosInput = z.input<typeof listingPhotosSchema>;
+
 // ── Медиа ба файл ──────────────────────────────────────────────────────────
 
 const UUID_PART = "[0-9a-fA-F-]{36}";

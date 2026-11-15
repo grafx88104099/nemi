@@ -8,6 +8,15 @@ import { validateListingInput } from "@/lib/validation/listing";
 
 const SAVE_ERR = "Зар хадгалахад алдаа гарлаа. Дахин оролдоно уу.";
 
+/**
+ * CRM-ийн Staff хөрөнгөөс нийтэлсэн зарыг энэ маягтаас засахгүй (DB trigger
+ * хориглоно) — тэр мессежийг нуулгүй шууд харуулна, эс бөгөөс агент яагаад
+ * хадгалагдахгүй байгааг ойлгохгүй.
+ */
+function listingErrorText(message: string | undefined, fallback: string): string {
+  return /CRM/i.test(message ?? "") ? message!.replace(/^[A-Z]+:\s*/, "") : fallback;
+}
+
 export type ListingInput = {
   title: string;
   type: string;
@@ -51,7 +60,7 @@ async function savePhotos(
   });
   if (error) {
     console.error("savePhotos:", error.message);
-    return { error: SAVE_ERR };
+    return { error: listingErrorText(error.message, SAVE_ERR) };
   }
   return {};
 }
@@ -152,7 +161,7 @@ export async function updateListing(id: string, raw: ListingInput): Promise<{ ok
     .select("id");
   if (error) {
     console.error("updateListing:", error.message);
-    return { ok: false, error: SAVE_ERR };
+    return { ok: false, error: listingErrorText(error.message, SAVE_ERR) };
   }
   if (!data || data.length === 0) return { ok: false, error: "Зар олдсонгүй эсвэл танд засах эрхгүй." };
   const photoRes = await savePhotos(supabase, id, input.photos);
@@ -173,7 +182,7 @@ export async function deleteListing(id: string): Promise<{ ok: boolean; error?: 
     .select("id");
   if (error) {
     console.error("deleteListing:", error.message);
-    return { ok: false, error: "Зар устгахад алдаа гарлаа." };
+    return { ok: false, error: listingErrorText(error.message, "Зар устгахад алдаа гарлаа.") };
   }
   if (!data || data.length === 0) return { ok: false, error: "Зар олдсонгүй эсвэл танд устгах эрхгүй." };
   revalidatePath("/agent/listings");

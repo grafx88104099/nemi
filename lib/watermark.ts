@@ -135,6 +135,35 @@ async function loadImage(src: string): Promise<HTMLImageElement> {
   return img;
 }
 
+type DecodedImage = { source: CanvasImageSource; width: number; height: number; close?: () => void };
+
+/**
+ * Blob → зурах боломжтой эх (ImageBitmap эсвэл <img>).
+ *
+ * ЯАГААД createImageBitmap нь эхний сонголт вэ: хөтчийн таб ар талд (нуугдсан)
+ * байхад `<img>.decode()` шийдэгдэхгүй удаан зогсдог — хэрэглэгч өөр таб руу
+ * шилжихэд тамга дарах ажил «Боловсруулж байна…» дээр хөлддөг. createImageBitmap
+ * нь дэлгэцийн зурагдалтаас хамаардаггүй тул ард нь ч ажиллана.
+ * `imageOrientation: "from-image"` нь <img>-тэй адил EXIF эргэлтийг хүндэтгэнэ.
+ */
+async function decodeImageBlob(blob: Blob): Promise<DecodedImage> {
+  if (typeof createImageBitmap === "function") {
+    try {
+      const bmp = await createImageBitmap(blob, { imageOrientation: "from-image" });
+      return { source: bmp, width: bmp.width, height: bmp.height, close: () => bmp.close() };
+    } catch {
+      // Дэмжихгүй хөтөч/формат — доорх <img> замаар.
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await loadImage(url);
+    return { source: img, width: img.naturalWidth, height: img.naturalHeight };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 function newCanvas(w: number, h: number): HTMLCanvasElement {
   const c = document.createElement("canvas");
   c.width = w;
@@ -148,14 +177,13 @@ async function buildLogoMark(logoUrl: string): Promise<HTMLCanvasElement | null>
     // fetch → blob → objectURL: canvas "tainted" болохоос сэргийлнэ (cross-origin зургийг шууд зурахгүй).
     const res = await fetch(logoUrl, { mode: "cors", cache: "force-cache" });
     if (!res.ok) return null;
-    const url = URL.createObjectURL(await res.blob());
+    const dec = await decodeImageBlob(await res.blob());
     try {
-      const img = await loadImage(url);
-      const { w, h } = fitWithin(img.naturalWidth, img.naturalHeight, LOGO_WORK_MAX);
+      const { w, h } = fitWithin(dec.width, dec.height, LOGO_WORK_MAX);
       const work = newCanvas(w, h);
       const ctx = work.getContext("2d", { willReadFrequently: true });
       if (!ctx) return null;
-      ctx.drawImage(img, 0, 0, w, h);
+      ctx.drawImage(dec.source, 0, 0, w, h);
       const pixels = ctx.getImageData(0, 0, w, h);
       const box = keyOutBackground(pixels.data, w, h);
       if (!box) return null;
@@ -164,7 +192,7 @@ async function buildLogoMark(logoUrl: string): Promise<HTMLCanvasElement | null>
       mark.getContext("2d")?.drawImage(work, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h);
       return mark;
     } finally {
-      URL.revokeObjectURL(url);
+      dec.close?.();
     }
   } catch {
     return null;
@@ -215,10 +243,9 @@ function canvasToJpeg(canvas: HTMLCanvasElement): Promise<Blob> {
  * (HEIC г.м. дэмжигдээгүй формат) алдаа шиднэ — тамгагүй зураг upload хийгдэхээс сэргийлнэ.
  */
 export async function applyWatermark(file: File, config: WatermarkConfig): Promise<File> {
-  const url = URL.createObjectURL(file);
+  const dec = await decodeImageBlob(file);
   try {
-    const img = await loadImage(url);
-    const { w, h } = fitWithin(img.naturalWidth, img.naturalHeight, WATERMARK_MAX_DIM);
+    const { w, h } = fitWithin(dec.width, dec.height, WATERMARK_MAX_DIM);
     if (!w || !h) throw new Error("empty_image");
     const canvas = newCanvas(w, h);
     const ctx = canvas.getContext("2d");
@@ -226,7 +253,7 @@ export async function applyWatermark(file: File, config: WatermarkConfig): Promi
     // PNG-ийн тунгалаг хэсэг JPEG-д хар болохоос сэргийлж цагаан дэвсгэр.
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, w, h);
-    ctx.drawImage(img, 0, 0, w, h);
+    ctx.drawImage(dec.source, 0, 0, w, h);
 
     const mark = config.logoUrl ? await logoMark(config.logoUrl) : null;
     if (mark) {
@@ -243,6 +270,6 @@ export async function applyWatermark(file: File, config: WatermarkConfig): Promi
     const base = file.name.replace(/\.[^.]+$/, "") || "photo";
     return new File([blob], `${base}.jpg`, { type: "image/jpeg" });
   } finally {
-    URL.revokeObjectURL(url);
+    dec.close?.();
   }
 }

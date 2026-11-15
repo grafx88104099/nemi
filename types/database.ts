@@ -4703,6 +4703,11 @@ export type Database = {
           brokerage_end_date: string | null;
           last_verified_at: string | null;
           last_verified_by: string | null;
+          // Нийтийн зар (20261114000100_crm2_publish.sql) — зөвхөн RPC бичнэ.
+          listing_id: string | null;
+          published_at: string | null;
+          published_by: string | null;
+          media_synced_at: string | null;
           search_text: string;
           created_by: string;
           created_at: string;
@@ -4753,6 +4758,10 @@ export type Database = {
           brokerage_end_date?: string | null;
           last_verified_at?: string | null;
           last_verified_by?: string | null;
+          listing_id?: string | null;
+          published_at?: string | null;
+          published_by?: string | null;
+          media_synced_at?: string | null;
           search_text?: string;
           created_by?: string;
           created_at?: string;
@@ -5936,6 +5945,15 @@ export type Database = {
         Args: { p_id: string; p_status: Database["public"]["Enums"]["crm2_property_status"]; p_created_by: string; p_listing: string; p_contract: string; p_photo: string };
         Returns: boolean;
       };
+      /** 20261114000100_crm2_publish.sql — нийтийн зар. */
+      crm2_publish_blockers: { Args: { p_property: string }; Returns: string[] };
+      /** jsonb { listing_id: uuid, needs_photos: boolean } */
+      crm2_publish_property: {
+        Args: { p_property: string; p_title?: string | null; p_description?: string | null };
+        Returns: Json;
+      };
+      /** Харах эрхгүй бол null. */
+      crm2_publish_state: { Args: { p_property: string }; Returns: Json };
       /** 20261113000200_crm2_pending_call.sql (тавигдаагүй бол PGRST202 — UI зөөлөн ажиллана). */
       crm2_request_transfer_with_call: {
         Args: { p_property: string; p_contact: string; p_occurred_at?: string | null; p_note?: string | null; p_result?: string | null; p_next_action?: Database["public"]["Enums"]["crm2_task_kind"] | null; p_next_action_due?: string | null; p_next_action_note?: string | null; p_requirement?: string | null; p_reason?: string | null };
@@ -5948,6 +5966,7 @@ export type Database = {
         Args: { p_deal: string; p_stage: Database["public"]["Enums"]["crm2_deal_stage"]; p_note?: string | null };
         Returns: undefined;
       };
+      crm2_set_listing_photos: { Args: { p_property: string; p_urls: string[] }; Returns: undefined };
       crm2_set_setting: { Args: { p_key: string; p_value: Json }; Returns: Json };
       crm2_setting: { Args: { p_key: string; p_office?: string | null }; Returns: Json | null };
       crm2_setting_bool: { Args: { p_key: string; p_office?: string | null }; Returns: boolean };
@@ -5994,6 +6013,8 @@ export type Database = {
         Returns: string;
       };
       crm2_transfer_deal: { Args: { p_deal: string; p_to_agent: string; p_reason: string }; Returns: string };
+      crm2_unpublish_property: { Args: { p_property: string; p_reason?: string | null }; Returns: undefined };
+      crm2_update_listing_text: { Args: { p_property: string; p_title: string; p_description: string }; Returns: undefined };
       crm2_uuid: { Args: { p_text: string }; Returns: string | null };
     };
     Enums: {
