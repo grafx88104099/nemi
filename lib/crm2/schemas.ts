@@ -1,4 +1,5 @@
 import { MUST_HAVE_MAX, REQUIREMENT_LIST_MAX, REQUIREMENT_LOCATION_MAX } from "@/lib/crm2/limits";
+import { parseNumberText } from "@/lib/number-input";
 import { z } from "zod";
 
 import { ubInputToIso, isIsoDate } from "@/lib/crm2/datetime";
@@ -27,14 +28,13 @@ import { CRM2_SETTING_KEYS } from "@/lib/crm2/settings";
 // ── Суурь ──────────────────────────────────────────────────────────────────
 
 const emptyToNull = (v: unknown) => (typeof v === "string" && v.trim() === "" ? null : v);
+// Таслал нь мянгатын тусгаарлагч ч, бутархайн тэмдэг ч байж болох тул байрлалаар
+// нь ялгана (lib/number-input.ts). Таниагүй бол бичвэрээр нь үлдээж, доорх
+// z.number() монголоор алдаа өгнө.
 const toNumber = (v: unknown) => {
-  if (typeof v === "string") {
-    const t = v.trim().replace(/[\s,]/g, "");
-    if (t === "") return null;
-    const n = Number(t);
-    return Number.isNaN(n) ? v : n;
-  }
-  return v;
+  if (typeof v !== "string") return v;
+  if (v.trim() === "") return null;
+  return parseNumberText(v) ?? v;
 };
 
 export const idSchema = z.guid("Буруу холбоос (id).");

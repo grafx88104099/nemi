@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { createListing, updateListing, type ListingInput } from "@/lib/actions/listings";
+import { parseNumberText } from "@/lib/number-input";
 import { Button } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
 import { MultiPhotoUpload } from "@/components/dashboard/MultiPhotoUpload";
@@ -66,7 +67,8 @@ export function ListingForm({
   const set = (k: keyof ListingInput, v: unknown) => setF((s) => ({ ...s, [k]: v }));
   // Сөрөг/NaN-аас хамгаалсан тоон оролт.
   const num = (v: string) => { const n = Number(v); return Number.isFinite(n) && n >= 0 ? n : 0; };
-  const areaNumOf = (t: string) => Math.max(0, Number(t.replace(",", ".")) || 0);
+  // Таслал нь бутархай ч («96,5»), мянгат ч («1,500») байж болно — lib/number-input шийднэ.
+  const areaNumOf = (t: string) => Math.max(0, parseNumberText(t) ?? 0);
 
   // 1м² үнэ → нийт үнэ = 1м² үнэ × талбай.
   function onPerM2(raw: string) {
@@ -103,7 +105,7 @@ export function ListingForm({
     if (!f.title.trim()) { setErr("Зарын гарчиг оруулна уу."); return; }
     if (!(f.price > 0)) { setErr("Үнэ 0-ээс их байх ёстой."); return; }
     const amenities = amenitiesText.split(",").map((s) => s.trim()).filter(Boolean);
-    const area = Math.max(0, Number(areaText.replace(",", ".")) || 0); // бутархай дэмжих
+    const area = areaNumOf(areaText); // бутархай, таслал дэмжих
     const payload = { ...f, amenities, area, photos };
     startTransition(async () => {
       const res = id ? await updateListing(id, payload) : await createListing(payload);

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
@@ -183,11 +184,10 @@ function Inner({
             </Select>
           </Field>
           <Field label={ctype === "percent" ? "Шимтгэл (%)" : "Шимтгэл"} htmlFor={`${ids}-cval`}>
-            <Input
+            <NumberInput
               id={`${ids}-cval`}
-              inputMode="decimal"
               value={cvalue}
-              onChange={(e) => setCvalue(e.target.value)}
+              onValueChange={setCvalue}
               placeholder={ctype === "percent" ? "3" : "1,500,000"}
             />
           </Field>

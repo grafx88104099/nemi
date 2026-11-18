@@ -4,6 +4,7 @@ import * as React from "react";
 import { FileText, Paperclip, Trash2 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Select } from "@/components/ui/select";
 import { COMMISSION_TYPE_LABEL, COMMISSION_TYPES, CURRENCIES, CURRENCY_LABEL } from "@/lib/crm2/labels";
 import { DOC_ACCEPT, fmtFileSize } from "@/lib/crm2/files";
@@ -119,13 +120,12 @@ export function BrokerageFields({
         />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormField label={percent ? "Хувь (%)" : "Дүн"} htmlFor={id("commission")} error={errors.commission_value}>
-            <Input
+            <NumberInput
               id={id("commission")}
-              inputMode="decimal"
               value={value.commission_value}
               disabled={disabled || !value.commission_type}
               placeholder={percent ? "жишээ: 3" : value.commission_type ? "жишээ: 2,000,000" : "Эхлээд төрлөө сонгоно уу"}
-              onChange={(e) => set("commission_value", e.target.value)}
+              onValueChange={(v) => set("commission_value", v)}
             />
           </FormField>
           {value.commission_type === "fixed" ? (

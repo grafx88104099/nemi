@@ -5,6 +5,7 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { Field, Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
 import { createRequirement, updateRequirement } from "@/lib/crm2/actions/contacts";
@@ -164,17 +165,15 @@ export function RequirementFormDrawer({
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium text-ink">Төсөв</legend>
           <div className="grid grid-cols-2 gap-2">
-            <Input
-              inputMode="decimal"
+            <NumberInput
               value={form.budget_min}
-              onChange={(e) => set("budget_min", e.target.value)}
+              onValueChange={(v) => set("budget_min", v)}
               placeholder="Доод"
               aria-label="Төсвийн доод"
             />
-            <Input
-              inputMode="decimal"
+            <NumberInput
               value={form.budget_max}
-              onChange={(e) => set("budget_max", e.target.value)}
+              onValueChange={(v) => set("budget_max", v)}
               placeholder="Дээд"
               aria-label="Төсвийн дээд"
             />
@@ -220,16 +219,17 @@ export function RequirementFormDrawer({
           <fieldset className="space-y-1.5">
             <legend className="text-sm font-medium text-ink">Өрөө</legend>
             <div className="grid grid-cols-2 gap-2">
-              <Input inputMode="numeric" value={form.rooms_min} onChange={(e) => set("rooms_min", e.target.value)} placeholder="Доод" aria-label="Өрөө доод" />
-              <Input inputMode="numeric" value={form.rooms_max} onChange={(e) => set("rooms_max", e.target.value)} placeholder="Дээд" aria-label="Өрөө дээд" />
+              <NumberInput inputMode="numeric" value={form.rooms_min} onValueChange={(v) => set("rooms_min", v)} placeholder="Доод" aria-label="Өрөө доод" />
+              <NumberInput inputMode="numeric" value={form.rooms_max} onValueChange={(v) => set("rooms_max", v)} placeholder="Дээд" aria-label="Өрөө дээд" />
             </div>
           </fieldset>
           <fieldset className="space-y-1.5">
             <legend className="text-sm font-medium text-ink">Хэмжээ (м²)</legend>
             <div className="grid grid-cols-2 gap-2">
-              <Input inputMode="decimal" value={form.area_min} onChange={(e) => set("area_min", e.target.value)} placeholder="Доод" aria-label="Хэмжээ доод" />
-              <Input inputMode="decimal" value={form.area_max} onChange={(e) => set("area_max", e.target.value)} placeholder="Дээд" aria-label="Хэмжээ дээд" />
+              <NumberInput value={form.area_min} onValueChange={(v) => set("area_min", v)} placeholder="Доод" aria-label="Хэмжээ доод" />
+              <NumberInput value={form.area_max} onValueChange={(v) => set("area_max", v)} placeholder="Дээд" aria-label="Хэмжээ дээд" />
             </div>
+            <p className="text-xs text-muted">Бутархайг цэг эсвэл таслалаар: 81.47 = 81,47</p>
           </fieldset>
         </div>
 

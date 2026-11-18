@@ -248,3 +248,35 @@ describe("setSettingSchema", () => {
     expect(setSettingSchema.safeParse({ key: "unknown.key", value: 1 }).success).toBe(false);
   });
 });
+
+describe("тоон талбарын таслал (гомдол: «81,47» → 8147)", () => {
+  it("бутархайг таслалаар бичсэнийг зөв уншина", () => {
+    const r = requirementCreateSchema.safeParse({ contact_id: ID, area_min: "81,47", area_max: "120,5" });
+    expect(r.success).toBe(true);
+    if (!r.success) return;
+    expect(r.data.area_min).toBe(81.47);
+    expect(r.data.area_max).toBe(120.5);
+  });
+
+  it("мянгатын таслалыг хэвээр ойлгоно", () => {
+    const r = requirementCreateSchema.safeParse({ contact_id: ID, budget_min: "1,500", budget_max: "250,000,000" });
+    expect(r.success).toBe(true);
+    if (!r.success) return;
+    expect(r.data.budget_min).toBe(1500);
+    expect(r.data.budget_max).toBe(250_000_000);
+  });
+
+  it("хөрөнгийн хэмжээ, үнэд мөн адил", () => {
+    const r = propertyCreateSchema.safeParse({ category: "sale", area_m2: "81,47", price: "350,000,000" });
+    expect(r.success).toBe(true);
+    if (!r.success) return;
+    expect(r.data.area_m2).toBe(81.47);
+    expect(r.data.price).toBe(350_000_000);
+  });
+
+  it("таниагүй тоон бичвэрт монгол алдаа", () => {
+    const r = propertyCreateSchema.safeParse({ category: "sale", area_m2: "1,2.3" });
+    expect(r.success).toBe(false);
+    expect(firstError(r)).toContain("тоо байна");
+  });
+});

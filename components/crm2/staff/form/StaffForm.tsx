@@ -7,6 +7,7 @@ import { Building2, FileSignature, Images, KeyRound, MapPinned, Ruler, ScrollTex
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
 import { createBrokerageDraft, submitBrokerage } from "@/lib/crm2/actions/brokerage";
@@ -529,47 +530,52 @@ export function StaffForm(props: Props) {
       {/* 3. Хэмжээс ба үнэ */}
       <FormSection id="staff-size" title="Хэмжээс ба үнэ" icon={Ruler}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <FormField label="Хэмжээ (м²)" htmlFor={fid("area_m2")} required={required.has("area_m2")} error={err("area_m2")}>
-            <Input
+          <FormField
+            label="Хэмжээ (м²)"
+            htmlFor={fid("area_m2")}
+            required={required.has("area_m2")}
+            error={err("area_m2")}
+            hint="Бутархайг цэг эсвэл таслалаар: 81.47 = 81,47"
+          >
+            <NumberInput
               id={fid("area_m2")}
-              inputMode="decimal"
               value={form.area_m2}
               disabled={busy}
               aria-invalid={!!err("area_m2") || undefined}
-              onChange={(e) => set("area_m2", e.target.value)}
+              onValueChange={(v) => set("area_m2", v)}
             />
             {note("area_m2", "хэмжээ")}
           </FormField>
           <FormField label="Өрөөний тоо" htmlFor={fid("rooms")} required={required.has("rooms")} error={err("rooms")}>
-            <Input
+            <NumberInput
               id={fid("rooms")}
               inputMode="numeric"
               value={form.rooms}
               disabled={busy}
               aria-invalid={!!err("rooms") || undefined}
-              onChange={(e) => set("rooms", e.target.value)}
+              onValueChange={(v) => set("rooms", v)}
             />
             {note("rooms", "өрөө")}
           </FormField>
           <FormField label="Давхар" htmlFor={fid("floor")} required={required.has("floor")} error={err("floor")} hint="Подвал бол хасах тоо.">
-            <Input
+            <NumberInput
               id={fid("floor")}
               inputMode="numeric"
               value={form.floor}
               disabled={busy}
               aria-invalid={!!err("floor") || undefined}
-              onChange={(e) => set("floor", e.target.value)}
+              onValueChange={(v) => set("floor", v)}
             />
             {note("floor", "давхар")}
           </FormField>
           <FormField label="Барилгын давхар" htmlFor={fid("building_floors")} error={err("building_floors")}>
-            <Input
+            <NumberInput
               id={fid("building_floors")}
               inputMode="numeric"
               value={form.building_floors}
               disabled={busy}
               aria-invalid={!!err("building_floors") || undefined}
-              onChange={(e) => set("building_floors", e.target.value)}
+              onValueChange={(v) => set("building_floors", v)}
             />
           </FormField>
         </div>
@@ -578,13 +584,12 @@ export function StaffForm(props: Props) {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormField label="Үнэ" htmlFor={fid("price")} required={required.has("price")} error={err("price")} hint={pricePreview || undefined}>
               <div className="flex gap-2">
-                <Input
+                <NumberInput
                   id={fid("price")}
-                  inputMode="decimal"
                   value={form.price}
                   disabled={busy}
                   aria-invalid={!!err("price") || undefined}
-                  onChange={(e) => set("price", e.target.value)}
+                  onValueChange={(v) => set("price", v)}
                 />
                 <Select
                   aria-label="Үнийн валют"
@@ -665,14 +670,13 @@ export function StaffForm(props: Props) {
           </FormField>
           <FormField label="Ашиглалтын зардал" htmlFor={fid("operating_cost")} error={err("operating_cost")}>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_7rem]">
-              <Input
+              <NumberInput
                 className="col-span-2 sm:col-span-1"
                 id={fid("operating_cost")}
-                inputMode="decimal"
                 value={form.operating_cost}
                 disabled={busy}
                 aria-invalid={!!err("operating_cost") || undefined}
-                onChange={(e) => set("operating_cost", e.target.value)}
+                onValueChange={(v) => set("operating_cost", v)}
               />
               <Select
                 aria-label="Зардлын валют"

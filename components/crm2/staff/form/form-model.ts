@@ -4,6 +4,7 @@ import { isIsoDate } from "@/lib/crm2/datetime";
 import { CATEGORY_PRICE_PERIODS, defaultPricePeriod, missingItemLabel } from "@/lib/crm2/labels";
 import { normalizePhone } from "@/lib/crm2/phone";
 import { propertyCreateSchema } from "@/lib/crm2/schemas";
+import { parseNumberText } from "@/lib/number-input";
 import type {
   Crm2BrokerageRow,
   Crm2CommissionType,
@@ -189,13 +190,13 @@ export function propertyToForm(
 
 /**
  * Тоон бичвэрийг (зай, таслалтай байж болно) тоо болгоно; хоосон → null;
- * тоо биш бол бичвэрээр нь үлдээнэ (схем монгол алдаа өгнө).
+ * тоо биш бол бичвэрээр нь үлдээнэ (схем монгол алдаа өгнө). Таслалын үүргийг
+ * (мянгат уу, бутархай уу) lib/number-input.ts байрлалаар нь шийднэ.
  */
 export function parseNumberInput(v: string): number | string | null {
-  const t = v.trim().replace(/[\s,]/g, "");
+  const t = v.trim();
   if (!t) return null;
-  const n = Number(t);
-  return Number.isFinite(n) ? n : v.trim();
+  return parseNumberText(t) ?? t;
 }
 
 const textOrNull = (v: string) => {
