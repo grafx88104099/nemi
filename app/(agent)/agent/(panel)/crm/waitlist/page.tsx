@@ -1,8 +1,10 @@
-import { Stage2Placeholder } from "@/components/crm2/mywork/Stage2Placeholders";
+import { WaitlistScreen } from "@/components/crm2/waitlist/WaitlistScreen";
 
 export const metadata = { title: "Хүлээлгийн үйлчлүүлэгч — CRM" };
 
-/** 2-р шатанд нээгдэнэ — юу нэмэгдэхийг тайлбарласан түр хуудас. */
-export default function AgentWaitlistPage() {
-  return <Stage2Placeholder panel="agent" page="waitlist" />;
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+/** T10 Хүлээлгийн жагсаалт (агентын панель). Дэлгэц нь components/crm2/waitlist-д. */
+export default async function AgentWaitlistPage({ searchParams }: { searchParams: SearchParams }) {
+  return <WaitlistScreen panel="agent" searchParams={await searchParams} />;
 }

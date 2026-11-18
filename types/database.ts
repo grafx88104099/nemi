@@ -5959,6 +5959,29 @@ export type Database = {
         Args: { p_property: string; p_contact: string; p_occurred_at?: string | null; p_note?: string | null; p_result?: string | null; p_next_action?: Database["public"]["Enums"]["crm2_task_kind"] | null; p_next_action_due?: string | null; p_next_action_note?: string | null; p_requirement?: string | null; p_reason?: string | null };
         Returns: Json;
       };
+      /** 20261118000200_crm2_waitlist.sql — нэг шаардлагын тохирох хөрөнгүүд (exact эхэнд, дараа нь хямдаас). */
+      crm2_requirement_match_list: {
+        Args: { p_requirement: string; p_limit?: number | null };
+        Returns: {
+          property_id: string;
+          code: string;
+          fit: string;
+          category: Database["public"]["Enums"]["crm2_property_category"];
+          property_type: string | null;
+          district: string | null;
+          location_text: string | null;
+          rooms: number | null;
+          area_m2: number | null;
+          floor: number | null;
+          building_floors: number | null;
+          price_total: number | null;
+          currency: string;
+          price_period: Database["public"]["Enums"]["crm2_price_period"];
+          available_from: string | null;
+          listing_agent_id: string | null;
+          listing_agent_name: string | null;
+        }[];
+      };
       crm2_reset_setting: { Args: { p_key: string }; Returns: Json };
       crm2_sees_all_properties: { Args: Record<string, never>; Returns: boolean };
       crm2_self_ok: { Args: { p_involved: string[] }; Returns: boolean };
@@ -6016,6 +6039,30 @@ export type Database = {
       crm2_unpublish_property: { Args: { p_property: string; p_reason?: string | null }; Returns: undefined };
       crm2_update_listing_text: { Args: { p_property: string; p_title: string; p_description: string }; Returns: undefined };
       crm2_uuid: { Args: { p_text: string }; Returns: string | null };
+      /**
+       * 20261118000200_crm2_waitlist.sql — хүлээж буй үйлчлүүлэгчид (идэвхтэй
+       * шаардлагатай, нээлттэй хэлцэлгүй). `requirement` = crm2_requirements
+       * мөр (дотоод талбаргүй) jsonb-ээр.
+       */
+      crm2_waitlist: {
+        Args: { p_only_mine?: boolean | null; p_with_matches?: boolean | null; p_limit?: number | null };
+        Returns: {
+          requirement_id: string;
+          contact_id: string;
+          contact_code: string;
+          contact_name: string;
+          responsible_agent_id: string | null;
+          agent_name: string | null;
+          requirement: Json;
+          waiting_since: string;
+          last_activity_at: string | null;
+          next_task_id: string | null;
+          next_task_due: string | null;
+          next_task_note: string | null;
+          exact_count: number;
+          near_count: number;
+        }[];
+      };
     };
     Enums: {
       user_role: "buyer" | "agent" | "office_admin" | "admin";

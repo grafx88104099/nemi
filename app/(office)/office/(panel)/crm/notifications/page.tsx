@@ -48,6 +48,7 @@ const EVENT_LABEL: Record<string, string> = {
   crm2_request_call: "Дуудлагатай шилжүүлэх хүсэлт",
   crm2_request_call_unrecorded: "Харилцагч өөр агенттай холбогдсон",
   crm2_request_call_skipped: "Хадгалсан дуудлага бүртгэгдсэнгүй",
+  crm2_waitlist_match: "Хүлээлгийн жагсаалт: хөрөнгө олдлоо",
   crm2_contact_transferred: "Харилцагч шилжсэн",
   crm2_deal_transferred: "Хэлцэл шилжсэн",
   crm_team_lead: "Багийн ахлагч",

@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { BarChart3, CheckCircle2, Clock3, Wallet } from "lucide-react";
+import { BarChart3, CheckCircle2, Wallet } from "lucide-react";
 
 import { getCrm2Context } from "@/lib/crm2/context";
 import { COMING_LATER_TEXT } from "@/lib/crm2/labels";
@@ -10,8 +10,8 @@ import { ButtonLink } from "@/components/ui/button";
 import { NoAccessState } from "@/components/crm2/ui";
 
 /**
- * Дараагийн шатанд нээгдэх цэсүүдийн түр хуудас (Хүлээлгийн үйлчлүүлэгч, Санхүү,
- * Тайлан): юу нэмэгдэхийг энгийн үгээр, одоо юуг ашиглаж болохыг заана.
+ * Дараагийн шатанд нээгдэх цэсүүдийн түр хуудас (Санхүү, Тайлан): юу
+ * нэмэгдэхийг энгийн үгээр, одоо юуг ашиглаж болохыг заана.
  */
 
 type Spec = {
@@ -25,23 +25,6 @@ type Spec = {
 };
 
 const SPECS = {
-  waitlist: {
-    title: "Хүлээлгийн үйлчлүүлэгч",
-    icon: Clock3,
-    intro: "Одоогоор тохирох Staff хөрөнгө олдоогүй үйлчлүүлэгчдийг энд хянана.",
-    coming: [
-      "Тохирох хөрөнгө одоогоор олдоогүй харилцагчийг шаардлагынх нь хамт жагсаалтад нэмэх — одоо байгаа харилцагчийн картыг ашиглана.",
-      "Staff-д хөрөнгө нэмэгдэх, өөрчлөгдөх бүрт хүлээж буй хүмүүсийн шаардлагатай харьцуулж, таарсныг хариуцсан агентад мэдэгдэх.",
-      "Дахин холбогдох өдөр ба сануулгыг хүн бүрээр тавих.",
-      "Санал болгох хөрөнгийг сонгосноор тухайн харилцагчтай шинэ хэлцэл эхлүүлэх.",
-    ],
-    now: {
-      text: "Одоо харилцагчийн карт дээр шаардлагаа бүртгэж, өмнөх хувилбаруудыг нь харж болно.",
-      href: (p) => p.contacts(),
-      label: "Харилцагчид",
-    },
-    allowed: () => true,
-  },
   finance: {
     title: "Санхүү",
     icon: Wallet,
