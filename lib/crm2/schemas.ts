@@ -1,3 +1,4 @@
+import { MUST_HAVE_MAX, REQUIREMENT_LIST_MAX, REQUIREMENT_LOCATION_MAX } from "@/lib/crm2/limits";
 import { z } from "zod";
 
 import { ubInputToIso, isIsoDate } from "@/lib/crm2/datetime";
@@ -388,8 +389,16 @@ export const phoneLookupSchema = z.object({
   property_id: optId,
 });
 
+/**
+ * Мөр бүрээр нэг утга (жагсаалт). Алдааны мессеж нь уртын хязгаарыг ЗААЖ хэлнэ —
+ * «хэт урт» гэдэг нь агентад юу засахаа ойлгуулдаггүй байв.
+ */
 const textList = (max: number, itemMax: number, label: string) =>
-  z.array(z.string().trim().max(itemMax, `${label} хэт урт.`)).max(max, `${label} ${max}-аас ихгүй.`).optional();
+  z
+    .array(z.string().trim().max(itemMax, `${label}: нэг мөр ${itemMax} тэмдэгтээс ихгүй.`))
+    .max(max, `${label} ${max}-аас ихгүй.`)
+    .optional();
+
 
 const requirementShape = {
   purpose: optText(200, "Зорилго"),
@@ -399,7 +408,7 @@ const requirementShape = {
   budget_max: optNumber({ min: 0, lt: 1e14, label: "Төсвийн дээд" }),
   currency: currencyEnum.optional(),
   price_period: periodEnum.optional(),
-  locations: textList(30, 200, "Байршил"),
+  locations: textList(REQUIREMENT_LIST_MAX, REQUIREMENT_LOCATION_MAX, "Байршил"),
   districts: textList(20, 60, "Дүүрэг"),
   rooms_min: optNumber({ int: true, min: 0, max: 100, label: "Өрөө (доод)" }),
   rooms_max: optNumber({ int: true, min: 0, max: 100, label: "Өрөө (дээд)" }),
@@ -407,7 +416,7 @@ const requirementShape = {
   area_max: optNumber({ gt: 0, lt: 1e7, label: "Хэмжээ (дээд)" }),
   move_in_from: optDate("Орох огноо"),
   move_in_note: optText(500, "Орох хугацааны тайлбар"),
-  must_haves: textList(30, 200, "Зайлшгүй нөхцөл"),
+  must_haves: textList(REQUIREMENT_LIST_MAX, MUST_HAVE_MAX, "Зайлшгүй нөхцөл"),
   required_features: z.array(keySchema).max(40).optional(),
   notes: optText(4000, "Тэмдэглэл"),
 };

@@ -16,6 +16,7 @@ import {
   type RequirementForm as FormState,
 } from "@/lib/crm2/contacts-requirements";
 import { CURRENCIES, CURRENCY_LABEL, PRICE_PERIODS, PRICE_PERIOD_LABEL, PROPERTY_CATEGORIES, categoryLabel } from "@/lib/crm2/labels";
+import { MUST_HAVE_MAX } from "@/lib/crm2/limits";
 import { settingOptions } from "@/lib/crm2/settings";
 import type { Crm2Currency, Crm2PricePeriod, Crm2PropertyCategory } from "@/lib/crm2/types";
 
@@ -64,6 +65,18 @@ export function RequirementFormDrawer({
   }
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((f) => ({ ...f, [k]: v }));
+
+  // Мөр бүр тусдаа нөхцөл тул урт нь МӨРӨӨР хязгаарлагдана. Хадгалах гэж
+  // оролдохоос нь өмнө, аль мөр хэдэн тэмдэгтээр хэтэрснийг МӨР ТУС БҮРЭЭР
+  // хэлж өгнө (нэг тоо харуулбал бусад мөрийг нь буруу засна).
+  // \r\n (Word-оос хуулсан) мөрийг мөн зөв тоолно.
+  const longMustHaves = form.must_haves
+    .split(/\r?\n/)
+    .map((line, i) => ({ no: i + 1, len: line.trim().length }))
+    .filter((l) => l.len > MUST_HAVE_MAX);
+  const mustHavesError = longMustHaves.length
+    ? `${longMustHaves.map((l) => `${l.no}-р мөр (${l.len}/${MUST_HAVE_MAX})`).join(", ")} хэт урт. Богиносгох эсвэл «Тэмдэглэл» хэсэгт бичнэ үү.`
+    : null;
   const toggle = (k: "districts" | "required_features", v: string, on: boolean) =>
     setForm((f) => ({ ...f, [k]: on ? [...f[k], v] : f[k].filter((x) => x !== v) }));
 
@@ -251,8 +264,19 @@ export function RequirementFormDrawer({
           </fieldset>
         ) : null}
 
-        <Field label="Бусад зайлшгүй нөхцөл" htmlFor={`${ids}-must`} hint="Мөр бүрт нэг нөхцөл">
-          <Textarea id={`${ids}-must`} rows={3} value={form.must_haves} onChange={(e) => set("must_haves", e.target.value)} />
+        <Field
+          label="Бусад зайлшгүй нөхцөл"
+          htmlFor={`${ids}-must`}
+          hint={`Мөр бүрт нэг нөхцөл · нэг мөр ${MUST_HAVE_MAX} тэмдэгт хүртэл. Урт тайлбарыг доорх «Тэмдэглэл»-д бичнэ.`}
+          error={mustHavesError ?? undefined}
+        >
+          <Textarea
+            id={`${ids}-must`}
+            rows={3}
+            aria-invalid={mustHavesError ? true : undefined}
+            value={form.must_haves}
+            onChange={(e) => set("must_haves", e.target.value)}
+          />
         </Field>
 
         <Field label="Тэмдэглэл" htmlFor={`${ids}-notes`}>
