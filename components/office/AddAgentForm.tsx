@@ -12,7 +12,7 @@ export function AddAgentForm() {
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ name: "", email: "", phone: "", specialty: "" });
   const [pending, startTransition] = useTransition();
-  const [result, setResult] = useState<{ emailed: boolean; link?: string; reason?: string; email?: string } | null>(null);
+  const [result, setResult] = useState<{ emailed: boolean; link?: string; reason?: string; email?: string; crmWarning?: string } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const router = useRouter();
@@ -27,7 +27,7 @@ export function AddAgentForm() {
       const r = await createAgentByOffice(f);
       if (r.error) setErr(r.error);
       else {
-        setResult({ emailed: !!r.emailed, link: r.actionLink, reason: r.reason, email: sentTo });
+        setResult({ emailed: !!r.emailed, link: r.actionLink, reason: r.reason, email: sentTo, crmWarning: r.crmWarning });
         setF({ name: "", email: "", phone: "", specialty: "" });
         router.refresh();
       }
@@ -54,6 +54,11 @@ export function AddAgentForm() {
               <>✓ Агент үүслээ. Гэхдээ и-мэйл илгээгдсэнгүй{result.reason ? ` (${result.reason})` : ""}. Доорх линкийг агентад дамжуулна уу:</>
             )}
           </div>
+          {result.crmWarning && (
+            <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              CRM: {result.crmWarning}
+            </p>
+          )}
           {result.link && (
             <div>
               {result.emailed && <p className="mb-1 text-xs text-muted">Нөөц линк (и-мэйл очоогүй тохиолдолд):</p>}

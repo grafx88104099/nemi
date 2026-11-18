@@ -199,7 +199,15 @@ export async function createAgentByOffice(input: {
   email: string;
   phone: string;
   specialty: string;
-}): Promise<{ ok?: boolean; emailed?: boolean; actionLink?: string; reason?: string; error?: string }> {
+}): Promise<{
+  ok?: boolean;
+  emailed?: boolean;
+  actionLink?: string;
+  reason?: string;
+  error?: string;
+  /** CRM-д автоматаар бүртгэж чадаагүй бол — агент үүссэн, зөвхөн сануулга. */
+  crmWarning?: string;
+}> {
   const ctx = await requireOffice();
   if ("error" in ctx) return { error: ctx.error };
   if (!input.name.trim() || !input.email.trim()) return { error: "Нэр болон и-мэйл шаардлагатай." };
@@ -239,6 +247,14 @@ export async function createAgentByOffice(input: {
   });
   if (agErr) return { error: agErr.message };
 
+  // 3.1) CRM ашигладаг оффис бол шинэ агентыг CRM-д давхар бүртгэнэ.
+  //
+  // ЯАГААД: CRM цэс нь crm_staff мөрөөр нээгддэг. Өмнө нь агент үүсгэхэд энэ
+  // мөр үүсдэггүй байсан тул шинэ агент нэвтрээд «CRM алга» гэж гомдоллодог
+  // байв (2026-11-16-нд бүртгүүлсэн агент). CRM огт ашигладаггүй оффист
+  // хүчээр нээхгүйн тулд оффис аль хэдийн CRM ажилтантай эсэхийг шалгана.
+  const crmWarning = await addToCrmStaff(admin, ctx.officeId, uid);
+
   // 4) Оффисын нэр + Resend имэйл
   const { data: office } = await admin.from("offices").select("name").eq("id", ctx.officeId).single();
   const res = await sendAgentInvite({
@@ -249,8 +265,48 @@ export async function createAgentByOffice(input: {
   });
 
   revalidatePath("/office/agents");
+  revalidatePath("/office/crm/settings/staff");
   // Линкийг үргэлж буцаана: и-мэйл очоогүй бол гол сувгаар, очсон ч нөөц болгон.
-  return { ok: true, emailed: res.sent, actionLink, reason: res.sent ? undefined : mapEmailReason(res.reason) };
+  return {
+    ok: true,
+    emailed: res.sent,
+    actionLink,
+    reason: res.sent ? undefined : mapEmailReason(res.reason),
+    crmWarning,
+  };
+}
+
+/**
+ * Шинэ агентыг CRM-ийн ажилтны бүртгэлд (crm_staff) нэмнэ — зөвхөн тухайн
+ * оффис CRM ашигладаг бол. Алдаа гарвал агент үүсгэх үйлдлийг унагаахгүй,
+ * анхааруулга болгон буцаана (оффис админ CRM → Тохиргоо → Ажилтан хэсгээс
+ * гараар нэмж болно).
+ */
+async function addToCrmStaff(
+  admin: ReturnType<typeof createAdminClient>,
+  officeId: string,
+  profileId: string
+): Promise<string | undefined> {
+  const { data: uses, error: readErr } = await admin
+    .from("crm_staff")
+    .select("id")
+    .eq("office_id", officeId)
+    .limit(1);
+  if (readErr) {
+    console.error("addToCrmStaff read:", readErr.message);
+    return "CRM-ийн ажилтны бүртгэлийг шалгаж чадсангүй.";
+  }
+  if (!uses?.length) return undefined; // Энэ оффис CRM ашиглахгүй байна.
+
+  const { error } = await admin
+    .from("crm_staff")
+    .insert({ office_id: officeId, profile_id: profileId, roles: ["agent"], panel_admin: false });
+  // 23505 — аль хэдийн бүртгэлтэй (давхар дуудлага), алдаа биш.
+  if (error && error.code !== "23505") {
+    console.error("addToCrmStaff insert:", error.message);
+    return "CRM-д автоматаар бүртгэж чадсангүй — CRM → Тохиргоо → Ажилтан хэсгээс нэмнэ үү.";
+  }
+  return undefined;
 }
 
 /** Resend-ийн алдааг оффис админд ойлгомжтой богино тайлбар болгоно. */
