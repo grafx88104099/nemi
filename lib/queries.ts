@@ -4,10 +4,20 @@ import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
 import type { ListingCardData } from "@/components/listings/ListingCard";
 
-const CARD_SELECT =
+/**
+ * ListingCard-д шаардагдах зарын багананууд. Оффисын самбар ч ижил картыг
+ * харуулдаг тул нэг эх сурвалжаас авна — нэг нь зураггүй болж хоцрохоос
+ * сэргийлнэ. Агентын embed нь дуудлага болгонд өөр (оффисын самбар
+ * agents!inner-ээр шүүдэг) тул тусад нь залгана.
+ */
+export const LISTING_CARD_COLUMNS =
   "id, title, price, ai_score, rooms, area, floor, district, photo, hot, verified, deal_type, " +
-  "rent_advance_months, rent_deposit_months, created_at, " +
-  "agent:agents(display_name, avatar, avatar_url, verified, office:offices(color))";
+  "rent_advance_months, rent_deposit_months, created_at";
+
+/** ListingCard-д хэрэгтэй агентын embed (нийтийн хуудсууд). */
+export const LISTING_CARD_AGENT = "agent:agents(display_name, avatar, avatar_url, verified, office:offices(color))";
+
+const CARD_SELECT = `${LISTING_CARD_COLUMNS}, ${LISTING_CARD_AGENT}`;
 
 /**
  * Онцлох (featured) идэвхтэй зарууд — нийтийн, ховор өөрчлөгддөг тул 5 минут

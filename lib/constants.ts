@@ -19,6 +19,25 @@ export const LISTING_STATUS: Record<ListingStatus, { label: string; tone: Status
 /** Агент гараар сонгож болох төлвүүд (review нь системийн урсгал тул орохгүй ч засвар хийхэд харагдана). */
 export const LISTING_STATUS_OPTIONS: ListingStatus[] = ["active", "draft", "review", "sold"];
 
+/**
+ * Маягтаар сонгогддоггүй ч өгөгдлийн санд байдаг төлвүүд: түрээслэгдсэн,
+ * түр түдгэлзсэн, буцаагдсан (CRM-ээс нийтлэл буцахад listing_status
+ * «withdrawn» болдог). Нэргүй орхивол англи enum хэрэглэгчид харагдана.
+ */
+const LISTING_STATUS_EXTRA: Record<string, { label: string; tone: StatusTone }> = {
+  rented: { label: "Түрээслэгдсэн", tone: "blue" },
+  paused: { label: "Түр түдгэлзсэн", tone: "amber" },
+  withdrawn: { label: "Буцаагдсан", tone: "neutral" },
+};
+
+/** Зарын төлвийн монгол нэр, өнгө — танихгүй төлвийг ч дүрсэлнэ. */
+export function listingStatusMeta(status: string): { label: string; tone: StatusTone } {
+  return (
+    LISTING_STATUS[status as ListingStatus] ??
+    LISTING_STATUS_EXTRA[status] ?? { label: status, tone: "neutral" }
+  );
+}
+
 // ── Үл хөдлөхийн төрөл ба дүүрэг (форм + шүүлт + нүүр хуудас нэг эх сурвалж) ──
 export const PROPERTY_TYPES = ["Орон сууц", "Хаус", "Газар", "Оффис", "Худалдааны талбай", "Обьект"] as const;
 export const DISTRICTS = ["Сүхбаатар", "Чингэлтэй", "Хан-Уул", "Баянгол", "Сонгинохайрхан", "Баянзүрх", "Налайх"] as const;

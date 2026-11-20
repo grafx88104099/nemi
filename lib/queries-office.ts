@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
+import { LISTING_CARD_COLUMNS } from "@/lib/queries";
+import type { ListingCardData } from "@/components/listings/ListingCard";
 
 /** Нэвтэрсэн office_admin-ийн оффис + агентууд + зарууд (эс бөгөөс null). */
 export async function getMyOffice() {
@@ -22,9 +24,14 @@ export async function getMyOffice() {
       .select("id, display_name, avatar, phone, rating, sold, listings_count, verified, premier, specialty, status")
       .eq("office_id", profile.office_id)
       .order("rating", { ascending: false }),
+    // Оффисын самбар нийтийн зартай ИЖИЛ картыг харуулдаг тул ижил багананууд
+    // + самбарт л хэрэгтэй төлөв. Шүүлт нь agents!inner-ээр явна.
     supabase
       .from("listings")
-      .select("id, title, price, status, district, ai_score, verified, agent:agents!inner(display_name, office_id)")
+      .select(
+        `${LISTING_CARD_COLUMNS}, status, ` +
+          "agent:agents!inner(display_name, avatar, avatar_url, verified, office_id, office:offices(color))"
+      )
       .eq("agent.office_id", profile.office_id)
       .order("created_at", { ascending: false }),
   ]);
@@ -36,10 +43,7 @@ export async function getMyOffice() {
       rating: number | null; sold: number; listings_count: number; verified: boolean; premier: boolean; specialty: string | null;
       status: "pending" | "active" | "rejected";
     }>,
-    listings: (listings ?? []) as unknown as Array<{
-      id: string; title: string; price: number; status: string; district: string | null; ai_score: number | null; verified: boolean;
-      agent: { display_name: string } | null;
-    }>,
+    listings: (listings ?? []) as unknown as Array<ListingCardData & { status: string }>,
   };
 }
 

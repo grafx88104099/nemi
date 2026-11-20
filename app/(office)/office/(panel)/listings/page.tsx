@@ -1,50 +1,47 @@
-import Link from "next/link";
-
 import { getMyOffice } from "@/lib/queries-office";
-import { Card, CardBody } from "@/components/ui/card";
+import { ListingCard } from "@/components/listings/ListingCard";
 import { VerifyToggle } from "@/components/office/VerifyToggle";
 import { Badge } from "@/components/ui/badge";
-import { fmtMNT } from "@/lib/format";
+import { listingStatusMeta } from "@/lib/constants";
 
 export const metadata = { title: "Зарууд — Оффис" };
 
+/**
+ * Оффисын зарууд. Нийтэд харагддагтай ИЖИЛ картаар (зураг, үнэ, өрөө/талбай,
+ * агент) харуулна — админ зараа нийтийн сайт дээр харагдахаар нь хянана.
+ * Картын доор зөвхөн самбарт хэрэгтэй хоёр зүйл: төлөв ба баталгааны сэлгүүр.
+ */
 export default async function OfficeListingsPage() {
   const data = await getMyOffice();
   if (!data) return null;
   const { listings } = data;
+  const verified = listings.filter((l) => l.verified).length;
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-8">
       <h1 className="text-2xl font-extrabold text-ink">Оффисын зарууд</h1>
-      <p className="text-sm text-muted">{listings.length} зар</p>
-      <Card className="mt-6">
-        <CardBody className="p-0">
-          <table className="w-full text-sm">
-            <thead className="border-b border-line bg-surface-2 text-left text-muted">
-              <tr>
-                <th className="p-3 font-medium">Зар</th>
-                <th className="p-3 font-medium">Үнэ</th>
-                <th className="p-3 font-medium">Төлөв</th>
-                <th className="p-3 font-medium">Баталгаа</th>
-              </tr>
-            </thead>
-            <tbody>
-              {listings.map((l) => (
-                <tr key={l.id} className="border-b border-line last:border-0">
-                  <td className="p-3">
-                    <Link href={`/listings/${l.id}`} className="font-medium text-ink hover:underline">{l.title}</Link>
-                    <div className="text-xs text-muted">{l.district} · {l.agent?.display_name}</div>
-                  </td>
-                  <td className="p-3 text-ink">{fmtMNT(l.price)}</td>
-                  <td className="p-3"><Badge tone={l.status === "active" ? "green" : "neutral"}>{l.status}</Badge></td>
-                  <td className="p-3"><VerifyToggle kind="listing" id={l.id} initial={l.verified} /></td>
-                </tr>
-              ))}
-              {listings.length === 0 && <tr><td colSpan={4} className="p-8 text-center text-muted">Зар алга.</td></tr>}
-            </tbody>
-          </table>
-        </CardBody>
-      </Card>
+      <p className="text-sm text-muted">
+        {listings.length} зар · {verified} баталгаатай
+      </p>
+
+      {listings.length > 0 ? (
+        <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {listings.map((l) => {
+            const st = listingStatusMeta(l.status);
+            return (
+              <div key={l.id} className="flex flex-col">
+                <ListingCard l={l} />
+                <div className="mt-2 flex min-h-11 flex-wrap items-center justify-between gap-2 px-1 py-1">
+                  <Badge tone={st.tone}>{st.label}</Badge>
+                  <VerifyToggle kind="listing" id={l.id} initial={l.verified} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="py-16 text-center text-muted">Зар алга.</p>
+      )}
     </div>
   );
 }

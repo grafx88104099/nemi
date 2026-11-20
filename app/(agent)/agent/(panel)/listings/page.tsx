@@ -9,10 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { fmtMNT } from "@/lib/format";
-import { LISTING_STATUS, DEAL_TYPE_LABEL, type DealType } from "@/lib/constants";
-
-const statusMeta = (s: string) =>
-  LISTING_STATUS[s as keyof typeof LISTING_STATUS] ?? { label: s, tone: "neutral" as const };
+import { listingStatusMeta as statusMeta, DEAL_TYPE_LABEL, type DealType } from "@/lib/constants";
 
 export default async function MyListingsPage() {
   const agent = await getMyAgent();
