@@ -3,9 +3,9 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
-import { valuateWithAI } from "@/lib/ai/valuate";
+import { valuateAndStore } from "@/lib/ai/valuate-listing";
 
-/** Зарын AI үнэлгээ хийж ai_valuations + listings.ai_score-д хадгална. */
+/** Агент өөрийн зарыг гараар AI-аар дахин үнэлүүлэх. */
 export async function valuateListing(
   listingId: string
 ): Promise<{ score?: number; note?: string; error?: string }> {
@@ -16,57 +16,14 @@ export async function valuateListing(
   if (!user) return { error: "auth" };
 
   // Эзэмшил шалгана — зөвхөн өөрийн зарыг үнэлүүлнэ (AI зардал дэмий гарахаас сэргийлнэ).
-  const { data: me } = await supabase
-    .from("agents")
-    .select("id")
-    .eq("profile_id", user.id)
-    .maybeSingle();
+  const { data: me } = await supabase.from("agents").select("id").eq("profile_id", user.id).maybeSingle();
   if (!me) return { error: "not_agent" };
-
-  const { data: l } = await supabase
-    .from("listings")
-    .select("title, type, district, rooms, area, price, price_per_m2, year, agent_id")
-    .eq("id", listingId)
-    .maybeSingle();
+  const { data: l } = await supabase.from("listings").select("agent_id").eq("id", listingId).maybeSingle();
   if (!l) return { error: "not_found" };
   if (l.agent_id !== me.id) return { error: "forbidden" };
 
-  // Харьцуулах зарууд (ижил дүүрэг + төрөл)
-  const { data: comps } = await supabase
-    .from("listings")
-    .select("price, area, price_per_m2")
-    .eq("district", l.district ?? "")
-    .eq("type", l.type ?? "")
-    .neq("id", listingId)
-    .limit(8);
-
-  const { result, error } = await valuateWithAI({
-    title: l.title,
-    type: l.type,
-    district: l.district,
-    rooms: l.rooms,
-    area: l.area,
-    price: l.price,
-    price_per_m2: l.price_per_m2,
-    year: l.year,
-    comps: comps ?? [],
-  });
-
-  if (error) return { error };
-  if (!result) return { error: "no_result" };
-
-  // Эзэмшигч агент өөрийн зарын ai_score-г шинэчилнэ (RLS зөвшөөрнө)
-  await supabase
-    .from("listings")
-    .update({ ai_score: result.score, ai_note: result.note })
-    .eq("id", listingId)
-    .eq("agent_id", me.id as string);
-  await supabase.from("ai_valuations").insert({
-    listing_id: listingId,
-    score: result.score,
-    note: result.note,
-    model: "claude-haiku-4-5",
-  });
+  const { result, error } = await valuateAndStore(listingId);
+  if (error || !result) return { error: error ?? "no_result" };
 
   revalidatePath(`/listings/${listingId}`);
   revalidatePath("/agent/listings");

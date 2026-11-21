@@ -3,6 +3,7 @@ import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
 import type { ListingCardData } from "@/components/listings/ListingCard";
+import { applyListingFilters, type ListingFilters } from "@/lib/listing-filters";
 
 /**
  * ListingCard-д шаардагдах зарын багананууд. Оффисын самбар ч ижил картыг
@@ -12,7 +13,7 @@ import type { ListingCardData } from "@/components/listings/ListingCard";
  */
 export const LISTING_CARD_COLUMNS =
   "id, title, price, ai_score, rooms, area, floor, district, photo, hot, verified, deal_type, " +
-  "rent_advance_months, rent_deposit_months, created_at";
+  "rent_advance_months, rent_deposit_months, created_at, owner_name";
 
 /** ListingCard-д хэрэгтэй агентын embed (нийтийн хуудсууд). */
 export const LISTING_CARD_AGENT = "agent:agents(display_name, avatar, avatar_url, verified, office:offices(color))";
@@ -40,20 +41,25 @@ export const getFeaturedListings = unstable_cache(
   { tags: ["listings"], revalidate: 300 }
 );
 
-export type ListingFilters = {
-  q?: string;
-  district?: string;
-  type?: string;
-  rooms?: number;
-  minPrice?: number;
-  maxPrice?: number;
-  deal?: "sale" | "rent";
-  /** Сүүлийн N хоногт нийтэлсэн зар (огноогоор шүүх). */
-  posted?: number;
-  sort?: "new" | "price_asc" | "price_desc" | "ai";
-  page?: number;
-  pageSize?: number;
-};
+export type { ListingFilters } from "@/lib/listing-filters";
+
+/**
+ * AI үнэлгээтэй идэвхтэй зар байгаа эсэх. Байхгүй үед «AI оноо» эрэмбийг
+ * санал болгохгүй — бүх утга хоосон бол эрэмбэ утгагүй.
+ */
+export const hasAiScores = unstable_cache(
+  async (): Promise<boolean> => {
+    const supabase = createPublicClient();
+    const { count } = await supabase
+      .from("listings")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "active")
+      .not("ai_score", "is", null);
+    return (count ?? 0) > 0;
+  },
+  ["has-ai-scores"],
+  { tags: ["listings"], revalidate: 600 }
+);
 
 /** Жагсаалт + шүүлтүүр + хуудаслалт. */
 export async function getListings(f: ListingFilters = {}) {
@@ -62,29 +68,19 @@ export async function getListings(f: ListingFilters = {}) {
   const page = f.page ?? 1;
   const from = (page - 1) * pageSize;
 
-  let query = supabase
-    .from("listings")
-    .select(CARD_SELECT, { count: "exact" })
-    .eq("status", "active");
-
-  if (f.q) query = query.ilike("title", `%${f.q}%`);
-  if (f.deal) query = query.eq("deal_type", f.deal);
-  if (f.district) query = query.eq("district", f.district);
-  if (f.type) query = query.eq("type", f.type);
-  if (f.rooms) query = query.gte("rooms", f.rooms);
-  if (f.minPrice) query = query.gte("price", f.minPrice);
-  if (f.maxPrice) query = query.lte("price", f.maxPrice);
-  if (f.posted && f.posted > 0) {
-    const cutoff = new Date(Date.now() - f.posted * 86_400_000).toISOString();
-    query = query.gte("created_at", cutoff);
-  }
+  let query = applyListingFilters(
+    supabase.from("listings").select(CARD_SELECT, { count: "exact" }).eq("status", "active"),
+    f
+  );
 
   switch (f.sort) {
     case "price_asc": query = query.order("price", { ascending: true }); break;
     case "price_desc": query = query.order("price", { ascending: false }); break;
-    case "ai": query = query.order("ai_score", { ascending: false }); break;
-    default: query = query.order("created_at", { ascending: false });
+    // Үнэлгээгүй зар төгсгөлд — эс бөгөөс DESC нь NULL-ийг эхэнд тавина.
+    case "ai": query = query.order("ai_score", { ascending: false, nullsFirst: false }); break;
   }
+  // Ижил үнэтэй/оноотой зар хуудас хооронд үсрэхгүй байх тогтвортой эрэмбэ.
+  query = query.order("created_at", { ascending: false }).order("id", { ascending: true });
 
   const { data, count } = await query.range(from, from + pageSize - 1);
   return {
@@ -116,6 +112,41 @@ export async function getListingById(id: string) {
         valuations: { score: number | null; note: string | null; model: string | null; created_at: string }[];
       })
     | null;
+}
+
+/**
+ * Төстэй зар: ижил төрөл (худалдах/түрээс) ба үл хөдлөхийн төрөл, үнэ ±35%.
+ * Эхлээд ижил дүүргээс, дутвал бусад дүүргээс; үнээр хамгийн ойрыг түрүүлнэ.
+ */
+export async function getSimilarListings(
+  l: { id: string; deal_type: string | null; type: string | null; district: string | null; price: number },
+  limit = 4
+): Promise<ListingCardData[]> {
+  if (!l.deal_type || !(l.price > 0)) return [];
+  const supabase = await createClient();
+  const base = () => {
+    let q = supabase
+      .from("listings")
+      .select(`${CARD_SELECT}, deal_type`)
+      .eq("status", "active")
+      .eq("deal_type", l.deal_type as "sale" | "rent")
+      .neq("id", l.id)
+      .gte("price", Math.floor(l.price * 0.65))
+      .lte("price", Math.ceil(l.price * 1.35));
+    if (l.type) q = q.eq("type", l.type);
+    return q;
+  };
+  const byGap = (a: ListingCardData, b: ListingCardData) => Math.abs(a.price - l.price) - Math.abs(b.price - l.price);
+
+  const near = l.district ? ((await base().eq("district", l.district).limit(24)).data ?? []) : [];
+  const picked = (near as unknown as ListingCardData[]).sort(byGap).slice(0, limit);
+  if (picked.length < limit) {
+    const { data } = await base().limit(24);
+    const seen = new Set(picked.map((p) => p.id));
+    const more = ((data ?? []) as unknown as ListingCardData[]).filter((p) => !seen.has(p.id)).sort(byGap);
+    picked.push(...more.slice(0, limit - picked.length));
+  }
+  return picked;
 }
 
 /** Зарын координат (lng/lat) — geography баганаас ST_X/ST_Y RPC-ээр. */

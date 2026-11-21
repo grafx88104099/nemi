@@ -217,6 +217,10 @@ export type Database = {
           deal_type: Database["public"]["Enums"]["deal_type"];
           rent_advance_months: number | null;
           rent_deposit_months: number | null;
+          owner_id: string | null;
+          owner_name: string | null;
+          owner_phone: string | null;
+          review_note: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -224,6 +228,10 @@ export type Database = {
           id?: string;
           legacy_id?: string | null;
           agent_id?: string | null;
+          owner_id?: string | null;
+          owner_name?: string | null;
+          owner_phone?: string | null;
+          review_note?: string | null;
           title: string;
           district?: string | null;
           type?: string | null;
@@ -252,6 +260,48 @@ export type Database = {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["listings"]["Insert"]>;
+        Relationships: [];
+      };
+      owner_requests: {
+        Row: {
+          id: string;
+          office_id: string;
+          user_id: string | null;
+          contact_name: string;
+          contact_phone: string;
+          deal_type: Database["public"]["Enums"]["deal_type"];
+          property_type: string | null;
+          district: string | null;
+          location_text: string | null;
+          area: number | null;
+          rooms: number | null;
+          price: number | null;
+          note: string | null;
+          status: "new" | "contacted" | "closed";
+          handled_by: string | null;
+          handled_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id: string;
+          user_id?: string | null;
+          contact_name: string;
+          contact_phone: string;
+          deal_type: Database["public"]["Enums"]["deal_type"];
+          property_type?: string | null;
+          district?: string | null;
+          location_text?: string | null;
+          area?: number | null;
+          rooms?: number | null;
+          price?: number | null;
+          note?: string | null;
+          status?: "new" | "contacted" | "closed";
+          handled_by?: string | null;
+          handled_at?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["owner_requests"]["Insert"]>;
         Relationships: [];
       };
       listing_photos: {
@@ -5288,6 +5338,27 @@ export type Database = {
       listings_within: {
         Args: { p_lng: number; p_lat: number; p_m: number };
         Returns: { id: string; title: string; price: number; district: string | null; ai_score: number | null; lng: number; lat: number; dist_m: number }[];
+      };
+      listings_map_search: {
+        Args: {
+          p_deal?: string | null;
+          p_district?: string | null;
+          p_type?: string | null;
+          p_rooms?: number | null;
+          p_min_price?: number | null;
+          p_max_price?: number | null;
+          p_min_area?: number | null;
+          p_max_area?: number | null;
+          p_q?: string | null;
+          p_posted?: number | null;
+          p_lng?: number | null;
+          p_lat?: number | null;
+          p_m?: number | null;
+        };
+        Returns: {
+          id: string; title: string; price: number; district: string | null; deal_type: string;
+          rooms: number; area: number | null; photo: string | null; lng: number; lat: number;
+        }[];
       };
       listing_point: {
         Args: { p_id: string };

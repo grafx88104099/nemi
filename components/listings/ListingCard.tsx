@@ -23,6 +23,8 @@ export type ListingCardData = {
   rent_advance_months?: number | null;
   rent_deposit_months?: number | null;
   created_at?: string;
+  /** Эзэн өөрөө нийтэлсэн зарын нэр (агентгүй). */
+  owner_name?: string | null;
   agent: {
     display_name: string;
     avatar: string | null;
@@ -96,6 +98,12 @@ export function ListingCard({ l }: { l: ListingCardData }) {
           {l.floor && l.floor !== "-" && <span>{l.floor}</span>}
           {l.district && <span>{l.district}</span>}
         </div>
+        {!l.agent && l.owner_name ? (
+          <div className="flex items-center gap-2 border-t border-line pt-2.5 text-sm">
+            <span className="truncate font-medium text-ink">{l.owner_name}</span>
+            <span className="shrink-0 text-xs text-muted">· эзнээс шууд</span>
+          </div>
+        ) : null}
         {l.agent && (
           <div className="flex items-center gap-2 border-t border-line pt-2.5">
             <Avatar

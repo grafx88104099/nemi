@@ -7,8 +7,9 @@ import { fmtMNT, shortMNT } from "@/lib/format";
 import { getLoanQuotes, type QuoteResult } from "@/lib/actions/loans";
 import { BankLogo } from "@/components/loans/BankLogo";
 
-export function LoanCalculator() {
-  const [price, setPrice] = useState(300_000_000);
+/** initialPrice — зарын хуудаснаас «Банк бүрээр харьцуулах» дарж ирэхэд тухайн үнэ. */
+export function LoanCalculator({ initialPrice }: { initialPrice?: number }) {
+  const [price, setPrice] = useState(initialPrice ?? 300_000_000);
   const [down, setDown] = useState(30);
   const [years, setYears] = useState(20);
   const [income, setIncome] = useState(6_000_000);

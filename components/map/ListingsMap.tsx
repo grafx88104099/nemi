@@ -1,35 +1,79 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 
 import { createClient } from "@/lib/supabase/client";
 import { shortMNT } from "@/lib/format";
+import type { ListingFilters } from "@/lib/listing-filters";
 
 type Pin = {
   id: string;
   title: string;
   price: number;
   district: string | null;
-  ai_score: number | null;
+  deal_type: string;
   lng: number;
   lat: number;
 };
 
+/**
+ * Цэгийн popup-ыг DOM-оор угсарна. InfoWindow.setContent(мөр) нь мөрийг HTML
+ * гэж тайлдаг тул агентын бичсэн гарчиг шууд оровол хөтөч дээр код ажиллана
+ * (stored XSS). textContent нь бичвэрийг зөвхөн бичвэр хэвээр нь харуулна.
+ */
+export function pinPopup(l: Pick<Pin, "id" | "title" | "district" | "price" | "deal_type">): HTMLElement {
+  const root = document.createElement("div");
+  const title = document.createElement("div");
+  title.style.fontWeight = "600";
+  title.textContent = l.title;
+  const meta = document.createElement("div");
+  meta.style.cssText = "color:#64748b;font-size:12px";
+  meta.textContent = [shortMNT(l.price) + (l.deal_type === "rent" ? "/сар" : ""), l.district]
+    .filter(Boolean)
+    .join(" · ");
+  const link = document.createElement("a");
+  link.href = `/listings/${encodeURIComponent(l.id)}`;
+  link.style.cssText = "color:#EA580C;font-size:12px";
+  link.textContent = "Дэлгэрэнгүй →";
+  root.append(title, meta, link);
+  return root;
+}
+
+/** Шүүлт → listings_map_search-ийн аргумент (жагсаалттай ижил утга). */
+function rpcArgs(f: ListingFilters) {
+  return {
+    p_deal: f.deal ?? null,
+    p_district: f.district ?? null,
+    p_type: f.type ?? null,
+    p_rooms: f.rooms ?? null,
+    p_min_price: f.minPrice ?? null,
+    p_max_price: f.maxPrice ?? null,
+    p_min_area: f.minArea ?? null,
+    p_max_area: f.maxArea ?? null,
+    p_q: f.q ?? null,
+    p_posted: f.posted ?? null,
+  };
+}
+
 const KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 const MAP_ID = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID;
 const UB = { lat: 47.918, lng: 106.917 };
+const NEAR_M = 4000;
 
-export function ListingsMap() {
+export function ListingsMap({ filters = {} }: { filters?: ListingFilters }) {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const markerLibRef = useRef<google.maps.MarkerLibrary | null>(null);
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
   const infoRef = useRef<google.maps.InfoWindow | null>(null);
+  const [ready, setReady] = useState(false);
   const [count, setCount] = useState<number | null>(null);
   const [near, setNear] = useState(false);
+  // Объект бүр шинэ байдаг тул шүүлтийг утгаар нь харьцуулна.
+  const argsKey = JSON.stringify(rpcArgs(filters));
 
-  function render(pins: Pin[]) {
+  const render = useCallback((pins: Pin[]) => {
     const map = mapRef.current;
     const lib = markerLibRef.current;
     const info = infoRef.current;
@@ -49,18 +93,31 @@ export function ListingsMap() {
         position: { lat: l.lat, lng: l.lng },
         content: el,
         gmpClickable: true,
+        title: l.title,
       });
       marker.addListener("click", () => {
-        info.setContent(
-          `<div style="font-weight:600">${l.title}</div><div style="color:#64748b;font-size:12px">${l.district ?? ""} · AI ${l.ai_score ?? "—"}</div><a href="/listings/${l.id}" style="color:#EA580C;font-size:12px">Дэлгэрэнгүй →</a>`
-        );
+        info.setContent(pinPopup(l));
         info.open({ map, anchor: marker });
       });
       markersRef.current.push(marker);
     }
     setCount(pins.length);
-  }
+  }, []);
 
+  const load = useCallback(
+    async (around?: { lng: number; lat: number }) => {
+      const supabase = createClient();
+      const args = JSON.parse(argsKey) as ReturnType<typeof rpcArgs>;
+      const { data } = await supabase.rpc("listings_map_search", {
+        ...args,
+        ...(around ? { p_lng: around.lng, p_lat: around.lat, p_m: NEAR_M } : {}),
+      });
+      render((data ?? []) as Pin[]);
+    },
+    [argsKey, render]
+  );
+
+  // Газрын зургийг нэг удаа үүсгэнэ.
   useEffect(() => {
     if (!ref.current || !KEY) return;
     let cancelled = false;
@@ -73,7 +130,7 @@ export function ListingsMap() {
       ]);
       if (cancelled || !ref.current) return;
 
-      const map = new Map(ref.current, {
+      mapRef.current = new Map(ref.current, {
         center: UB,
         zoom: 11,
         mapId: MAP_ID || undefined,
@@ -81,13 +138,9 @@ export function ListingsMap() {
         streetViewControl: false,
         clickableIcons: false,
       });
-      mapRef.current = map;
       markerLibRef.current = markerLib;
       infoRef.current = new InfoWindow();
-
-      const supabase = createClient();
-      const { data } = await supabase.rpc("listings_map");
-      if (!cancelled) render((data ?? []) as Pin[]);
+      setReady(true);
     })();
 
     return () => {
@@ -97,21 +150,28 @@ export function ListingsMap() {
     };
   }, []);
 
+  // Шүүлт өөрчлөгдөх бүрт (мөн анх бэлэн болоход) цэгүүдийг ачаална.
+  useEffect(() => {
+    if (!ready) return;
+    let stale = false;
+    (async () => {
+      await load();
+      if (!stale) setNear(false);
+    })();
+    return () => {
+      stale = true;
+    };
+  }, [ready, load]);
+
   async function searchNearCenter() {
-    const map = mapRef.current;
-    if (!map) return;
-    const c = map.getCenter();
+    const c = mapRef.current?.getCenter();
     if (!c) return;
-    const supabase = createClient();
-    const { data } = await supabase.rpc("listings_within", { p_lng: c.lng(), p_lat: c.lat(), p_m: 4000 });
-    render((data ?? []) as Pin[]);
+    await load({ lng: c.lng(), lat: c.lat() });
     setNear(true);
   }
 
   async function reset() {
-    const supabase = createClient();
-    const { data } = await supabase.rpc("listings_map");
-    render((data ?? []) as Pin[]);
+    await load();
     setNear(false);
   }
 
@@ -125,16 +185,16 @@ export function ListingsMap() {
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={searchNearCenter}
-          className="rounded-lg bg-brand-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-600"
+          className="min-h-11 rounded-lg bg-brand-500 px-4 text-sm font-semibold text-white hover:bg-brand-600"
         >
           📍 Энэ хавьд хайх (4км)
         </button>
         {near && (
-          <button onClick={reset} className="text-sm text-muted hover:underline">
-            Бүгдийг харах
+          <button onClick={reset} className="min-h-11 px-2 text-sm text-muted hover:underline">
+            Бүх бүсийг харах
           </button>
         )}
         {count != null && <span className="text-sm text-muted">{count} зар</span>}

@@ -7,7 +7,15 @@ import { getBankProducts } from "@/lib/loans/banks";
 
 export const metadata = { title: "Орон сууцны зээл — Нэми" };
 
-export default async function HomeLoansPage() {
+export default async function HomeLoansPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const raw = (await searchParams).price;
+  const n = Number(Array.isArray(raw) ? raw[0] : raw);
+  // Зарын хуудаснаас ирсэн үнэ (боломжит хүрээнд л хүлээж авна).
+  const initialPrice = Number.isFinite(n) && n >= 1_000_000 && n <= 1e12 ? Math.round(n) : undefined;
   const products = await getBankProducts();
 
   // Банк бүрийн хамгийн бага хүүг гаргаж лого зурвас үүсгэнэ
@@ -31,7 +39,7 @@ export default async function HomeLoansPage() {
 
       <Card className="mt-6">
         <CardBody>
-          <LoanCalculator />
+          <LoanCalculator initialPrice={initialPrice} />
         </CardBody>
       </Card>
 

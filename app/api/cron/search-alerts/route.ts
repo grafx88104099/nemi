@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { applyListingFilters, filtersHref, parseListingFilters } from "@/lib/listing-filters";
 
 /**
  * Хадгалсан хайлтын сэрэмжлүүлэг (cron).
@@ -13,7 +14,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const secret = process.env.CRON_SECRET;
-  if (secret && searchParams.get("key") !== secret) {
+  // Vercel Cron нь CRON_SECRET-ийг `Authorization: Bearer` толгойгоор илгээдэг —
+  // өмнө нь зөвхөн ?key-г шалгадаг тул нууц тохируулбал cron өөрөө 401 авдаг байв.
+  const bearer = request.headers.get("authorization");
+  if (secret && searchParams.get("key") !== secret && bearer !== `Bearer ${secret}`) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
@@ -28,29 +32,27 @@ export async function GET(request: Request) {
   let created = 0;
 
   for (const s of searches ?? []) {
-    const f = (s.filters ?? {}) as Record<string, string>;
-    let q = admin
-      .from("listings")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "active")
-      .gte("created_at", since);
-
-    if (f.q) q = q.ilike("title", `%${f.q}%`);
-    if (f.district) q = q.eq("district", f.district);
-    if (f.type) q = q.eq("type", f.type);
-    if (f.rooms) q = q.gte("rooms", Number(f.rooms));
-    if (f.minPrice) q = q.gte("price", Number(f.minPrice));
-    if (f.maxPrice) q = q.lte("price", Number(f.maxPrice));
+    // Жагсаалттай НЭГ шүүлт (Түрээс/Худалдах, талбай орно). Хугацааг энд
+    // «сүүлийн 24 цаг»-аар шүүдэг тул хадгалсан «posted»-ийг алгасна.
+    const f = parseListingFilters((s.filters ?? {}) as Record<string, string>);
+    const q = applyListingFilters(
+      admin
+        .from("listings")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "active")
+        .gte("created_at", since),
+      f,
+      { ignorePosted: true }
+    );
 
     const { count } = await q;
     if (count && count > 0) {
-      const qs = new URLSearchParams(f).toString();
       await admin.from("notifications").insert({
         user_id: s.user_id,
         type: "alert",
         title: "Шинэ зар таны хайлтад",
         body: `«${s.name ?? "Хайлт"}» — ${count} шинэ зар нэмэгдлээ.`,
-        link: `/listings?${qs}`,
+        link: filtersHref("/listings", f, { withSort: true }),
       });
       created++;
     }
