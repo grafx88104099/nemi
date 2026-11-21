@@ -1,6 +1,7 @@
 "use server";
 
 import { crm2Session, revalidateCrm2 } from "@/lib/crm2/server";
+import { expirePublicListings } from "@/lib/listings-cache";
 import { AUTH_ERROR, dbFail, fail, ok, zodErrorText } from "@/lib/crm2/result";
 import {
   listingPhotosSchema,
@@ -40,6 +41,7 @@ export async function publishProperty(input: {
   const res = (data ?? null) as unknown as { listing_id?: string | null; needs_photos?: boolean | null } | null;
   if (!res?.listing_id) return fail("Зар үүсгэж чадсангүй. Дахин оролдоно уу.");
   revalidateCrm2();
+  expirePublicListings();
   return ok({ listing_id: res.listing_id, needs_photos: !!res.needs_photos });
 }
 
@@ -55,6 +57,7 @@ export async function unpublishProperty(input: { property_id: string; reason?: s
   });
   if (error) return dbFail("unpublishProperty", error);
   revalidateCrm2();
+  expirePublicListings();
   return ok(null);
 }
 
@@ -75,6 +78,7 @@ export async function updateListingText(input: {
   });
   if (error) return dbFail("updateListingText", error);
   revalidateCrm2();
+  expirePublicListings();
   return ok(null);
 }
 
@@ -93,5 +97,6 @@ export async function setListingPhotos(input: { property_id: string; urls: strin
   });
   if (error) return dbFail("setListingPhotos", error);
   revalidateCrm2();
+  expirePublicListings();
   return ok(null);
 }

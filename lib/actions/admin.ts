@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { expirePublicListings } from "@/lib/listings-cache";
 
 import { createClient } from "@/lib/supabase/server";
 
@@ -42,6 +43,7 @@ export async function setListingStatus(
     .eq("id", id);
   if (error) return { error: error.message };
   revalidatePath("/admin/listings");
+  expirePublicListings();
   return { ok: true };
 }
 
@@ -51,6 +53,7 @@ export async function deleteListingAdmin(id: string) {
   const { error } = await ctx.supabase.from("listings").delete().eq("id", id);
   if (error) return { error: error.message };
   revalidatePath("/admin/listings");
+  expirePublicListings();
   return { ok: true };
 }
 

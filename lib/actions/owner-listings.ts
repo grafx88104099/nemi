@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { expirePublicListings } from "@/lib/listings-cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -125,6 +126,7 @@ export async function updateOwnerListing(id: string, raw: OwnerListingInput): Pr
   if (phErr) return { ok: false, error: SAVE_ERR };
   revalidatePath("/my-listings");
   revalidatePath(`/listings/${id}`);
+  expirePublicListings();
   return { ok: true };
 }
 
@@ -140,6 +142,7 @@ export async function deleteOwnerListing(id: string): Promise<{ ok: boolean; err
     .select("id");
   if (error || !data?.length) return { ok: false, error: "Устгаж чадсангүй." };
   revalidatePath("/my-listings");
+  expirePublicListings();
   return { ok: true };
 }
 

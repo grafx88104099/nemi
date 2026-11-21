@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
 import type { ListingCardData } from "@/components/listings/ListingCard";
 import { applyListingFilters, type ListingFilters } from "@/lib/listing-filters";
+import { LISTINGS_TAG } from "@/lib/listings-cache";
 
 /**
  * ListingCard-д шаардагдах зарын багананууд. Оффисын самбар ч ижил картыг
@@ -20,25 +21,65 @@ export const LISTING_CARD_AGENT = "agent:agents(display_name, avatar, avatar_url
 
 const CARD_SELECT = `${LISTING_CARD_COLUMNS}, ${LISTING_CARD_AGENT}`;
 
+/** Нүүр хуудасны «Онцлох зарууд»-ын эх оффис (PMC). */
+export const FEATURED_OFFICE_ID = "931b4a39-a38a-442c-9170-ea573522efd0";
+
 /**
- * Онцлох (featured) идэвхтэй зарууд — нийтийн, ховор өөрчлөгддөг тул 5 минут
- * кэшлэв (зочин болгонд DB цохилгүй). cookie-гүй public client ашиглана
- * (unstable_cache дотор cookies() хориотой).
+ * «Онцлох зарууд» — ЭРГЭЛДДЭГ: FEATURED_OFFICE_ID-ийн агентуудын хамгийн
+ * сүүлд нэмэгдсэн 10 боломжит (идэвхтэй, нүүр зурагтай) зар. Шинэ зар нэмэгдэхэд
+ * эхэнд орж, хамгийн хуучин нь гарна; зарагдсан/буцаагдсан нь өөрөө гарна.
+ * Гараар тэмдэглэх (listings.featured) биш, дүрмээр — ямар ч замаар (агентын
+ * маягт, Staff-аас нийтлэх) нэмэгдсэн зар шууд орно.
+ *
+ * 60 секунд кэшлэнэ; зар өөрчлөх Server Action бүр шууд цэвэрлэнэ
+ * (lib/listings-cache). cookie-гүй public client (unstable_cache дотор cookies() хориотой).
  */
 export const getFeaturedListings = unstable_cache(
-  async (limit = 8): Promise<ListingCardData[]> => {
+  async (limit = 10): Promise<ListingCardData[]> => {
     const supabase = createPublicClient();
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("listings")
-      .select(CARD_SELECT)
+      .select(
+        `${LISTING_CARD_COLUMNS}, agent:agents!inner(display_name, avatar, avatar_url, verified, office_id, office:offices(color))`
+      )
       .eq("status", "active")
-      .eq("featured", true)
-      .order("ai_score", { ascending: false })
+      .not("photo", "is", null)
+      .eq("agent.office_id", FEATURED_OFFICE_ID)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true })
       .limit(limit);
+    if (error) console.error("getFeaturedListings:", error.message);
     return (data ?? []) as unknown as ListingCardData[];
   },
   ["featured-listings"],
-  { tags: ["listings"], revalidate: 300 }
+  { tags: [LISTINGS_TAG], revalidate: 60 }
+);
+
+/**
+ * Нүүр хуудасны «Шинэ зарууд»: хамгийн сүүлд нийтлэгдсэн, одоо БОЛОМЖИТ
+ * (идэвхтэй — зарагдсан, ноорог, хянагдаж буйг оруулахгүй) зар. Нүүрэнд
+ * зураггүй карт харагдахгүйн тулд нүүр зурагтайг л авна.
+ *
+ * Зар хадгалах Server Action бүр кэшийг шууд цэвэрлэдэг (lib/listings-cache);
+ * Staff-аас DB триггерээр шинэчлэгдсэн зар 60 секундэд гарна.
+ * RLS (anon) түдгэлзүүлсэн оффисын зарыг өөрөө хасна.
+ */
+export const getLatestListings = unstable_cache(
+  async (limit = 8): Promise<ListingCardData[]> => {
+    const supabase = createPublicClient();
+    const { data, error } = await supabase
+      .from("listings")
+      .select(CARD_SELECT)
+      .eq("status", "active")
+      .not("photo", "is", null)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true })
+      .limit(limit);
+    if (error) console.error("getLatestListings:", error.message);
+    return (data ?? []) as unknown as ListingCardData[];
+  },
+  ["latest-listings"],
+  { tags: [LISTINGS_TAG], revalidate: 60 }
 );
 
 export type { ListingFilters } from "@/lib/listing-filters";
@@ -58,7 +99,7 @@ export const hasAiScores = unstable_cache(
     return (count ?? 0) > 0;
   },
   ["has-ai-scores"],
-  { tags: ["listings"], revalidate: 600 }
+  { tags: [LISTINGS_TAG], revalidate: 600 }
 );
 
 /** Жагсаалт + шүүлтүүр + хуудаслалт. */

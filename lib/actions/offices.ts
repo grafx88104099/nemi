@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { expirePublicListings } from "@/lib/listings-cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -264,6 +265,7 @@ export async function setVerified(
   revalidatePath("/office/agents");
   revalidatePath("/office/listings");
   revalidatePath("/admin");
+  expirePublicListings();
   return { ok: true };
 }
 

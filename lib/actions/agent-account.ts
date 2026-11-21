@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { expirePublicListings } from "@/lib/listings-cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -187,6 +188,7 @@ export async function deleteAgentFully(
   revalidatePath("/office/agents");
   revalidatePath("/office");
   revalidatePath("/agents");
+  expirePublicListings();
   return { ok: true };
 }
 

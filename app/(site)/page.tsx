@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { Search, ShieldCheck, Sparkles, TrendingUp, ArrowRight, Home as HomeIcon, Tag, KeyRound } from "lucide-react";
 
-import { getFeaturedListings } from "@/lib/queries";
+import { getFeaturedListings, getLatestListings } from "@/lib/queries";
 import { ListingCard } from "@/components/listings/ListingCard";
 import { PROPERTY_TYPES } from "@/lib/constants";
 
 export default async function Home() {
-  const featured = await getFeaturedListings(8);
+  const [recent, featured] = await Promise.all([getLatestListings(18), getFeaturedListings(10)]);
+  // «Шинэ зарууд»-д онцлохыг давтахгүй — шинээр нэмэгдсэн зар энд гарч ирнэ.
+  const featuredIds = new Set(featured.map((l) => l.id));
+  const latest = recent.filter((l) => !featuredIds.has(l.id)).slice(0, 8);
 
   return (
     <>
@@ -99,20 +102,49 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* Featured — зар байхгүй бол хэсгийг харуулахгүй */}
+      {/* Онцлох зарууд — PMC-ийн хамгийн сүүлийн 10 зар, эргэлддэг (lib/queries getFeaturedListings). Хоосон бол харуулахгүй. */}
       {featured.length > 0 && (
-        <section className="mx-auto max-w-7xl px-4 py-14">
-          <div className="mb-6 flex items-end justify-between">
+        <section className="mx-auto max-w-7xl px-4 py-14" aria-labelledby="featured-heading">
+          <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h2 className="text-2xl font-extrabold text-ink">Онцлох зарууд</h2>
-              <p className="text-sm text-muted">AI-аар хамгийн өндөр үнэлгээтэй сонголтууд</p>
+              <h2 id="featured-heading" className="text-2xl font-extrabold text-ink">Онцлох зарууд</h2>
+              <p className="text-sm text-muted">Хамгийн сүүлд нэмэгдсэн, баталгаатай сонголтууд</p>
             </div>
-            <Link href="/listings" className="inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:underline">
-              Бүгдийг үзэх <ArrowRight className="size-4" />
+            <Link href="/listings" className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-brand-600 hover:underline">
+              Бүгдийг үзэх <ArrowRight className="size-4" aria-hidden />
             </Link>
           </div>
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {/* 10 карт: xl-д 5×2, lg-д 4 багана, утсанд нэг багана. */}
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
             {featured.map((l) => (
+              <ListingCard key={l.id} l={l} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Бусад шинэ зарууд — онцлохоос гадуурх хамгийн сүүлийн боломжит зар (эзний зар орно, давхардуулахгүй) */}
+      {latest.length > 0 && (
+        <section className="mx-auto max-w-7xl px-4 pb-14" aria-labelledby="latest-heading">
+          <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 id="latest-heading" className="text-2xl font-extrabold text-ink">Бусад шинэ зарууд</h2>
+              <p className="text-sm text-muted">Сүүлд нэмэгдсэн, одоо боломжтой бусад зарууд</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4">
+              <Link href="/listings?deal=sale" className="inline-flex min-h-11 items-center text-sm font-semibold text-muted hover:text-ink hover:underline">
+                Худалдах
+              </Link>
+              <Link href="/listings?deal=rent" className="inline-flex min-h-11 items-center text-sm font-semibold text-muted hover:text-ink hover:underline">
+                Түрээс
+              </Link>
+              <Link href="/listings" className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-brand-600 hover:underline">
+                Бүгдийг үзэх <ArrowRight className="size-4" aria-hidden />
+              </Link>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {latest.map((l) => (
               <ListingCard key={l.id} l={l} />
             ))}
           </div>

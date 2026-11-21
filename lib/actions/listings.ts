@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { expirePublicListings } from "@/lib/listings-cache";
 import { after } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
@@ -135,6 +136,7 @@ export async function createListing(raw: ListingInput): Promise<{ id?: string; e
   const photoRes = await savePhotos(supabase, data.id, input.photos);
   if (photoRes.error) return { error: photoRes.error };
   revalidatePath("/agent/listings");
+  expirePublicListings();
   valuateLater(data.id);
   return { id: data.id };
 }
@@ -190,6 +192,7 @@ export async function updateListing(id: string, raw: ListingInput): Promise<{ ok
   if (photoRes.error) return { ok: false, error: photoRes.error };
   revalidatePath("/agent/listings");
   revalidatePath(`/listings/${id}`);
+  expirePublicListings();
   const prev = before as Record<string, unknown> | null;
   const next: Record<string, unknown> = {
     title: input.title, type: input.type, district: input.district, deal_type: input.deal_type,
@@ -214,5 +217,6 @@ export async function deleteListing(id: string): Promise<{ ok: boolean; error?: 
   }
   if (!data || data.length === 0) return { ok: false, error: "Зар олдсонгүй эсвэл танд устгах эрхгүй." };
   revalidatePath("/agent/listings");
+  expirePublicListings();
   return { ok: true };
 }
