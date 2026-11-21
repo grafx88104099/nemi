@@ -7,6 +7,24 @@ import { Card, CardBody } from "@/components/ui/card";
 import { ListingForm } from "@/components/dashboard/ListingForm";
 import { DEAL_TYPE_LABEL, type DealType } from "@/lib/constants";
 import { watermarkFromOffice } from "@/lib/watermark";
+import { getCrmStaffContext } from "@/lib/queries-crm-core";
+import { STAFF_NEW_HREF } from "@/components/dashboard/NewListingButtons";
+
+/** CRM-ийн агентад: энэ маягт бол гэрээгүй ШУУД зар; анхдагч зам нь Staff. */
+function StaffHint() {
+  return (
+    <div className="mt-4 rounded-xl border border-brand-200 bg-brand-50 p-4 text-sm text-ink">
+      <p className="font-semibold">Энэ бол гэрээгүй шууд зар.</p>
+      <p className="mt-1 text-muted">
+        Хөрөнгийг Staff-д нэг удаа бүртгэвэл зуучлалын гэрээ батлагдмагц «Зар» хэсгээс нийтэлнэ — зураг нь
+        тамгатай, үнэ, төлөв нь Staff-аас автоматаар шинэчлэгдэнэ, дахин бичих шаардлагагүй.
+      </p>
+      <Link href={STAFF_NEW_HREF} className="mt-2 inline-flex min-h-11 items-center font-semibold text-brand-700 hover:underline">
+        Staff-д хөрөнгө бүртгэх →
+      </Link>
+    </div>
+  );
+}
 
 export default async function NewListingPage({
   searchParams,
@@ -35,7 +53,7 @@ export default async function NewListingPage({
     );
   }
 
-  const { deal } = await searchParams;
+  const [{ deal }, crm] = await Promise.all([searchParams, getCrmStaffContext()]);
   const dealType: DealType | null = deal === "rent" ? "rent" : deal === "sale" ? "sale" : null;
 
   // Алхам 1 — Худалдах уу, түрээс үү?
@@ -47,6 +65,7 @@ export default async function NewListingPage({
         </Link>
         <h1 className="mt-4 text-center text-2xl font-extrabold text-ink">Ямар зар оруулах вэ?</h1>
         <p className="mt-2 text-center text-muted">Эхлээд зарын төрлөө сонгоно уу.</p>
+        {crm ? <StaffHint /> : null}
         <div className="mt-8 grid gap-4 sm:grid-cols-2">
           <Link
             href="/agent/listings/new?deal=sale"

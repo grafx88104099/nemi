@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Building2, Users, CalendarDays, Star, Clock, Plus, UserCircle, ArrowRight, AlertCircle, Eye } from "lucide-react";
+import { Building2, Users, CalendarDays, Star, Clock, UserCircle, ArrowRight, AlertCircle, Eye } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
 import { getMyAgent, getAgentOverview } from "@/lib/queries-agent";
@@ -10,6 +10,7 @@ import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { PremierUpgrade } from "@/components/dashboard/PremierUpgrade";
+import { NewListingButtons } from "@/components/dashboard/NewListingButtons";
 
 const STAFF_HREF = "/agent/crm/staff";
 const SHOWINGS_DAYS = 7;
@@ -132,7 +133,7 @@ export default async function AgentOverview() {
           ) : <Badge tone="amber">Хүлээгдэж буй</Badge>}
           {isActive && (
             <>
-              <ButtonLink href="/agent/listings/new" size="sm"><Plus className="size-4" /> Шинэ зар</ButtonLink>
+              <NewListingButtons crm={!!crmCtx} />
               <ButtonLink href={STAFF_HREF} size="sm" variant="outline"><Users className="size-4" /> CRM</ButtonLink>
             </>
           )}

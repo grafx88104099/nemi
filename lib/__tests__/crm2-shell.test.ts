@@ -43,17 +43,9 @@ describe("CRM цэс", () => {
     expect(labels(secondary)).toEqual(["Календарь"]);
   });
 
-  it("менежер: бүх 7 хэсэг, оффист тохиргоотой", () => {
+  it("менежер: ажиллаж буй бүх хэсэг, оффист тохиргоотой; «удахгүй» хэсэг цэсэнд гарахгүй", () => {
     const { primary } = crmNavItems("office", ctx({ isManager: true, roles: ["sales_director"] }), { canOpenTeam: true });
-    expect(labels(primary)).toEqual([
-      "Staff",
-      "Харилцагчид",
-      "Миний ажил",
-      "Хүлээлгийн үйлчлүүлэгч",
-      "Санхүү",
-      "Тайлан",
-      "Тохиргоо",
-    ]);
+    expect(labels(primary)).toEqual(["Staff", "Харилцагчид", "Миний ажил", "Хүлээлгийн үйлчлүүлэгч", "Тохиргоо"]);
   });
 
   it("оффисын энгийн агентад санхүү, тайлан, тохиргоо харагдахгүй", () => {
@@ -61,13 +53,12 @@ describe("CRM цэс", () => {
     expect(labels(primary)).toEqual(["Staff", "Харилцагчид", "Миний ажил", "Хүлээлгийн үйлчлүүлэгч"]);
   });
 
-  it("санхүүгийн эрхтэнд санхүү ба тайлан; ахлагчид тайлан", () => {
-    expect(labels(crmNavItems("office", ctx({ hasFinance: true }), { canOpenTeam: false }).primary)).toEqual(
-      expect.arrayContaining(["Санхүү", "Тайлан"])
-    );
-    const lead = labels(crmNavItems("agent", ctx({ isTeamLead: true }), { canOpenTeam: true }).primary);
-    expect(lead).toContain("Тайлан");
-    expect(lead).not.toContain("Санхүү");
+  it("«Санхүү», «Тайлан» бэлэн болох хүртэл хэнд ч цэсэнд гарахгүй", () => {
+    for (const c of [ctx({ hasFinance: true }), ctx({ isTeamLead: true }), ctx({ isManager: true })]) {
+      const l = labels(crmNavItems("office", c, { canOpenTeam: true }).primary);
+      expect(l).not.toContain("Санхүү");
+      expect(l).not.toContain("Тайлан");
+    }
   });
 
   it("туслах: Миний баг (панелиар ялгаатай зам), Батлах зөвхөн батлах эрхтэнд", () => {

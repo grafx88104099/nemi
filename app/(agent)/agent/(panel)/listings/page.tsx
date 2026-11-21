@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, Pencil, Share2 } from "lucide-react";
+import { Pencil, Share2 } from "lucide-react";
 
 import { getMyAgent, getAgentListings, getShareCounts, getSharedWithMe } from "@/lib/queries-agent";
 import { DashboardNav } from "@/components/dashboard/DashboardNav";
@@ -8,6 +8,7 @@ import { ShareListingButton } from "@/components/dashboard/ShareListingButton";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
+import { NewListingButtons } from "@/components/dashboard/NewListingButtons";
 import { fmtMNT } from "@/lib/format";
 import { listingStatusMeta as statusMeta, DEAL_TYPE_LABEL, type DealType } from "@/lib/constants";
 
@@ -32,9 +33,7 @@ export default async function MyListingsPage() {
       <div className="mt-1"><DashboardNav /></div>
       <div className="mt-6 flex items-center justify-between">
         <h1 className="text-xl font-extrabold text-ink">Миний зар ({listings.length})</h1>
-        <ButtonLink href="/agent/listings/new" size="sm">
-          <Plus className="size-4" /> Шинэ зар
-        </ButtonLink>
+        <NewListingButtons />
       </div>
 
       <Card className="mt-4 overflow-hidden">

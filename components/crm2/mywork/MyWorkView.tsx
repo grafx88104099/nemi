@@ -4,18 +4,22 @@ import { CalendarDays, CalendarClock, ChevronRight, Eye, ListTodo } from "lucide
 import { cn } from "@/lib/utils";
 import { fmtDateTime, fmtDayWithWeekday, fmtTime } from "@/lib/format";
 import { getCrm2Context } from "@/lib/crm2/context";
-import { TASK_BUCKET_LABEL, type TaskBucket } from "@/lib/crm2/datetime";
+import { TASK_BUCKET_LABEL, taskBucket, type TaskBucket } from "@/lib/crm2/datetime";
 import { crm2Paths, type Crm2Panel } from "@/lib/crm2/paths";
 import { groupTasks, listMyScheduledShowings, listMyTasks, type TaskListItem } from "@/lib/crm2/queries/tasks";
+import { getMyActiveTasks, type TaskRow } from "@/lib/queries-tasks";
 import { Card, CardBody } from "@/components/ui/card";
 import { ButtonLink } from "@/components/ui/button";
 import { CodeChip, Crm2Empty, LoadErrorState, NoAccessState } from "@/components/crm2/ui";
 
+import { OfficeTaskList } from "./OfficeTaskList";
 import { TaskList, type TaskRowItem } from "./TaskList";
 
 /**
- * «Миний ажил» (1-р шатны энгийн хувилбар): надад оноогдсон нээлттэй ажил хугацаагаар
- * (хэтэрсэн нь тодорхой), дараагийн 7 хоногийн товлосон үзүүлэлт. Сануулга, хүлээлэг — 2-р шатанд.
+ * «Миний ажил»: надад оноогдсон нээлттэй ажил хугацаагаар (хэтэрсэн нь тодорхой),
+ * дараагийн 7 хоногийн товлосон үзүүлэлт. CRM-ийн дараагийн алхам ба оффисын
+ * даалгавар (төсөл, оффисын үүрэг) НЭГ жагсаалтад, хугацааны ижил бүлэгт — агент
+ * өмнө нь хоёр өөр цэснээс ажлаа хайдаг байв.
  */
 
 const WEEK_MS = 7 * 86_400_000;
@@ -55,9 +59,17 @@ export async function MyWorkView({ panel }: { panel: Crm2Panel }) {
     );
   }
   const paths = crm2Paths(panel);
-  const [taskList, showingList] = await Promise.all([listMyTasks(), listMyScheduledShowings()]);
+  const [taskList, showingList, officeTasks] = await Promise.all([
+    listMyTasks(),
+    listMyScheduledShowings(),
+    getMyActiveTasks(),
+  ]);
   const tasks = taskList.items;
   const groups = groupTasks(tasks);
+  const officeGroups: Record<TaskBucket, TaskRow[]> = { overdue: [], today: [], upcoming: [], none: [] };
+  for (const t of officeTasks) officeGroups[taskBucket(t.deadline)].push(t);
+  const count = (b: TaskBucket) => groups[b].length + officeGroups[b].length;
+  const officeBase = panel === "office" ? "/office/tasks" : "/agent/tasks";
   const { now, items: upcomingShowings } = nextWeek(showingList.items);
 
   return (
@@ -65,12 +77,20 @@ export async function MyWorkView({ panel }: { panel: Crm2Panel }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-xl font-extrabold text-ink sm:text-2xl">Миний ажил</h1>
-          <p className="text-sm text-muted">Танд оноогдсон дараагийн алхмууд ба ойрын үзүүлэлтүүд.</p>
+          <p className="text-sm text-muted">
+            Танд оноогдсон дараагийн алхмууд, оффисын даалгавар ба ойрын үзүүлэлтүүд — нэг дор.
+          </p>
         </div>
-        <ButtonLink href={paths.calendar()} variant="outline" size="touch" className="self-start sm:self-auto">
-          <CalendarDays className="size-4" aria-hidden />
-          Календарь
-        </ButtonLink>
+        <div className="flex flex-wrap gap-2 self-start sm:self-auto">
+          <ButtonLink href={officeBase} variant="outline" size="touch">
+            <ListTodo className="size-4" aria-hidden />
+            Оффисын даалгавар
+          </ButtonLink>
+          <ButtonLink href={paths.calendar()} variant="outline" size="touch">
+            <CalendarDays className="size-4" aria-hidden />
+            Календарь
+          </ButtonLink>
+        </div>
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -81,20 +101,20 @@ export async function MyWorkView({ panel }: { panel: Crm2Panel }) {
               <span
                 className={cn(
                   "text-lg font-bold tabular-nums",
-                  b === "overdue" && groups.overdue.length ? "text-rose-700" : "text-ink"
+                  b === "overdue" && count("overdue") ? "text-rose-700" : "text-ink"
                 )}
               >
                 {/* Ачаалж чадаагүй бол «0» гэж харуулахгүй (доор алдааны төлөв). */}
-                {taskList.error ? "—" : groups[b].length}
+                {taskList.error ? "—" : count(b)}
               </span>
             </>
           );
           const cls = cn(
             "rounded-xl border bg-surface px-3 py-2",
-            b === "overdue" && groups.overdue.length ? "border-rose-300" : "border-line"
+            b === "overdue" && count("overdue") ? "border-rose-300" : "border-line"
           );
           // Хоосон бүлгийн хэсэг харагдахгүй тул «0» хавтанг холбоос болгохгүй.
-          return groups[b].length > 0 ? (
+          return count(b) > 0 ? (
             <a key={b} href={`#bucket-${b}`} className={cn(cls, "transition hover:bg-surface-2")}>
               {tile}
             </a>
@@ -113,7 +133,7 @@ export async function MyWorkView({ panel }: { panel: Crm2Panel }) {
           </h2>
           {taskList.error ? (
             <LoadErrorState retryHref={paths.myWork()} />
-          ) : tasks.length === 0 ? (
+          ) : tasks.length + officeTasks.length === 0 ? (
             <Crm2Empty
               icon={ListTodo}
               title="Нээлттэй ажил алга"
@@ -121,12 +141,13 @@ export async function MyWorkView({ panel }: { panel: Crm2Panel }) {
               action={{ label: "Staff руу", href: paths.staff() }}
             />
           ) : (
-            BUCKETS.filter((b) => groups[b].length > 0).map((b) => (
-              <div key={b} id={`bucket-${b}`} className="scroll-mt-24">
-                <h3 className={cn("mb-2 text-sm font-bold", b === "overdue" ? "text-rose-700" : "text-ink")}>
-                  {TASK_BUCKET_LABEL[b]} <span className="font-normal text-muted">({groups[b].length})</span>
+            BUCKETS.filter((b) => count(b) > 0).map((b) => (
+              <div key={b} id={`bucket-${b}`} className="scroll-mt-24 space-y-2">
+                <h3 className={cn("text-sm font-bold", b === "overdue" ? "text-rose-700" : "text-ink")}>
+                  {TASK_BUCKET_LABEL[b]} <span className="font-normal text-muted">({count(b)})</span>
                 </h3>
-                <TaskList items={groups[b].map(toRow)} paths={paths} />
+                {groups[b].length > 0 ? <TaskList items={groups[b].map(toRow)} paths={paths} /> : null}
+                {officeGroups[b].length > 0 ? <OfficeTaskList items={officeGroups[b]} basePath={officeBase} /> : null}
               </div>
             ))
           )}

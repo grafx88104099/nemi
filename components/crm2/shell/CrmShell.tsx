@@ -4,6 +4,7 @@ import type { CrmStaffContext } from "@/lib/queries-crm-core";
 import { cn } from "@/lib/utils";
 
 import { CrmNav } from "./CrmNav";
+import { CrmQuickBar } from "./CrmQuickBar";
 import { crmNavItems, fallbackCrm2Context } from "./menu";
 
 /**
@@ -33,7 +34,9 @@ export async function CrmShell({
           <CrmNav primary={primary} secondary={secondary} />
         </div>
       </div>
-      <div className="min-w-0 flex-1">{children}</div>
+      {/* Утсанд доод хурдан цэсний ард агуулга хаагдахгүй байх зай. */}
+      <div className={cn("min-w-0 flex-1", ctx.canWork && "pb-20 md:pb-0")}>{children}</div>
+      {ctx.canWork ? <CrmQuickBar panel={panel} /> : null}
     </div>
   );
 }

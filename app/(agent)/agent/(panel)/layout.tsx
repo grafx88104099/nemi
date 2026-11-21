@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCrmStaffContext } from "@/lib/queries-crm-core";
 import { Topbar } from "@/components/layout/Topbar";
 import { ServiceWorkerRegister } from "@/components/crm2/shell/ServiceWorkerRegister";
+import { AgentNavProvider } from "@/components/dashboard/DashboardNav";
 
 export default async function DashboardLayout({
   children,
@@ -22,7 +23,9 @@ export default async function DashboardLayout({
   return (
     <>
       <Topbar />
-      <main className="flex-1 bg-bg">{children}</main>
+      <main className="flex-1 bg-bg">
+        <AgentNavProvider crm={!!crm}>{children}</AgentNavProvider>
+      </main>
       {crm ? <ServiceWorkerRegister /> : null}
     </>
   );

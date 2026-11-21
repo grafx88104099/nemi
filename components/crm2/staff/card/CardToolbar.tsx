@@ -39,6 +39,7 @@ export function CardToolbar({
   agentOptions,
   settings,
   offer,
+  autoCall = false,
 }: {
   panel: Crm2Panel;
   propertyId: string;
@@ -52,10 +53,12 @@ export function CardToolbar({
   agentOptions: StaffOption[] | null;
   settings: DealUiSettings;
   offer: CallPrefill | null;
+  /** ?call=1 — утасны «Дуудлага» товчоор хөрөнгө сонгож ирсэн: дуудлагын цонх шууд нээгдэнэ. */
+  autoCall?: boolean;
 }) {
   const router = useRouter();
   const paths = crm2Paths(panel);
-  const [callOpen, setCallOpen] = React.useState(false);
+  const [callOpen, setCallOpen] = React.useState(autoCall && canWork);
   const [callPrefill, setCallPrefill] = React.useState<CallPrefill | null>(null);
   const [statusOpen, setStatusOpen] = React.useState(false);
   const [verifyOpen, setVerifyOpen] = React.useState(false);

@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { Building2, Plus, Sparkles, X } from "lucide-react";
+import { Building2, Phone, Plus, Sparkles, X } from "lucide-react";
 
 import { ButtonLink } from "@/components/ui/button";
 import { Crm2Empty, FilterPager, FilterProvider, LoadErrorState, NoAccessState, type FilterParams } from "@/components/crm2/ui";
-import { parseOfferParams } from "@/components/crm2/staff/card/logic";
+import { firstParam, parseOfferParams } from "@/components/crm2/staff/card/logic";
 import { getCrm2Context, getCrm2Settings } from "@/lib/crm2/context";
 import { categoryLabel, PROPERTY_CATEGORIES, PROPERTY_STATUS_LABEL } from "@/lib/crm2/labels";
 import { crm2Paths, type Crm2Panel } from "@/lib/crm2/paths";
@@ -81,6 +81,9 @@ export async function StaffListScreen({ panel, searchParams }: { panel: Crm2Pane
   const empty = EMPTY_TEXT[params.view];
   // Санал болгох горим: картын холбоос, цэвэрлэх холбоонд дамжуулна.
   const offerQuery = offer.contactId ? { offer_for: offer.contactId, origin: offer.originDealId } : undefined;
+  // «Дуудлага» горим (утасны доод цэснээс): хөрөнгөө сонгоход картын дуудлагын цонх шууд нээгдэнэ.
+  const callMode = !offerQuery && firstParam(searchParams.call) === "1";
+  const cardQuery = callMode ? { call: "1" } : offerQuery;
   const offerWho = offerContact ? `${offerContact.code} ${offerContact.full_name}` : "Харилцагч";
   const openStatusText = openStatuses.map((s) => PROPERTY_STATUS_LABEL[s] ?? s).join(", ") || PROPERTY_STATUS_LABEL.active;
   const viewQuery = params.view !== "active" ? { view: params.view } : undefined;
@@ -112,6 +115,22 @@ export async function StaffListScreen({ panel, searchParams }: { panel: Crm2Pane
           <Link
             href={p.staff(viewQuery)}
             aria-label="Санал болгохыг болих"
+            className="flex size-11 shrink-0 items-center justify-center rounded-lg text-brand-700 hover:bg-brand-100 sm:size-9"
+          >
+            <X className="size-4" aria-hidden />
+          </Link>
+        </div>
+      ) : null}
+
+      {callMode ? (
+        <div className="mt-4 flex items-start justify-between gap-2 rounded-2xl border border-brand-200 bg-brand-50 p-3 text-sm text-brand-900">
+          <p className="flex min-w-0 items-start gap-1.5">
+            <Phone className="mt-0.5 size-4 shrink-0 text-brand-600" aria-hidden />
+            <span>Дуудлага ирсэн хөрөнгөө сонгоно уу (кодоор хайж болно) — дуудлагын цонх шууд нээгдэнэ.</span>
+          </p>
+          <Link
+            href={p.staff(viewQuery)}
+            aria-label="Дуудлага бүртгэхийг болих"
             className="flex size-11 shrink-0 items-center justify-center rounded-lg text-brand-700 hover:bg-brand-100 sm:size-9"
           >
             <X className="size-4" aria-hidden />
@@ -176,7 +195,7 @@ export async function StaffListScreen({ panel, searchParams }: { panel: Crm2Pane
                 <li key={item.id} className="min-w-0">
                   <StaffPropertyCard
                     item={item}
-                    href={p.property(item.id, undefined, offerQuery)}
+                    href={p.property(item.id, undefined, cardQuery)}
                     categoryLabels={categoryLabels}
                     typeLabels={settings["property.types"]}
                     names={names}

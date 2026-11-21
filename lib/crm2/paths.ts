@@ -96,14 +96,33 @@ export const CRM2_MENU_LABEL: Record<Crm2MenuKey, string> = {
 };
 
 /**
+ * Ажиллаж буй хэсэг. «Санхүү», «Тайлан» одоогоор зөвхөн «удахгүй» гэсэн түр
+ * хуудас тул цэснээс нуусан — цэсний тал нь хоосон хуудас руу хөтөлж агентыг
+ * төөрөгдүүлж байв. Хэсгийг хийж дуусгахад энд true болгоно (зам нь хэвээр).
+ */
+export const CRM2_SECTION_READY: Record<Crm2MenuKey, boolean> = {
+  staff: true,
+  contacts: true,
+  myWork: true,
+  waitlist: true,
+  finance: false,
+  reports: false,
+  settings: true,
+};
+
+/**
  * Үндсэн цэс (зурагны дарааллаар). Санхүү, Тайлан, Тохиргоо — эрхээр:
  * санхүү = санхүүгийн эрх эсвэл менежер; тайлан = ахлагч, менежер, санхүү;
  * тохиргоо = оффисын панелд тохиргоо удирдах эрхтэн, агентын панелд хувийн тохиргоо (бүгд).
  */
-export function crm2MenuItems(panel: Crm2Panel, ctx: Crm2Context | null): Crm2MenuItem[] {
+export function crm2MenuItems(
+  panel: Crm2Panel,
+  ctx: Crm2Context | null,
+  ready: Record<Crm2MenuKey, boolean> = CRM2_SECTION_READY
+): Crm2MenuItem[] {
   const p = crm2Paths(panel);
   if (!ctx?.isMember) return [];
-  const show: Record<Crm2MenuKey, boolean> = {
+  const allowed: Record<Crm2MenuKey, boolean> = {
     staff: true,
     contacts: true,
     myWork: true,
@@ -112,6 +131,7 @@ export function crm2MenuItems(panel: Crm2Panel, ctx: Crm2Context | null): Crm2Me
     reports: ctx.isTeamLead || ctx.isManager || ctx.hasFinance,
     settings: panel === "agent" ? true : ctx.canManageSettings || ctx.isManager,
   };
+  const show = (k: Crm2MenuKey) => allowed[k] && ready[k];
   const href: Record<Crm2MenuKey, string> = {
     staff: p.staff(),
     contacts: p.contacts(),
@@ -122,6 +142,6 @@ export function crm2MenuItems(panel: Crm2Panel, ctx: Crm2Context | null): Crm2Me
     settings: p.settings(),
   };
   return (Object.keys(CRM2_MENU_LABEL) as Crm2MenuKey[])
-    .filter((k) => show[k])
+    .filter(show)
     .map((key) => ({ key, label: CRM2_MENU_LABEL[key], href: href[key] }));
 }

@@ -85,6 +85,21 @@ export async function getOfficeTasks(filters: TaskFilters = {}): Promise<TaskRow
   return (await fetchTasks(filters)).rows;
 }
 
+/**
+ * «Миний ажил»-д: надад хариуцуулсан эсвэл оролцогчоор орсон, дуусаагүй
+ * оффисын даалгавар. Оффис админд RLS бүгдийг нээдэг тул хувийн байлгахын
+ * тулд үүргээр нь шүүнэ.
+ */
+export async function getMyActiveTasks(): Promise<TaskRow[]> {
+  const { rows, uid } = await fetchTasks({});
+  if (!uid) return [];
+  return rows.filter(
+    (t) =>
+      t.status !== "completed" &&
+      (t.responsible_id === uid || t.members.some((m) => m.profile_id === uid && m.role === "participant"))
+  );
+}
+
 /** Агентын даалгаврууд (RLS зөвхөн гишүүн даалгаврыг буцаана). */
 export async function getMyTasks(filters: TaskFilters = {}): Promise<TaskRow[]> {
   return (await fetchTasks(filters)).rows;

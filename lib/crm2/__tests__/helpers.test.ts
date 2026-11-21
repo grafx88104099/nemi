@@ -123,13 +123,30 @@ describe("paths", () => {
       "Хүлээлгийн үйлчлүүлэгч",
       "Тохиргоо",
     ]);
-    expect(crm2MenuItems("office", { ...base, isManager: true }).map((m) => m.key)).toEqual([
+    // Эрхийн логик (бүх хэсэг бэлэн гэж үзвэл): менежерт бүгд.
+    const allReady = { staff: true, contacts: true, myWork: true, waitlist: true, finance: true, reports: true, settings: true };
+    expect(crm2MenuItems("office", { ...base, isManager: true }, allReady).map((m) => m.key)).toEqual([
       "staff",
       "contacts",
       "myWork",
       "waitlist",
       "finance",
       "reports",
+      "settings",
+    ]);
+    // Санхүүгийн эрхтэнд санхүү+тайлан, ахлагчид зөвхөн тайлан.
+    expect(crm2MenuItems("office", { ...base, hasFinance: true }, allReady).map((m) => m.key)).toEqual(
+      expect.arrayContaining(["finance", "reports"])
+    );
+    const lead = crm2MenuItems("agent", { ...base, isTeamLead: true }, allReady).map((m) => m.key);
+    expect(lead).toContain("reports");
+    expect(lead).not.toContain("finance");
+    // Анхдагчаар «удахгүй» хэсэг нуугдана.
+    expect(crm2MenuItems("office", { ...base, isManager: true }).map((m) => m.key)).toEqual([
+      "staff",
+      "contacts",
+      "myWork",
+      "waitlist",
       "settings",
     ]);
     expect(crm2MenuItems("agent", { ...base, isMember: false })).toEqual([]);

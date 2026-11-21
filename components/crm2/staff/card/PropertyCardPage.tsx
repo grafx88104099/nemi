@@ -130,6 +130,7 @@ export async function PropertyCardPage({
           agentOptions={agentOptions}
           settings={ui}
           offer={offer ? { contact: offer.contact, origin: offer.origin ? { id: offer.origin.id, code: offer.origin.code } : null } : null}
+          autoCall={!offer && firstParam(searchParams.call) === "1"}
         />
         <PendingRequests requests={requests} me={me} />
         <CardTabsNav panel={panel} propertyId={p.id} active={tab} />
