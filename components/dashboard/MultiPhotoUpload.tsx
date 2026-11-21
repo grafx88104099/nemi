@@ -14,11 +14,14 @@ export function MultiPhotoUpload({
   value,
   onChange,
   watermark = null,
+  folder = "",
 }: {
   value: string[];
   onChange: (urls: string[]) => void;
   /** Оффис тамга асаасан бол зураг бүрд лого тамга дарж байж upload хийнэ. */
   watermark?: WatermarkConfig | null;
+  /** Хадгалах хавтас («owners/<uid>») — эзэн зөвхөн өөрийн хавтаст хуулна (storage бодлого). */
+  folder?: string;
 }) {
   const [stage, setStage] = useState<"idle" | "stamping" | "uploading">("idle");
   const uploading = stage !== "idle";
@@ -68,7 +71,7 @@ export function MultiPhotoUpload({
       ready.map(async (file, i) => {
         const raw = (file.name.split(".").pop() ?? "").toLowerCase();
         const ext = ALLOWED_EXT.includes(raw) ? raw : "jpg";
-        const path = `${Date.now()}-${i}-${Math.round(Math.random() * 1e6)}.${ext}`;
+        const path = `${folder ? `${folder}/` : ""}${Date.now()}-${i}-${Math.round(Math.random() * 1e6)}.${ext}`;
         const { error } = await supabase.storage.from("listings").upload(path, file);
         if (error) return { error: error.message, url: null as string | null };
         return { error: null, url: supabase.storage.from("listings").getPublicUrl(path).data.publicUrl };

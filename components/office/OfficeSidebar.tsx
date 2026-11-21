@@ -11,6 +11,7 @@ import {
   ExternalLink,
   FolderKanban,
   Home,
+  Inbox,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -36,6 +37,7 @@ const items = [
   { href: "/office/crm", label: "CRM", icon: Briefcase },
   { href: "/office/projects", label: "Төсөл", icon: FolderKanban },
   { href: "/office/listings", label: "Зарууд", icon: Home },
+  { href: "/office/owner-requests", label: "Зуучлуулах хүсэлт", icon: Inbox },
   { href: "/office/settings", label: "Тохиргоо", icon: Settings },
 ];
 

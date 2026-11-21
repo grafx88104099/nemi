@@ -29,11 +29,17 @@ export async function setUserRole(
 
 export async function setListingStatus(
   id: string,
-  status: "active" | "draft" | "review" | "sold"
+  status: "active" | "draft" | "review" | "sold",
+  /** Эзний зарыг буцаахад шалтгаан — эзэнд мэдэгдлээр очно. */
+  reviewNote?: string | null
 ) {
   const ctx = await requireAdmin();
   if ("error" in ctx) return ctx;
-  const { error } = await ctx.supabase.from("listings").update({ status }).eq("id", id);
+  const note = reviewNote?.trim().slice(0, 500) || null;
+  const { error } = await ctx.supabase
+    .from("listings")
+    .update(reviewNote === undefined ? { status } : { status, review_note: note })
+    .eq("id", id);
   if (error) return { error: error.message };
   revalidatePath("/admin/listings");
   return { ok: true };

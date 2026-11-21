@@ -9,7 +9,8 @@ import { RentMenu } from "@/components/layout/RentMenu";
 const nav: [string, string][] = [
   ["/listings?deal=sale", "Худалдах"],
   // Түрээс — RentMenu dropdown (доор)
-  ["/my-home", "Зарах"],
+  // Хөрөнгөө зарах: оффист зуучлуулах эсвэл өөрөө зар оруулах (үнэлгээний тооцоолуур тэндээс).
+  ["/sell", "Зарах"],
   ["/agents", "Агентууд"],
   ["/home-loans", "Зээл"],
   ["/ai", "AI"],

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { createListing, updateListing, type ListingInput } from "@/lib/actions/listings";
+import { createOwnerListing, updateOwnerListing } from "@/lib/actions/owner-listings";
 import { parseNumberText } from "@/lib/number-input";
 import { Button } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
@@ -18,16 +19,25 @@ import type { WatermarkConfig } from "@/lib/watermark";
 
 const TYPES = PROPERTY_TYPES;
 
+/**
+ * Зарын маягт. owner горим — энгийн хэрэглэгч өөрийн хөрөнгийг зарлана:
+ * холбоо барих нэр/утас (зар дээр харагдана), зураг өөрийн хавтаст, төлөв нь
+ * «Хянуулахаар илгээх» / «Ноорог» — нийтлэх эсэхийг админ шийднэ.
+ */
 export function ListingForm({
   id,
   initial,
   watermark = null,
+  owner,
 }: {
   id?: string;
   initial?: Partial<ListingInput>;
   watermark?: WatermarkConfig | null;
+  owner?: { uid: string; name: string; phone: string; reviewNote?: string | null };
 }) {
   const router = useRouter();
+  const [ownerName, setOwnerName] = useState(owner?.name ?? "");
+  const [ownerPhone, setOwnerPhone] = useState(owner?.phone ?? "");
   const [pending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [photos, setPhotos] = useState<string[]>(initial?.photos ?? []);
@@ -52,7 +62,11 @@ export function ListingForm({
     description: initial?.description ?? "",
     amenities: initial?.amenities ?? [],
     photos: [],
-    status: (initial?.status as ListingInput["status"]) ?? "active",
+    status: owner
+      ? initial?.status === "draft" || initial?.status === "sold"
+        ? (initial.status as ListingInput["status"])
+        : "review"
+      : ((initial?.status as ListingInput["status"]) ?? "active"),
     deal_type: (initial?.deal_type as DealType) ?? "sale",
     rent_advance_months: initial?.rent_advance_months ?? 1,
     rent_deposit_months: initial?.rent_deposit_months ?? 1,
@@ -107,14 +121,18 @@ export function ListingForm({
     const amenities = amenitiesText.split(",").map((s) => s.trim()).filter(Boolean);
     const area = areaNumOf(areaText); // бутархай, таслал дэмжих
     const payload = { ...f, amenities, area, photos };
+    if (owner && photos.length === 0) { setErr("Дор хаяж нэг зураг оруулна уу."); return; }
     startTransition(async () => {
-      const res = id ? await updateListing(id, payload) : await createListing(payload);
+      const ownerPayload = { ...payload, owner_name: ownerName, owner_phone: ownerPhone };
+      const res = owner
+        ? id ? await updateOwnerListing(id, ownerPayload) : await createOwnerListing(ownerPayload)
+        : id ? await updateListing(id, payload) : await createListing(payload);
       const failed = ("error" in res && res.error) || ("ok" in res && !res.ok);
       if (failed) {
         setErr(("error" in res && res.error) ? res.error : "Хадгалахад алдаа гарлаа.");
         return;
       }
-      router.push("/agent/listings");
+      router.push(owner ? "/my-listings" : "/agent/listings");
       router.refresh();
     });
   }
@@ -256,21 +274,59 @@ export function ListingForm({
       </Field>
 
       <Field label="Зураг (олон)">
-        <MultiPhotoUpload value={photos} onChange={setPhotos} watermark={watermark} />
+        <MultiPhotoUpload
+          value={photos}
+          onChange={setPhotos}
+          watermark={watermark}
+          folder={owner ? `owners/${owner.uid}` : ""}
+        />
       </Field>
 
-      <Field label="Төлөв">
-        <select className={sel} value={f.status} onChange={(e) => set("status", e.target.value as ListingInput["status"])}>
-          {LISTING_STATUS_OPTIONS.map((s) => (
-            <option key={s} value={s}>{LISTING_STATUS[s].label}</option>
-          ))}
-        </select>
-      </Field>
+      {owner ? (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Холбоо барих нэр">
+              <Input value={ownerName} onChange={(e) => setOwnerName(e.target.value)} maxLength={120} required autoComplete="name" />
+            </Field>
+            <Field label="Утасны дугаар" hint="Зар дээр харагдана — сонирхсон хүн тан руу шууд залгана.">
+              <Input value={ownerPhone} onChange={(e) => setOwnerPhone(e.target.value)} inputMode="tel" required autoComplete="tel" placeholder="9911 2233" />
+            </Field>
+          </div>
+          {owner.reviewNote ? (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              Хянагчийн тэмдэглэл: {owner.reviewNote}
+            </p>
+          ) : null}
+          <Field label="Илгээх">
+            <select className={sel} value={f.status} onChange={(e) => set("status", e.target.value as ListingInput["status"])}>
+              <option value="review">Нийтлүүлэхээр хянуулах</option>
+              <option value="draft">Ноорог болгон хадгалах</option>
+              {id ? <option value="sold">{f.deal_type === "rent" ? "Түрээслэгдсэн / зарагдсан" : "Зарагдсан"}</option> : null}
+            </select>
+          </Field>
+          <p className="text-xs text-muted">
+            Зар нийтэд гарахаас өмнө Нэми-ийн баг хянана (ихэвчлэн ажлын 1 өдөрт). Нийтлэгдсэн зарын үнэ, мэдээллийг
+            өөрчилбөл дахин хянагдана.
+          </p>
+        </>
+      ) : (
+        <Field label="Төлөв">
+          <select className={sel} value={f.status} onChange={(e) => set("status", e.target.value as ListingInput["status"])}>
+            {LISTING_STATUS_OPTIONS.map((s) => (
+              <option key={s} value={s}>{LISTING_STATUS[s].label}</option>
+            ))}
+          </select>
+        </Field>
+      )}
 
       {err && <p className="text-sm text-danger">{err}</p>}
       <div className="flex gap-3">
         <Button type="submit" disabled={pending}>
-          {pending ? "Хадгалж байна..." : id ? "Шинэчлэх" : "Зар нийтлэх"}
+          {pending
+            ? "Хадгалж байна..."
+            : owner
+              ? f.status === "review" ? "Хянуулахаар илгээх" : "Хадгалах"
+              : id ? "Шинэчлэх" : "Зар нийтлэх"}
         </Button>
         <Button type="button" variant="ghost" disabled={pending} onClick={() => router.back()}>Болих</Button>
       </div>

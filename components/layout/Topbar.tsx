@@ -37,8 +37,9 @@ export async function Topbar() {
         </Link>
         <NavLinks />
         <div className="ml-auto flex items-center gap-2">
+          {/* Агент → агентын самбар; бусад (худалдан авагч, зочин) → эзний «Хөрөнгөө зарлах». */}
           <ButtonLink
-            href="/agent/listings/new"
+            href={profile?.role === "agent" || profile?.role === "office_admin" ? "/agent/listings" : "/sell"}
             variant="ghost"
             size="sm"
             className="hidden lg:inline-flex"

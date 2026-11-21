@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { LayoutDashboard, Heart, Settings, LogOut, MessageCircle, Users } from "lucide-react";
+import { LayoutDashboard, Heart, Home, Settings, LogOut, MessageCircle, Users } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { Avatar } from "@/components/ui/avatar";
@@ -90,6 +90,11 @@ export function UserMenu({
           <MenuLink href="/favorites" icon={<Heart className="size-4" />}>
             Хадгалсан
           </MenuLink>
+          {!isAgent && !isOffice ? (
+            <MenuLink href="/my-listings" icon={<Home className="size-4" />}>
+              Миний зарууд
+            </MenuLink>
+          ) : null}
           <MenuLink href="/account" icon={<Settings className="size-4" />}>
             Миний профайл
           </MenuLink>
