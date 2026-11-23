@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ShieldCheck, Star, Sparkles, Phone, Clock } from "lucide-react";
@@ -8,6 +9,16 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { ListingCard } from "@/components/listings/ListingCard";
 import { StartAgentChatButton } from "@/components/chat/StartAgentChatButton";
+import { getAgentSeo } from "@/lib/queries-seo";
+import { agentMetaFor } from "@/lib/seo/profiles";
+import { isUuid } from "@/lib/seo/site";
+
+/** Нийтийн client-ээр (утас/profile_id-гүй). DB алдааг барихгүй. */
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  if (!isUuid(id)) return agentMetaFor(id, null);
+  return agentMetaFor(id, await getAgentSeo(id));
+}
 
 export default async function AgentProfilePage({
   params,

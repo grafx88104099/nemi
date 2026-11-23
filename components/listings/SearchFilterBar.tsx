@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { X } from "lucide-react";
 
+import { SmartSearchInput } from "@/components/search/SmartSearchInput";
 import { DISTRICTS, PROPERTY_TYPES } from "@/lib/constants";
 import {
   DEAL_TABS,
@@ -19,6 +20,9 @@ const field =
  * Нийтийн зарын шүүлтийн самбар — жагсаалт ба газрын зураг хоёулаа ашиглана.
  * JS-гүй GET маягт: Түрээс/Худалдах таб нь холбоос, маягт нь `deal`-ийг
  * далд талбараар хадгална (өмнө нь шүүх дарахад алга болдог байв).
+ *
+ * Маягт нь каноник href-ээрээ key-тэй: чип, таб, ухаалаг хайлтын redirect зэрэг
+ * клиент навигацийн дараа удирдлагагүй талбар бүр шинэ анхдагч утгаар дахин үүснэ.
  */
 export function SearchFilterBar({
   base,
@@ -33,6 +37,8 @@ export function SearchFilterBar({
   aiSort?: boolean;
 }) {
   const chips = activeFilterChips(base, f);
+  // URL/задалсан «7 өрөө» гэх мэт 5-аас их утга дахин илгээхэд алга болохгүй.
+  const roomOpts = f.rooms && f.rooms > 5 ? [1, 2, 3, 4, 5, f.rooms] : [1, 2, 3, 4, 5];
   const sorts = SORT_OPTIONS.filter(([v]) => v !== "ai" || aiSort || f.sort === "ai");
 
   return (
@@ -58,16 +64,17 @@ export function SearchFilterBar({
       </nav>
 
       <form
+        key={filtersHref(base, f, { withSort: true })}
         action={base}
         className="grid grid-cols-2 gap-3 rounded-2xl border border-line bg-surface p-4 shadow-sm md:grid-cols-4 lg:grid-cols-6"
       >
         {f.deal ? <input type="hidden" name="deal" value={f.deal} /> : null}
-        <input
-          name="q"
+        <SmartSearchInput
           defaultValue={f.q ?? ""}
-          placeholder="Гарчгаар хайх..."
-          aria-label="Гарчгаар хайх"
-          className={cn(field, "col-span-2")}
+          placeholder="Зайсан 2 өрөө, 300 сая хүртэл…"
+          ariaLabel="Хайх"
+          className="col-span-2"
+          inputClassName="h-11 rounded-lg"
         />
         <select name="district" defaultValue={f.district ?? ""} aria-label="Дүүрэг" className={field}>
           <option value="">Бүх дүүрэг</option>
@@ -79,7 +86,7 @@ export function SearchFilterBar({
         </select>
         <select name="rooms" defaultValue={f.rooms ? String(f.rooms) : ""} aria-label="Өрөө" className={field}>
           <option value="">Өрөө</option>
-          {[1, 2, 3, 4, 5].map((r) => <option key={r} value={r}>{r}+ өрөө</option>)}
+          {roomOpts.map((r) => <option key={r} value={r}>{r}+ өрөө</option>)}
         </select>
         <select name="posted" defaultValue={f.posted ? String(f.posted) : ""} aria-label="Нийтэлсэн хугацаа" className={field}>
           <option value="">Бүх хугацаа</option>

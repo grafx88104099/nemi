@@ -5,8 +5,15 @@
  * мэдэгдэл (cron) хоёр тусдаа давхардуулан бичсэн байсан ба зөрсөн —
  * мэдэгдэл Түрээс/Худалдахыг огт тоодоггүй, жагсаалтын маягт `deal`-ийг
  * алддаг байв. Одоо жагсаалт, газрын зураг, мэдэгдэл бүгд эндээс авна.
+ *
+ * Чөлөөт текст (q) нь гарчгаар биш listings.search_text-ээр (латин→кирилл
+ * нугалсан, нийтийн талбараас триггерээр бүтсэн) хайгдана — газрын зургийн
+ * listings_map_search(p_q_groups)-тэй ИЖИЛ хэв маяг (lib/search/query.ts).
  */
 import { shortMNT } from "@/lib/format";
+import { likeAnyFilter, searchPatternGroups } from "@/lib/search/query";
+
+export { escapeLike } from "@/lib/search/query";
 
 export type ListingDeal = "sale" | "rent";
 export type ListingSort = "new" | "price_asc" | "price_desc" | "ai";
@@ -145,17 +152,13 @@ export function activeFilterChips(base: string, f: ListingFilters): FilterChip[]
   return chips;
 }
 
-/** ILIKE-ийн % _ \ тэмдгийг үсэг болгоно («50%» гэж хайхад бүгдийг олохгүй). */
-export function escapeLike(s: string): string {
-  return s.replace(/[\\%_]/g, (m) => `\\${m}`);
-}
-
 /** Шүүлтийг хүлээж авах асуулгын хамгийн бага хэлбэр (PostgREST builder). */
 export interface FilterableQuery<T> {
   eq(column: string, value: unknown): T;
   gte(column: string, value: unknown): T;
   lte(column: string, value: unknown): T;
-  ilike(column: string, pattern: string): T;
+  like(column: string, pattern: string): T;
+  or(filters: string): T;
 }
 
 /**
@@ -168,7 +171,13 @@ export function applyListingFilters<T extends FilterableQuery<T>>(
   opts: { now?: number; ignorePosted?: boolean } = {}
 ): T {
   let q = query;
-  if (f.q) q = q.ilike("title", `%${escapeLike(f.q)}%`);
+  // Үг бүр (AND) тусдаа параметр болно — PostgREST давтагдсан or= ба баганын
+  // шүүлтийг AND-аар нэгтгэдэг. Зөвхөн дүүргэгч үгтэй q текст шүүлт нэмэхгүй.
+  if (f.q) {
+    for (const g of searchPatternGroups(f.q)) {
+      q = g.length === 1 ? q.like("search_text", g[0]) : q.or(likeAnyFilter("search_text", g));
+    }
+  }
   if (f.deal) q = q.eq("deal_type", f.deal);
   if (f.district) q = q.eq("district", f.district);
   if (f.type) q = q.eq("type", f.type);

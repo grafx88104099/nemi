@@ -15,7 +15,8 @@ class FakeQuery implements FilterableQuery<FakeQuery> {
   eq(c: string, v: unknown) { this.calls.push(["eq", c, v]); return this; }
   gte(c: string, v: unknown) { this.calls.push(["gte", c, v]); return this; }
   lte(c: string, v: unknown) { this.calls.push(["lte", c, v]); return this; }
-  ilike(c: string, v: string) { this.calls.push(["ilike", c, v]); return this; }
+  like(c: string, v: string) { this.calls.push(["like", c, v]); return this; }
+  or(v: string) { this.calls.push(["or", "", v]); return this; }
 }
 
 describe("parseListingFilters", () => {
@@ -92,7 +93,31 @@ describe("applyListingFilters", () => {
 
   it("хайлтын % _ тэмдгийг үсэг болгоно", () => {
     expect(escapeLike("50%_off\\")).toBe("50\\%\\_off\\\\");
+    // Нугалалт % _ \-ийг хасдаг тул хэв маягт хэзээ ч орохгүй.
     const q = applyListingFilters(new FakeQuery(), parseListingFilters({ q: "100%" }));
-    expect(q.calls).toEqual([["ilike", "title", "%100\\%%"]]);
+    expect(q.calls).toEqual([["like", "search_text", "% 100%"]]);
+  });
+
+  it("q-г search_text-ээр, латин бичлэгийг кирилл болгож хайна", () => {
+    const q = applyListingFilters(new FakeQuery(), parseListingFilters({ q: "zaisan" }));
+    expect(q.calls).toEqual([["like", "search_text", "%заисан%"]]);
+  });
+
+  it("хоёрдмол латин үсэг нэг or= бүлэг болно", () => {
+    const q = applyListingFilters(new FakeQuery(), parseListingFilters({ q: "uruu" }));
+    expect(q.calls).toHaveLength(1);
+    const [op, , v] = q.calls[0];
+    expect(op).toBe("or");
+    expect(v).toContain('search_text.like."%уру%"');
+    expect(v).toContain('search_text.like."%оро%"');
+  });
+
+  it("дүүргэгч үгс хасагдана", () => {
+    const q = applyListingFilters(new FakeQuery(), parseListingFilters({ q: "зайсан байр хайж байна" }));
+    expect(q.calls).toEqual([
+      ["like", "search_text", "%заисан%"],
+      ["like", "search_text", "%баир%"],
+    ]);
+    expect(applyListingFilters(new FakeQuery(), parseListingFilters({ q: "байна" })).calls).toEqual([]);
   });
 });

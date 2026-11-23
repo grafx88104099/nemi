@@ -1,9 +1,38 @@
+import type { Metadata } from "next";
+import { Suspense } from "react";
 import Link from "next/link";
 import { Search, ShieldCheck, Sparkles, TrendingUp, ArrowRight, Home as HomeIcon, Tag, KeyRound } from "lucide-react";
 
 import { getFeaturedListings, getLatestListings } from "@/lib/queries";
 import { ListingCard } from "@/components/listings/ListingCard";
+import { HomeRecentlyViewed } from "@/components/home/HomeRecentlyViewed";
+import { SmartSearchInput } from "@/components/search/SmartSearchInput";
 import { PROPERTY_TYPES } from "@/lib/constants";
+import { absUrl, jsonLdHtml, SITE_NAME } from "@/lib/seo/site";
+
+// Гарчиг, тайлбар, OG-г root layout-оос өвлөнө.
+export const metadata: Metadata = { alternates: { canonical: "/" } };
+
+const HOME_JSON_LD = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": absUrl("/#org"),
+      name: SITE_NAME,
+      url: absUrl("/"),
+      logo: absUrl("/icons/icon-512.png"),
+    },
+    {
+      "@type": "WebSite",
+      "@id": absUrl("/#website"),
+      name: SITE_NAME,
+      url: absUrl("/"),
+      inLanguage: "mn",
+      publisher: { "@id": absUrl("/#org") },
+    },
+  ],
+};
 
 export default async function Home() {
   // Кэш хоосон үед DB алдаа гарвал нүүр хуудас унахгүй — тухайн хэсэг л нуугдана.
@@ -18,6 +47,7 @@ export default async function Home() {
 
   return (
     <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(HOME_JSON_LD) }} />
       {/* Hero */}
       <section className="bg-gradient-to-b from-brand-50 to-bg">
         <div className="mx-auto max-w-5xl px-4 py-20 text-center">
@@ -37,10 +67,11 @@ export default async function Home() {
             className="mx-auto mt-8 flex max-w-2xl items-center gap-2 rounded-2xl bg-surface p-2 shadow-lg"
           >
             <Search className="ml-2 size-5 text-subtle" />
-            <input
-              name="q"
-              placeholder="Дүүрэг, хороолол, зарын нэрээр хайх..."
-              className="h-11 flex-1 bg-transparent text-sm text-ink placeholder:text-subtle focus:outline-none"
+            <SmartSearchInput
+              placeholder="Дүүрэг, хороолол, «2 өрөө 300 сая хүртэл»…"
+              ariaLabel="Зар хайх"
+              className="min-w-0 flex-1 text-left"
+              inputClassName="h-11 border-0 bg-transparent px-1 focus:ring-0"
             />
             <button
               type="submit"
@@ -106,6 +137,11 @@ export default async function Home() {
           ))}
         </div>
       </section>
+
+      {/* Нэвтэрсэн хэрэглэгчийн сүүлд үзсэн зарууд — hero-г хориглохгүй (Suspense). */}
+      <Suspense fallback={null}>
+        <HomeRecentlyViewed />
+      </Suspense>
 
       {/* Онцлох зарууд — PMC-ийн хамгийн сүүлийн 10 зар, эргэлддэг (lib/queries getFeaturedListings). Хоосон бол харуулахгүй. */}
       {featured.length > 0 && (

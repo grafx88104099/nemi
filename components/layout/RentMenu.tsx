@@ -6,13 +6,13 @@ import { ChevronDown, Search, Building2, Home, Calculator, Calendar, Heart, Bell
 
 import { cn } from "@/lib/utils";
 
-const searchLinks = [
+export const RENT_SEARCH_LINKS = [
   { href: "/listings?deal=rent&type=Орон+сууц", icon: Building2, label: "Орон сууц түрээс" },
   { href: "/listings?deal=rent&type=Хаус", icon: Home, label: "Хаус түрээс" },
   { href: "/listings?deal=rent", icon: Search, label: "Бүх түрээсийн зар" },
 ];
 
-const toolLinks = [
+export const RENT_TOOL_LINKS = [
   { href: "/rent/afford", icon: Calculator, label: "Хэдийг чадахаа тооцоол" },
   { href: "/tours", icon: Calendar, label: "Миний үзлэгүүд" },
   { href: "/favorites", icon: Heart, label: "Хадгалсан зар" },
@@ -47,7 +47,7 @@ export function RentMenu() {
             <div>
               <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-subtle">Түрээс хайх</h4>
               <div className="space-y-0.5">
-                {searchLinks.map((l) => (
+                {RENT_SEARCH_LINKS.map((l) => (
                   <Link key={l.href} href={l.href} onClick={() => setOpen(false)} className="flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm text-ink hover:bg-surface-2">
                     <l.icon className="size-4 text-brand-600" /> {l.label}
                   </Link>
@@ -57,7 +57,7 @@ export function RentMenu() {
             <div>
               <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-subtle">Түрээслэгчийн хэрэгсэл</h4>
               <div className="space-y-0.5">
-                {toolLinks.map((l) => (
+                {RENT_TOOL_LINKS.map((l) => (
                   <Link key={l.href} href={l.href} onClick={() => setOpen(false)} className="flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm text-ink hover:bg-surface-2">
                     <l.icon className="size-4 text-brand-600" /> {l.label}
                   </Link>

@@ -8,13 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { LoginPrompt } from "@/components/auth/LoginPrompt";
 import { fmtMNT } from "@/lib/format";
 import { BackLink } from "@/components/ui/back-link";
-
-const STATUS: Record<string, { label: string; tone: "amber" | "green" | "neutral" | "rose" }> = {
-  pending: { label: "Хүлээгдэж буй", tone: "amber" },
-  confirmed: { label: "Баталгаажсан", tone: "green" },
-  done: { label: "Болсон", tone: "neutral" },
-  cancelled: { label: "Цуцалсан", tone: "rose" },
-};
+import { VIEWING_STATUS } from "@/lib/constants";
 
 export default async function ToursPage() {
   const supabase = await createClient();
@@ -55,7 +49,7 @@ export default async function ToursPage() {
                     {v.agent && <span>· {v.agent.display_name}</span>}
                   </div>
                 </div>
-                <Badge tone={STATUS[v.status]?.tone ?? "neutral"}>{STATUS[v.status]?.label ?? v.status}</Badge>
+                <Badge tone={VIEWING_STATUS[v.status]?.tone ?? "neutral"}>{VIEWING_STATUS[v.status]?.label ?? v.status}</Badge>
               </CardBody>
             </Card>
           ))}

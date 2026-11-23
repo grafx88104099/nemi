@@ -6,6 +6,7 @@ import { MessageCircle } from "lucide-react";
 
 import { startAgentChat } from "@/lib/actions/chat";
 import { Button } from "@/components/ui/button";
+import { currentPath, loginHref } from "@/lib/nav";
 
 export function StartAgentChatButton({ agentId }: { agentId: string }) {
   const [pending, startTransition] = useTransition();
@@ -15,7 +16,7 @@ export function StartAgentChatButton({ agentId }: { agentId: string }) {
     startTransition(async () => {
       const res = await startAgentChat(agentId);
       if (res.error === "auth") {
-        router.push("/login?next=" + encodeURIComponent(window.location.pathname));
+        router.push(loginHref(currentPath()));
         return;
       }
       if (res.id) router.push(`/messages?c=${res.id}`);

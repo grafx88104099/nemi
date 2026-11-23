@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { readAttributionColumns } from "@/lib/attribution-server";
+import { conversationLink } from "@/lib/hub";
 
 /** Зар дээрх агенттай харилцаа эхлүүлэх (байгаа бол буцаана). */
 export async function startConversation(listingId: string): Promise<{ id?: string; error?: string }> {
@@ -36,6 +38,7 @@ export async function startConversation(listingId: string): Promise<{ id?: strin
       listing_id: listingId,
       agent_id: listing.agent_id,
       last_message_at: new Date().toISOString(),
+      ...(await readAttributionColumns()),
     })
     .select("id")
     .single();
@@ -62,7 +65,12 @@ export async function startAgentChat(agentId: string): Promise<{ id?: string; er
 
   const { data, error } = await supabase
     .from("conversations")
-    .insert({ buyer_id: user.id, agent_id: agentId, last_message_at: new Date().toISOString() })
+    .insert({
+      buyer_id: user.id,
+      agent_id: agentId,
+      last_message_at: new Date().toISOString(),
+      ...(await readAttributionColumns()),
+    })
     .select("id")
     .single();
   if (error) return { error: error.message };
@@ -107,7 +115,7 @@ export async function sendMessage(conversationId: string, body: string): Promise
         type: "message",
         title: "Шинэ мессеж",
         body: text.slice(0, 120),
-        link: `/messages?c=${conversationId}`,
+        link: conversationLink(conversationId),
       });
     }
   } catch {

@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getFavoriteListings } from "@/lib/queries-user";
 import { ListingCard } from "@/components/listings/ListingCard";
-import { LoginPrompt } from "@/components/auth/LoginPrompt";
+import { GuestFavoritesList } from "@/components/listings/GuestFavoritesList";
 import { BackLink } from "@/components/ui/back-link";
 
 export default async function FavoritesPage() {
@@ -9,8 +9,15 @@ export default async function FavoritesPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  // Нэвтрээгүй: энэ төхөөрөмж дээр (localStorage) хадгалсан зарууд.
   if (!user)
-    return <LoginPrompt desc="Хадгалсан зараа харахын тулд нэвтэрнэ үү." next="/favorites" />;
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-8">
+        <BackLink href="/listings" label="Зар руу буцах" />
+        <h1 className="text-2xl font-extrabold text-ink">Хадгалсан зар</h1>
+        <GuestFavoritesList />
+      </div>
+    );
 
   const listings = await getFavoriteListings();
 

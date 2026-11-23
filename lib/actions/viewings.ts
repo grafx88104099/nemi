@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { readAttributionColumns } from "@/lib/attribution-server";
 
 /** Зар үзсэнийг тэмдэглэх (recently_viewed upsert). Нэвтрээгүй бол алгасна. */
 export async function recordView(listingId: string) {
@@ -37,6 +38,7 @@ export async function bookViewing(
     buyer_id: user.id,
     scheduled_at: scheduledAt,
     status: "pending",
+    ...(await readAttributionColumns()),
   });
   if (error) return { ok: false, error: error.message };
   // Агентад DB trigger (viewings_notify_agent) мэдэгдэнэ.

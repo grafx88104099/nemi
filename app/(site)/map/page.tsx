@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { List } from "lucide-react";
 
 import { ListingsMap } from "@/components/map/ListingsMap";
 import { SearchFilterBar } from "@/components/listings/SearchFilterBar";
 import { filtersHref, parseListingFilters, type ListingFilters } from "@/lib/listing-filters";
+import { applySmartQuery } from "@/lib/search/parse-query";
 
 export const metadata = { title: "Газрын зураг — Нэми" };
 
@@ -13,6 +15,9 @@ export default async function MapPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const filters = parseListingFilters(await searchParams);
+  // Жагсаалттай ижил каноник redirect (задалсан утга чип болно).
+  const smart = applySmartQuery(filters);
+  if (smart.changed) redirect(filtersHref("/map", smart.filters));
   // Клиент компонент руу зөвхөн шүүлтийн утгууд (хуудас, эрэмбэ газрын зурагт хамаагүй).
   const mapFilters: ListingFilters = { ...filters, page: undefined, sort: undefined, pageSize: undefined };
 

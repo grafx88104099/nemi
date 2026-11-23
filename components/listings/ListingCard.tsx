@@ -6,6 +6,7 @@ import { fmtMNT, relativeDate, isFresh } from "@/lib/format";
 import { rentTermCode } from "@/lib/constants";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { CardSaveButton } from "@/components/listings/CardSaveButton";
 
 export type ListingCardData = {
   id: string;
@@ -34,96 +35,102 @@ export type ListingCardData = {
   } | null;
 };
 
-export function ListingCard({ l }: { l: ListingCardData }) {
+/**
+ * Зарын карт. Hook-гүй (сервер хуудас ба GuestFavoritesList (клиент) хоёулаа зурна).
+ * Зүрх (CardSaveButton) нь <Link>-ийн хажууд (sibling) — <a> дотор <button> үүрлэхгүй.
+ * Фокусын хүрээ контейнер дээр (has-[a:focus-visible]) — overflow-hidden таслахгүй.
+ */
+export function ListingCard({ l, saveable = true }: { l: ListingCardData; saveable?: boolean }) {
   return (
-    <Link
-      href={`/listings/${l.id}`}
-      className="group block overflow-hidden rounded-2xl border border-line bg-surface shadow-sm transition hover:shadow-md"
-    >
-      <div className="relative aspect-[4/3] overflow-hidden bg-surface-2">
-        {l.photo && (
-          <Image
-            src={l.photo}
-            alt={l.title}
-            fill
-            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
-            className="object-cover transition duration-300 group-hover:scale-105"
-          />
-        )}
-        <div className="absolute left-3 top-3">
-          {l.hot ? (
-            <Badge tone="rose">
-              <Flame /> Эрэлттэй
-            </Badge>
-          ) : l.verified ? (
-            <Badge tone="green">
-              <ShieldCheck /> Баталгаатай
-            </Badge>
-          ) : null}
-        </div>
-        {l.created_at && isFresh(l.created_at) && (
-          <div className="absolute right-3 top-3">
-            <Badge tone="brand">
-              <Sparkles /> Шинэ
-            </Badge>
+    <div className="group relative overflow-hidden rounded-2xl border border-line bg-surface shadow-sm transition hover:shadow-md has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-brand-500">
+      <Link href={`/listings/${l.id}`} className="block focus-visible:outline-none">
+        <div className="relative aspect-[4/3] overflow-hidden bg-surface-2">
+          {l.photo && (
+            <Image
+              src={l.photo}
+              alt={l.title}
+              fill
+              sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
+              className="object-cover transition duration-300 group-hover:scale-105"
+            />
+          )}
+          {/* Баруун дээд булан зүрхэнд — бүх тэмдэг зүүн талд. */}
+          <div className={`absolute left-3 top-3 flex flex-wrap gap-1.5 ${saveable ? "right-16" : "right-3"}`}>
+            {l.hot ? (
+              <Badge tone="rose">
+                <Flame /> Эрэлттэй
+              </Badge>
+            ) : l.verified ? (
+              <Badge tone="green">
+                <ShieldCheck /> Баталгаатай
+              </Badge>
+            ) : null}
+            {l.created_at && isFresh(l.created_at) && (
+              <Badge tone="brand">
+                <Sparkles /> Шинэ
+              </Badge>
+            )}
           </div>
-        )}
-      </div>
-      <div className="space-y-2 p-4">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-lg font-extrabold text-ink">
-            <span>
-              {fmtMNT(l.price)}
-              {l.deal_type === "rent" && <span className="text-sm font-medium text-muted">/сар</span>}
-            </span>
-            {l.deal_type === "rent" && l.rent_advance_months != null && l.rent_deposit_months != null && (
-              <span className="rounded-md bg-surface-2 px-1.5 py-0.5 text-xs font-semibold text-muted">
-                {rentTermCode(l.rent_advance_months, l.rent_deposit_months)}
+        </div>
+        <div className="space-y-2 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-lg font-extrabold text-ink">
+              <span>
+                {fmtMNT(l.price)}
+                {l.deal_type === "rent" && <span className="text-sm font-medium text-muted">/сар</span>}
+              </span>
+              {l.deal_type === "rent" && l.rent_advance_months != null && l.rent_deposit_months != null && (
+                <span className="rounded-md bg-surface-2 px-1.5 py-0.5 text-xs font-semibold text-muted">
+                  {rentTermCode(l.rent_advance_months, l.rent_deposit_months)}
+                </span>
+              )}
+            </div>
+            {l.ai_score != null && (
+              <span
+                title="AI чанарын оноо"
+                className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-bold text-brand-700"
+              >
+                <Star className="size-3 fill-current" /> {l.ai_score}
               </span>
             )}
           </div>
-          {l.ai_score != null && (
-            <span
-              title="AI чанарын оноо"
-              className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-bold text-brand-700"
-            >
-              <Star className="size-3 fill-current" /> {l.ai_score}
-            </span>
+          <div className="line-clamp-1 font-semibold text-ink">{l.title}</div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted">
+            {l.rooms > 0 && <span>{l.rooms} өрөө</span>}
+            {l.area != null && <span>{l.area} м²</span>}
+            {l.floor && l.floor !== "-" && <span>{l.floor}</span>}
+            {l.district && <span>{l.district}</span>}
+          </div>
+          {!l.agent && l.owner_name ? (
+            <div className="flex items-center gap-2 border-t border-line pt-2.5 text-sm">
+              <span className="truncate font-medium text-ink">{l.owner_name}</span>
+              <span className="shrink-0 text-xs text-muted">· эзнээс шууд</span>
+            </div>
+          ) : null}
+          {l.agent && (
+            <div className="flex items-center gap-2 border-t border-line pt-2.5">
+              <Avatar
+                initials={l.agent.avatar ?? "NA"}
+                src={l.agent.avatar_url}
+                size="sm"
+                color={l.agent.office?.color ?? "#C2410C"}
+              />
+              <span className="flex-1 truncate text-sm font-medium text-ink">
+                {l.agent.display_name}
+              </span>
+              {l.agent.verified && <ShieldCheck className="size-4 text-emerald-600" />}
+            </div>
+          )}
+          {l.created_at && (
+            <div className="flex items-center gap-1 text-xs text-muted">
+              <Clock className="size-3" /> {relativeDate(l.created_at)} нийтэлсэн
+            </div>
           )}
         </div>
-        <div className="line-clamp-1 font-semibold text-ink">{l.title}</div>
-        <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted">
-          {l.rooms > 0 && <span>{l.rooms} өрөө</span>}
-          {l.area != null && <span>{l.area} м²</span>}
-          {l.floor && l.floor !== "-" && <span>{l.floor}</span>}
-          {l.district && <span>{l.district}</span>}
-        </div>
-        {!l.agent && l.owner_name ? (
-          <div className="flex items-center gap-2 border-t border-line pt-2.5 text-sm">
-            <span className="truncate font-medium text-ink">{l.owner_name}</span>
-            <span className="shrink-0 text-xs text-muted">· эзнээс шууд</span>
-          </div>
-        ) : null}
-        {l.agent && (
-          <div className="flex items-center gap-2 border-t border-line pt-2.5">
-            <Avatar
-              initials={l.agent.avatar ?? "NA"}
-              src={l.agent.avatar_url}
-              size="sm"
-              color={l.agent.office?.color ?? "#C2410C"}
-            />
-            <span className="flex-1 truncate text-sm font-medium text-ink">
-              {l.agent.display_name}
-            </span>
-            {l.agent.verified && <ShieldCheck className="size-4 text-emerald-600" />}
-          </div>
-        )}
-        {l.created_at && (
-          <div className="flex items-center gap-1 text-xs text-muted">
-            <Clock className="size-3" /> {relativeDate(l.created_at)} нийтэлсэн
-          </div>
-        )}
-      </div>
-    </Link>
+      </Link>
+      {saveable ? (
+        <CardSaveButton listingId={l.id} title={l.title} className="absolute right-3 top-3 z-10" />
+      ) : null}
+    </div>
   );
 }

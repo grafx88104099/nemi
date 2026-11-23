@@ -26,6 +26,8 @@ export type Database = {
           email: string | null;
           role: Database["public"]["Enums"]["user_role"];
           office_id: string | null;
+          /** 20261123000400_phone_login: зөвхөн service role тогтооно (guard trigger). */
+          phone_verified_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -36,6 +38,7 @@ export type Database = {
           email?: string | null;
           role?: Database["public"]["Enums"]["user_role"];
           office_id?: string | null;
+          phone_verified_at?: string | null;
           created_at?: string;
         };
         Update: {
@@ -46,6 +49,7 @@ export type Database = {
           email?: string | null;
           role?: Database["public"]["Enums"]["user_role"];
           office_id?: string | null;
+          phone_verified_at?: string | null;
           created_at?: string;
         };
         Relationships: [];
@@ -221,6 +225,10 @@ export type Database = {
           owner_name: string | null;
           owner_phone: string | null;
           review_note: string | null;
+          /** 20261123000200_listing_closed_public: active → sold/rented үед trigger listings_set_closed_at тогтооно. */
+          closed_at: string | null;
+          /** 20261123000300_listings_search_text: trigger listings_search_text эзэмшинэ (Insert/Update-д байхгүй). */
+          search_text: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -256,6 +264,8 @@ export type Database = {
           deal_type?: Database["public"]["Enums"]["deal_type"];
           rent_advance_months?: number | null;
           rent_deposit_months?: number | null;
+          /** Trigger listings_set_closed_at дарж бичнэ (клиентийн утгыг үл тооно). */
+          closed_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -280,6 +290,10 @@ export type Database = {
           status: "new" | "contacted" | "closed";
           handled_by: string | null;
           handled_at: string | null;
+          /** 20261123000500_listing_attribution: ^[a-z0-9_-]{1,40}$, үүсгэсний дараа хөлдөнө. */
+          utm_source: string | null;
+          utm_medium: string | null;
+          utm_campaign: string | null;
           created_at: string;
         };
         Insert: {
@@ -299,6 +313,9 @@ export type Database = {
           status?: "new" | "contacted" | "closed";
           handled_by?: string | null;
           handled_at?: string | null;
+          utm_source?: string | null;
+          utm_medium?: string | null;
+          utm_campaign?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["owner_requests"]["Insert"]>;
@@ -377,6 +394,8 @@ export type Database = {
           name: string | null;
           filters: Json;
           alert_enabled: boolean;
+          /** 20261123000100_saved_search_last_seen: null = хэзээ ч нээгээгүй (created_at-аар орлуулна). */
+          last_seen_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -385,6 +404,7 @@ export type Database = {
           name?: string | null;
           filters: Json;
           alert_enabled?: boolean;
+          last_seen_at?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["saved_searches"]["Insert"]>;
@@ -604,6 +624,10 @@ export type Database = {
           buyer_id: string | null;
           agent_id: string | null;
           last_message_at: string | null;
+          /** 20261123000500_listing_attribution: ^[a-z0-9_-]{1,40}$, үүсгэсний дараа хөлдөнө. */
+          utm_source: string | null;
+          utm_medium: string | null;
+          utm_campaign: string | null;
           created_at: string;
         };
         Insert: {
@@ -613,6 +637,9 @@ export type Database = {
           buyer_id?: string | null;
           agent_id?: string | null;
           last_message_at?: string | null;
+          utm_source?: string | null;
+          utm_medium?: string | null;
+          utm_campaign?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["conversations"]["Insert"]>;
@@ -649,6 +676,10 @@ export type Database = {
           buyer_id: string | null;
           scheduled_at: string | null;
           status: Database["public"]["Enums"]["viewing_status"];
+          /** 20261123000500_listing_attribution: ^[a-z0-9_-]{1,40}$, үүсгэсний дараа хөлдөнө. */
+          utm_source: string | null;
+          utm_medium: string | null;
+          utm_campaign: string | null;
           created_at: string;
         };
         Insert: {
@@ -659,9 +690,82 @@ export type Database = {
           buyer_id?: string | null;
           scheduled_at?: string | null;
           status?: Database["public"]["Enums"]["viewing_status"];
+          utm_source?: string | null;
+          utm_medium?: string | null;
+          utm_campaign?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["viewings"]["Insert"]>;
+        Relationships: [];
+      };
+      /** 20261123000400_phone_login: SMS hook-ийн дугаар тутмын тоолуур (HMAC hash). Зөвхөн service role (RLS, policy-гүй). */
+      phone_otp_sends: {
+        Row: { id: number; phone_hash: string; sent_at: string };
+        Insert: { id?: number; phone_hash: string; sent_at?: string };
+        Update: { id?: number; phone_hash?: string; sent_at?: string };
+        Relationships: [];
+      };
+      /**
+       * 20261123000700_api_rate_limits: тогтмол цонхны тоолуур (AI хайлт). Түлхүүр нь
+       * хэшлэсэн IP эсвэл 'ai-search:global'. Зөвхөн service_role; бичилт rate_limit_hit-ээр.
+       */
+      api_rate_limits: {
+        Row: { key: string; window_start: string; hits: number };
+        Insert: { key: string; window_start: string; hits?: number };
+        Update: { key?: string; window_start?: string; hits?: number };
+        Relationships: [];
+      };
+      /**
+       * 20261123000500_listing_attribution: нэргүй зар үзэлт (IP/UA/user_id-гүй).
+       * Бичилт зөвхөн listing_view_record (service_role); уншилт listing_channel_stats-аар.
+       */
+      listing_views: {
+        Row: {
+          id: number;
+          listing_id: string;
+          session_hash: string;
+          utm_source: string | null;
+          utm_medium: string | null;
+          utm_campaign: string | null;
+          utm_content: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: number;
+          listing_id: string;
+          session_hash: string;
+          utm_source?: string | null;
+          utm_medium?: string | null;
+          utm_campaign?: string | null;
+          utm_content?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["listing_views"]["Insert"]>;
+        Relationships: [];
+      };
+      /**
+       * 20261123000600_listing_share_posts: оффисын FB хуудсанд нийтэлсэн зар
+       * (external_id null = хүлээгдэж буй). authenticated зөвхөн SELECT (RLS);
+       * бичилт зөвхөн listing_share_reserve/complete/release RPC-ээр.
+       */
+      listing_share_posts: {
+        Row: {
+          id: string;
+          listing_id: string;
+          channel: "facebook";
+          posted_by: string | null;
+          external_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          listing_id: string;
+          channel?: "facebook";
+          posted_by?: string | null;
+          external_id?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["listing_share_posts"]["Insert"]>;
         Relationships: [];
       };
       reviews: {
@@ -5354,6 +5458,8 @@ export type Database = {
           p_lng?: number | null;
           p_lat?: number | null;
           p_m?: number | null;
+          /** 20261123000300_listings_search_text: AND бүлгүүд (≤6), бүлэг бүр OR LIKE хэв маяг (≤8, ≤80 тэмдэгт). */
+          p_q_groups?: Json | null;
         };
         Returns: {
           id: string; title: string; price: number; district: string | null; deal_type: string;
@@ -5364,6 +5470,48 @@ export type Database = {
         Args: { p_id: string };
         Returns: { lng: number; lat: number }[];
       };
+      /** 20261123000200_listing_closed_public: хаагдсан агентын зар (180 хоног); гарчиг/үнэ/холбоо барих/байршилгүй. */
+      listing_closed_public: {
+        Args: { p_id: string };
+        Returns: {
+          id: string;
+          deal_type: string;
+          type: string | null;
+          district: string | null;
+          rooms: number | null;
+          area: number | null;
+          floor: string | null;
+          photo: string | null;
+        }[];
+      };
+      /** 20261123000300_listings_search_text: латин→кирилл нугалалт (lib/search/fold.ts-тэй ижил байх ёстой). */
+      search_fold: { Args: { p: string }; Returns: string };
+      /** 20261123000500_listing_attribution: зөвхөн service_role. */
+      listing_view_record: {
+        Args: {
+          p_listing: string;
+          p_session: string;
+          p_viewer?: string | null;
+          p_source?: string | null;
+          p_medium?: string | null;
+          p_campaign?: string | null;
+          p_content?: string | null;
+        };
+        Returns: boolean;
+      };
+      /** 20261123000500_listing_attribution: authenticated. */
+      listing_can_distribute: { Args: { p_listing: string }; Returns: boolean };
+      /** 20261123000500_listing_attribution: authenticated; эрхгүй зар/агент → хоосон. */
+      listing_channel_stats: {
+        Args: { p_agent?: string | null; p_listing?: string | null; p_days?: number | null };
+        Returns: { listing_id: string; channel: string; views: number; chats: number; viewing_requests: number }[];
+      };
+      /** 20261123000600_listing_share_posts: null = идэвхгүй зар эсвэл 24 цагт нийтэлсэн/хүлээгдэж буй. */
+      listing_share_reserve: { Args: { p_listing: string }; Returns: string | null };
+      listing_share_complete: { Args: { p_id: string; p_external_id: string }; Returns: boolean };
+      listing_share_release: { Args: { p_id: string }; Returns: boolean };
+      /** 20261123000700_api_rate_limits: зөвхөн service_role. true = зөвшөөрнө; буруу параметр → false. */
+      rate_limit_hit: { Args: { p_key: string; p_window_seconds: number; p_max: number }; Returns: boolean };
       replace_listing_photos: {
         Args: { p_listing_id: string; p_urls: string[] };
         Returns: undefined;

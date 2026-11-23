@@ -5,6 +5,7 @@ import { expirePublicListings } from "@/lib/listings-cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { readAttributionColumns } from "@/lib/attribution-server";
 import { validateListingInput } from "@/lib/validation/listing";
 import { validateOwnerContact, validateOwnerRequest, type OwnerRequestInput } from "@/lib/validation/owner";
 import type { ListingInput } from "@/lib/actions/listings";
@@ -182,7 +183,9 @@ export async function submitOwnerRequest(raw: OwnerRequestInput): Promise<{ ok: 
     return { ok: false, error: "Энэ дугаараас өнөөдөр хангалттай хүсэлт ирсэн байна. Оффис тантай удахгүй холбогдоно." };
   }
 
-  const { error } = await admin.from("owner_requests").insert({ ...input, user_id: user?.id ?? null });
+  const { error } = await admin
+    .from("owner_requests")
+    .insert({ ...input, user_id: user?.id ?? null, ...(await readAttributionColumns()) });
   if (error) {
     console.error("submitOwnerRequest:", error.message);
     return { ok: false, error: "Хүсэлт илгээхэд алдаа гарлаа. Дахин оролдоно уу." };

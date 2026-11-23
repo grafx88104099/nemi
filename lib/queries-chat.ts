@@ -10,7 +10,7 @@ export async function getConversations() {
   const { data } = await supabase
     .from("conversations")
     .select(
-      "id, last_message_at, buyer_id, listing:listings(id, title, photo), agent:agents(display_name, avatar, profile_id, office:offices(color))"
+      "id, last_message_at, buyer_id, listing:listings(id, title, photo), agent:agents(id, display_name, avatar, avatar_url, profile_id, office:offices(name, color))"
     )
     .order("last_message_at", { ascending: false });
 
@@ -25,7 +25,14 @@ export type ConversationRow = {
   last_message_at: string | null;
   buyer_id: string | null;
   listing: { id: string; title: string; photo: string | null } | null;
-  agent: { display_name: string; avatar: string | null; profile_id: string | null; office: { color: string | null } | null } | null;
+  agent: {
+    id: string;
+    display_name: string;
+    avatar: string | null;
+    avatar_url: string | null;
+    profile_id: string | null;
+    office: { name: string | null; color: string | null } | null;
+  } | null;
 };
 
 export async function getMessages(conversationId: string) {

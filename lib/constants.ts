@@ -174,3 +174,11 @@ export const PROJECT_STATUS_LABEL: Record<ProjectStatus, { label: string; tone: 
   won: { label: "Амжилттай", tone: "blue" },
   lost: { label: "Алдсан", tone: "rose" },
 };
+
+// ── Үзлэгийн төлөв (tours, «Миний Нэми») ─────────────────
+export const VIEWING_STATUS: Record<string, { label: string; tone: "amber" | "green" | "neutral" | "rose" }> = {
+  pending: { label: "Хүлээгдэж буй", tone: "amber" },
+  confirmed: { label: "Баталгаажсан", tone: "green" },
+  done: { label: "Болсон", tone: "neutral" },
+  cancelled: { label: "Цуцалсан", tone: "rose" },
+};

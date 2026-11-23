@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 import type { Database } from "@/types/database";
+import { buildLoginRedirectUrl } from "@/lib/auth/login-redirect";
 
 /**
  * Хүсэлт бүрт хэрэглэгчийн session-ийг шинэчилж, cookie-г дамжуулна.
@@ -48,20 +49,14 @@ export async function updateSession(request: NextRequest) {
 
   // Backoffice (/admin) — тусдаа нэвтрэлт (/admin/login)
   if (path.startsWith("/admin") && path !== "/admin/login" && !user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/admin/login";
-    url.searchParams.set("next", path);
-    return NextResponse.redirect(url);
+    return NextResponse.redirect(buildLoginRedirectUrl(request.nextUrl, "/admin/login"));
   }
 
   // Оффисын портал (/office, /office/*) — тусдаа нэвтрэлт (/office/login).
   // ТЭМДЭГЛЭЛ: "/office/" (зураастай) ашиглана — нийтийн "/offices", "/office-signup"-ийг барихгүй.
   const inOfficeArea = path === "/office" || path.startsWith("/office/");
   if (inOfficeArea && path !== "/office/login" && !user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/office/login";
-    url.searchParams.set("next", path);
-    return NextResponse.redirect(url);
+    return NextResponse.redirect(buildLoginRedirectUrl(request.nextUrl, "/office/login"));
   }
 
   // CRM §1.1(г) — эрхийн тэлэлтийн хаалт: panel_admin=false CRM ажилтанд оффис
@@ -89,19 +84,14 @@ export async function updateSession(request: NextRequest) {
   // ТЭМДЭГЛЭЛ: "/agent/" (зураастай) ашиглана — нийтийн "/agents"-ийг барихгүй.
   const inAgentArea = path === "/agent" || path.startsWith("/agent/");
   if (inAgentArea && path !== "/agent/login" && !user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/agent/login";
-    url.searchParams.set("next", path);
-    return NextResponse.redirect(url);
+    return NextResponse.redirect(buildLoginRedirectUrl(request.nextUrl, "/agent/login"));
   }
 
   // Бусад энгийн хамгаалагдсан замууд (худалдан авагч/нийтлэг).
   const protectedPrefixes = ["/account", "/office-signup"];
   if (protectedPrefixes.some((p) => path.startsWith(p)) && !user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    url.searchParams.set("next", path);
-    return NextResponse.redirect(url);
+    // next = зам + query (буцаж ирэхэд шүүлтүүр хадгалагдана).
+    return NextResponse.redirect(buildLoginRedirectUrl(request.nextUrl, "/login"));
   }
 
   return supabaseResponse;

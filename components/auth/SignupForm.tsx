@@ -7,6 +7,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
+import { loginHref } from "@/lib/nav";
 
 export function SignupForm({
   role = "buyer",
@@ -29,6 +30,7 @@ export function SignupForm({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
+  const loginLink = next !== "/" ? loginHref(next) : "/login";
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -75,7 +77,7 @@ export function SignupForm({
           <b>{email}</b> хаягт баталгаажуулах холбоос илгээлээ. Холбоосыг дарж
           бүртгэлээ идэвхжүүлнэ үү.
         </p>
-        <Link href="/login" className="block text-sm font-semibold text-brand-600 hover:underline">
+        <Link href={loginLink} className="block text-sm font-semibold text-brand-600 hover:underline">
           Нэвтрэх хуудас руу
         </Link>
       </div>
@@ -149,7 +151,7 @@ export function SignupForm({
       </Button>
       <p className="text-center text-sm text-muted">
         Бүртгэлтэй юу?{" "}
-        <Link href="/login" className="font-semibold text-brand-600 hover:underline">
+        <Link href={loginLink} className="font-semibold text-brand-600 hover:underline">
           Нэвтрэх
         </Link>
       </p>

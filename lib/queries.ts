@@ -5,21 +5,14 @@ import { createPublicClient } from "@/lib/supabase/public";
 import type { ListingCardData } from "@/components/listings/ListingCard";
 import { applyListingFilters, type ListingFilters } from "@/lib/listing-filters";
 import { LISTINGS_TAG } from "@/lib/listings-cache";
+import { LISTING_CARD_COLUMNS, LISTING_CARD_SELECT } from "@/lib/listing-card-select";
+import { rankSimilar, similarPriceBand } from "@/lib/similar-listings";
 
-/**
- * ListingCard-д шаардагдах зарын багананууд. Оффисын самбар ч ижил картыг
- * харуулдаг тул нэг эх сурвалжаас авна — нэг нь зураггүй болж хоцрохоос
- * сэргийлнэ. Агентын embed нь дуудлага болгонд өөр (оффисын самбар
- * agents!inner-ээр шүүдэг) тул тусад нь залгана.
- */
-export const LISTING_CARD_COLUMNS =
-  "id, title, price, ai_score, rooms, area, floor, district, photo, hot, verified, deal_type, " +
-  "rent_advance_months, rent_deposit_months, created_at, owner_name";
+// Картын select мөрүүд клиентэд аюулгүй lib/listing-card-select.ts-д байна;
+// хуучин импорт (`from "@/lib/queries"`) ажилласаар байхаар re-export хийнэ.
+export { LISTING_CARD_COLUMNS, LISTING_CARD_AGENT, LISTING_CARD_SELECT } from "@/lib/listing-card-select";
 
-/** ListingCard-д хэрэгтэй агентын embed (нийтийн хуудсууд). */
-export const LISTING_CARD_AGENT = "agent:agents(display_name, avatar, avatar_url, verified, office:offices(color))";
-
-const CARD_SELECT = `${LISTING_CARD_COLUMNS}, ${LISTING_CARD_AGENT}`;
+const CARD_SELECT = LISTING_CARD_SELECT;
 
 /** Нүүр хуудасны «Онцлох зарууд»-ын эх оффис (PMC). */
 export const FEATURED_OFFICE_ID = "931b4a39-a38a-442c-9170-ea573522efd0";
@@ -164,33 +157,38 @@ export async function getListingById(id: string) {
 /**
  * Төстэй зар: ижил төрөл (худалдах/түрээс) ба үл хөдлөхийн төрөл, үнэ ±35%.
  * Эхлээд ижил дүүргээс, дутвал бусад дүүргээс; үнээр хамгийн ойрыг түрүүлнэ.
+ * price null (хаагдсан зарын хуудас — үнэ ил гаргахгүй) бол үнийн хязгааргүй,
+ * хамгийн шинийг нь түрүүлнэ.
  */
 export async function getSimilarListings(
-  l: { id: string; deal_type: string | null; type: string | null; district: string | null; price: number },
+  l: { id: string; deal_type: string | null; type: string | null; district: string | null; price: number | null },
   limit = 4
 ): Promise<ListingCardData[]> {
-  if (!l.deal_type || !(l.price > 0)) return [];
+  if (!l.deal_type) return [];
+  const band = similarPriceBand(l.price);
   const supabase = await createClient();
-  const base = () => {
+  const base = (district?: string) => {
     let q = supabase
       .from("listings")
       .select(`${CARD_SELECT}, deal_type`)
       .eq("status", "active")
       .eq("deal_type", l.deal_type as "sale" | "rent")
-      .neq("id", l.id)
-      .gte("price", Math.floor(l.price * 0.65))
-      .lte("price", Math.ceil(l.price * 1.35));
+      .neq("id", l.id);
+    if (band) q = q.gte("price", band[0]).lte("price", band[1]);
     if (l.type) q = q.eq("type", l.type);
-    return q;
+    if (district) q = q.eq("district", district);
+    return band ? q : q.order("created_at", { ascending: false });
   };
-  const byGap = (a: ListingCardData, b: ListingCardData) => Math.abs(a.price - l.price) - Math.abs(b.price - l.price);
 
-  const near = l.district ? ((await base().eq("district", l.district).limit(24)).data ?? []) : [];
-  const picked = (near as unknown as ListingCardData[]).sort(byGap).slice(0, limit);
+  const near = l.district ? ((await base(l.district).limit(24)).data ?? []) : [];
+  const picked = rankSimilar(near as unknown as ListingCardData[], l.price).slice(0, limit);
   if (picked.length < limit) {
     const { data } = await base().limit(24);
     const seen = new Set(picked.map((p) => p.id));
-    const more = ((data ?? []) as unknown as ListingCardData[]).filter((p) => !seen.has(p.id)).sort(byGap);
+    const more = rankSimilar(
+      ((data ?? []) as unknown as ListingCardData[]).filter((p) => !seen.has(p.id)),
+      l.price
+    );
     picked.push(...more.slice(0, limit - picked.length));
   }
   return picked;

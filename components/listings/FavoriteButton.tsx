@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Heart } from "lucide-react";
 
-import { toggleFavorite } from "@/lib/actions/favorites";
+import { maybeShowGuestSavedToast, useFavorite } from "@/components/listings/favorites-store";
 import { cn } from "@/lib/utils";
 
+/**
+ * Зарын хуудасны «Хадгалах». Картын зүрхтэй нэг store (favorites-store) хуваалцана.
+ * Нэвтрээгүй бол /login руу шилжүүлэхгүй — энэ төхөөрөмж дээр хадгална.
+ */
 export function FavoriteButton({
   listingId,
   initial = false,
@@ -16,23 +19,18 @@ export function FavoriteButton({
   initial?: boolean;
   withLabel?: boolean;
 }) {
-  const [fav, setFav] = useState(initial);
-  const [pending, startTransition] = useTransition();
+  const { saved, ready, pending, toggle } = useFavorite(listingId);
   const router = useRouter();
+  const fav = ready ? saved : initial;
 
-  function onClick() {
-    startTransition(async () => {
-      const res = await toggleFavorite(listingId);
-      if (res.error === "auth") {
-        router.push("/login?next=" + encodeURIComponent(window.location.pathname));
-        return;
-      }
-      setFav(res.favorited);
-    });
+  async function onClick() {
+    const r = await toggle();
+    if (r.guest && r.saved) maybeShowGuestSavedToast(router);
   }
 
   return (
     <button
+      type="button"
       onClick={onClick}
       disabled={pending}
       className={cn(
@@ -40,6 +38,7 @@ export function FavoriteButton({
         fav ? "border-rose-200 bg-rose-50 text-rose-600" : "border-line bg-surface text-ink hover:bg-surface-2"
       )}
       aria-pressed={fav}
+      aria-label={withLabel ? undefined : fav ? "Хадгалснаас хасах" : "Хадгалах"}
     >
       <Heart className={cn("size-4", fav && "fill-current")} />
       {withLabel && (fav ? "Хадгалсан" : "Хадгалах")}

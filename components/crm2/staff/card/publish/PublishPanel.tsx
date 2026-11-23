@@ -47,7 +47,7 @@ const PHOTO_FAIL_TEXT =
 const WHO_CAN_PUBLISH_TEXT =
   "Зар нийтлэх, буцаах эрх зөвхөн энэ хөрөнгийн үүрэгт агентууд (листлэгч, гэрээ, зураг), тэдний багийн ахлагч, оффисын менежерт байна.";
 
-const textareaClass =
+export const textareaClass =
   "w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-subtle focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20";
 
 /**

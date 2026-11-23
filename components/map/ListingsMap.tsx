@@ -6,6 +6,7 @@ import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 import { createClient } from "@/lib/supabase/client";
 import { shortMNT } from "@/lib/format";
 import type { ListingFilters } from "@/lib/listing-filters";
+import { searchPatternGroups } from "@/lib/search/query";
 
 type Pin = {
   id: string;
@@ -51,7 +52,9 @@ function rpcArgs(f: ListingFilters) {
     p_max_price: f.maxPrice ?? null,
     p_min_area: f.minArea ?? null,
     p_max_area: f.maxArea ?? null,
-    p_q: f.q ?? null,
+    // Жагсаалттай ижил search_text хэв маяг (хуучин p_q нь зөвхөн deploy-ийн үеийн клиентэд).
+    p_q: null,
+    p_q_groups: f.q ? searchPatternGroups(f.q) : null,
     p_posted: f.posted ?? null,
   };
 }

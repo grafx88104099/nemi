@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { applyListingFilters, filtersHref, parseListingFilters } from "@/lib/listing-filters";
+import { applySmartQuery } from "@/lib/search/parse-query";
+import { withSavedSearchParam } from "@/lib/hub";
 
 /**
  * Хадгалсан хайлтын сэрэмжлүүлэг (cron).
@@ -34,7 +36,9 @@ export async function GET(request: Request) {
   for (const s of searches ?? []) {
     // Жагсаалттай НЭГ шүүлт (Түрээс/Худалдах, талбай орно). Хугацааг энд
     // «сүүлийн 24 цаг»-аар шүүдэг тул хадгалсан «posted»-ийг алгасна.
-    const f = parseListingFilters((s.filters ?? {}) as Record<string, string>);
+    // Хуучин хадгалсан чөлөөт текстийг («2 өрөө түрээс») /listings-ийн каноник
+    // холбоостой ЯГ ижлээр задална — мэдэгдэл ба жагсаалтын үр дүн зөрөхгүй.
+    const f = applySmartQuery(parseListingFilters((s.filters ?? {}) as Record<string, string>)).filters;
     const q = applyListingFilters(
       admin
         .from("listings")
@@ -52,7 +56,8 @@ export async function GET(request: Request) {
         type: "alert",
         title: "Шинэ зар таны хайлтад",
         body: `«${s.name ?? "Хайлт"}» — ${count} шинэ зар нэмэгдлээ.`,
-        link: filtersHref("/listings", f, { withSort: true }),
+        // ?ss=<id> — нээхэд /listings-ийн SavedSearchSeen хаб дээрх «N шинэ»-г цэвэрлэнэ.
+        link: withSavedSearchParam(filtersHref("/listings", f, { withSort: true }), s.id),
       });
       created++;
     }

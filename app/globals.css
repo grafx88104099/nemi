@@ -65,4 +65,11 @@
   ::before {
     border-color: var(--color-line);
   }
+  /* Гар утасны доод цэс (MobileTabBar, зөвхөн (site) хуудсууд) — h-14 + safe area.
+     Footer-ийн доод зай, toast-ын байрлал энэ хувьсагчийг ашиглана. */
+  @media (max-width: 767.98px) {
+    body:has([data-mobile-tabbar]) {
+      --mobile-tabbar-h: calc(3.5rem + env(safe-area-inset-bottom));
+    }
+  }
 }

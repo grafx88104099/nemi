@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ShieldCheck, Flame, Star, Phone, MapPin, Check, Clock, Sparkles, Landmark } from "lucide-react";
@@ -19,6 +20,25 @@ import { FavoriteButton } from "@/components/listings/FavoriteButton";
 import { BookViewingButton } from "@/components/listings/BookViewingButton";
 import { ListingLocationMap } from "@/components/listings/ListingLocationMap";
 import { StartChatButton } from "@/components/chat/StartChatButton";
+import { ClosedListingView } from "@/components/listings/ClosedListingView";
+import { ListingViewBeacon } from "@/components/listings/ListingViewBeacon";
+import { getClosedListing, getListingSeo } from "@/lib/queries-seo";
+import { listingHeadline, listingJsonLd, listingMetaFor, type ListingSeo } from "@/lib/seo/listing";
+import { absUrl, isUuid, jsonLdHtml } from "@/lib/seo/site";
+
+/**
+ * Нийтийн (cookie-гүй) client-ээр: идэвхтэй → бүрэн OG/canonical; хаагдсан →
+ * noindex,follow (canonical-гүй); бусад → noindex,nofollow. DB алдааг барихгүй —
+ * 500 болж мөлхөгч дахин оролдоно (noindex болж кэшлэгдэхгүй).
+ */
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  if (!isUuid(id)) return listingMetaFor(id, { kind: "invalid" });
+  const l = await getListingSeo(id);
+  if (l) return listingMetaFor(id, { kind: "active", l });
+  const c = await getClosedListing(id);
+  return listingMetaFor(id, c ? { kind: "closed", c } : { kind: "none" });
+}
 
 export default async function ListingDetailPage({
   params,
@@ -27,7 +47,20 @@ export default async function ListingDetailPage({
 }) {
   const { id } = await params;
   const l = await getListingById(id);
-  if (!l) notFound();
+  if (!l) {
+    // Хаагдсан агентын зар → хязгаарлагдмал нийтийн хуудас (үзэлт бүртгэхгүй).
+    if (!isUuid(id)) notFound();
+    const closed = await getClosedListing(id);
+    if (!closed) notFound();
+    const similar = await getSimilarListings({
+      id,
+      deal_type: closed.deal_type,
+      type: closed.type,
+      district: closed.district,
+      price: null,
+    });
+    return <ClosedListingView listing={closed} similar={similar} />;
+  }
 
   const isRent = l.deal_type === "rent";
   const [favorited, point, , similar, products] = await Promise.all([
@@ -59,6 +92,9 @@ export default async function ListingDetailPage({
   const advM = l.rent_advance_months as number | null;
   const depM = l.rent_deposit_months as number | null;
   const hasRentTerms = isRent && advM != null && depM != null;
+  const seo = l as unknown as ListingSeo;
+  const shareUrl = absUrl(`/listings/${id}`);
+  const shareText = listingHeadline(seo);
   const spec = (label: string, val: React.ReactNode) => (
     <div className="rounded-xl bg-surface-2 p-3 text-center">
       <div className="text-xs text-muted">{label}</div>
@@ -68,6 +104,12 @@ export default async function ListingDetailPage({
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
+      {l.status === "active" ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: jsonLdHtml(listingJsonLd(seo, shareUrl)) }}
+        />
+      ) : null}
       <Link href="/listings" className="text-sm text-muted hover:underline">← Жагсаалт руу</Link>
 
       <PhotoGallery photos={photos} title={l.title as string} />
@@ -238,7 +280,7 @@ export default async function ListingDetailPage({
                     <StartChatButton listingId={id} />
                     <BookViewingButton listingId={id} agentId={(agent.id as string) ?? null} />
                     <FavoriteButton listingId={id} initial={favorited} withLabel />
-                    <ShareButton title={l.title as string} />
+                    <ShareButton title={l.title as string} url={shareUrl} text={shareText} />
                     {agent.phone ? (
                       <a
                         href={`tel:${agent.phone}`}
@@ -266,13 +308,13 @@ export default async function ListingDetailPage({
                       </a>
                     ) : null}
                     <FavoriteButton listingId={id} initial={favorited} withLabel />
-                    <ShareButton title={l.title as string} />
+                    <ShareButton title={l.title as string} url={shareUrl} text={shareText} />
                   </div>
                 </>
               ) : (
                 <>
                   <p className="text-sm text-muted">Агент тодорхойгүй.</p>
-                  <ShareButton title={l.title as string} />
+                  <ShareButton title={l.title as string} url={shareUrl} text={shareText} />
                 </>
               )}
             </CardBody>
@@ -300,6 +342,7 @@ export default async function ListingDetailPage({
           </div>
         </section>
       ) : null}
+      {l.status === "active" ? <ListingViewBeacon listingId={id} /> : null}
     </div>
   );
 }

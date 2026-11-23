@@ -16,6 +16,7 @@ export function Modal({
   children,
   footer,
   closeOnBackdrop = true,
+  size = "md",
 }: {
   open: boolean;
   onClose: () => void;
@@ -23,6 +24,8 @@ export function Modal({
   children: React.ReactNode;
   footer?: React.ReactNode;
   closeOnBackdrop?: boolean;
+  /** md = max-w-md (анхдагч), lg = max-w-2xl. */
+  size?: "md" | "lg";
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -78,7 +81,7 @@ export function Modal({
         tabIndex={-1}
         // Урт маягт дэлгэцээс хэтэрвэл тасрахгүй: цонх дэлгэцийн өндрөөр
         // хязгаарлагдаж, агуулга дотроо гүйлгэгдэнэ; толгой ба footer үргэлж харагдана.
-        className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col rounded-2xl bg-surface shadow-xl outline-none"
+        className={`flex max-h-[calc(100dvh-2rem)] w-full ${size === "lg" ? "max-w-2xl" : "max-w-md"} flex-col rounded-2xl bg-surface shadow-xl outline-none`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-line p-4">

@@ -1,22 +1,23 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Heart, Bookmark, Clock, CalendarDays, Home as HomeIcon, KeyRound, Users, ArrowRight } from "lucide-react";
+import { Heart, Bookmark, Clock, CalendarDays, Home as HomeIcon, LayoutGrid, Users, ArrowRight } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { ProfileForm } from "@/components/account/ProfileForm";
+import { formatPhone } from "@/lib/crm2/phone";
 
 export const metadata = { title: "Миний профайл — Нэми" };
 
 const SECTIONS: { href: string; label: string; desc: string; icon: typeof Heart }[] = [
+  { href: "/me", label: "Миний Нэми", desc: "Хайлт, хадгалсан, үзлэг, чат нэг дор", icon: LayoutGrid },
   { href: "/favorites", label: "Хадгалсан зар", desc: "Дуртай зараа нэг дороос", icon: Heart },
   { href: "/saved-searches", label: "Хадгалсан хайлт", desc: "Хайлтаа хадгалж, мэдэгдэл аваарай", icon: Bookmark },
   { href: "/recently-viewed", label: "Сүүлд үзсэн", desc: "Саяхан үзсэн зарууд", icon: Clock },
   { href: "/tours", label: "Үзлэгийн цаг", desc: "Товлосон үзлэгүүд", icon: CalendarDays },
   { href: "/my-home", label: "Миний гэр", desc: "Гэрийн үнэлгээ, хяналт", icon: HomeIcon },
-  { href: "/your-rental", label: "Миний түрээс", desc: "Түрээсийн мэдээлэл", icon: KeyRound },
   { href: "/my-team", label: "Миний баг", desc: "Холбоотой агентууд", icon: Users },
 ];
 
@@ -29,17 +30,21 @@ export default async function AccountPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, phone, role")
+    .select("full_name, phone, phone_verified_at, role")
     .eq("id", user.id)
     .single();
 
-  const name = profile?.full_name || user.email?.split("@")[0] || "Хэрэглэгч";
-  const initials = name
-    .split(" ")
-    .map((s) => s[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  // Утсаар л нэвтэрсэн хэрэглэгч (и-мэйлгүй) — дугаараар нь харуулна.
+  const authPhone = user.phone ? formatPhone(user.phone) : "";
+  const textName = profile?.full_name || user.email?.split("@")[0] || "";
+  const name = textName || authPhone || "Хэрэглэгч";
+  const initials =
+    textName
+      .split(" ")
+      .map((s) => s[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "Х";
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -48,7 +53,7 @@ export default async function AccountPage() {
         <Avatar initials={initials} size="lg" color="#0F172A" />
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-2xl font-extrabold text-ink">{name}</h1>
-          <p className="truncate text-sm text-muted">{user.email}</p>
+          <p className="truncate text-sm text-muted">{user.email || authPhone}</p>
         </div>
         <Badge tone="brand">{profile?.role ?? "buyer"}</Badge>
       </div>
@@ -81,6 +86,7 @@ export default async function AccountPage() {
           <ProfileForm
             initial={{ full_name: profile?.full_name ?? "", phone: profile?.phone ?? "" }}
             email={user.email ?? ""}
+            phoneVerified={!!profile?.phone_verified_at}
           />
         </CardBody>
       </Card>

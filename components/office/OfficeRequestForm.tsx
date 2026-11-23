@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { requestOffice } from "@/lib/actions/offices";
 import { Button } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
+import { loginHref } from "@/lib/nav";
 
 export function OfficeRequestForm({ next = "/office-signup" }: { next?: string }) {
   const [name, setName] = useState("");
@@ -22,7 +23,7 @@ export function OfficeRequestForm({ next = "/office-signup" }: { next?: string }
     startTransition(async () => {
       const r = await requestOffice({ name, phone, note });
       if (r.error === "auth") {
-        router.push("/login?next=" + encodeURIComponent(next));
+        router.push(loginHref(next));
         return;
       }
       if (r.error) setErr("Алдаа гарлаа. Дахин оролдоно уу.");

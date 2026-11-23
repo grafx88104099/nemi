@@ -9,6 +9,9 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { NewListingButtons } from "@/components/dashboard/NewListingButtons";
+import { DistributeListingButton } from "@/components/distribute/DistributeListingButton";
+import { getAgentChannelStats } from "@/lib/distribute/share-kit";
+import { formatCountsCompact, formatCountsLine, summarizeByListing, ZERO_COUNTS } from "@/lib/distribute/stats-model";
 import { fmtMNT } from "@/lib/format";
 import { listingStatusMeta as statusMeta, DEAL_TYPE_LABEL, type DealType } from "@/lib/constants";
 
@@ -23,10 +26,12 @@ export default async function MyListingsPage() {
     );
   }
   const listings = await getAgentListings(agent.id as string);
-  const [shareCounts, sharedWithMe] = await Promise.all([
+  const [shareCounts, sharedWithMe, channelRows] = await Promise.all([
     getShareCounts(listings.map((l) => l.id)),
     getSharedWithMe(agent.id as string),
+    getAgentChannelStats(agent.id as string, 30),
   ]);
+  const byListing = summarizeByListing(channelRows);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6">
@@ -46,6 +51,9 @@ export default async function MyListingsPage() {
               <th scope="col" className="p-3 font-medium">Үнэ</th>
               <th scope="col" className="p-3 font-medium">Дүүрэг</th>
               <th scope="col" className="p-3 font-medium">Төлөв</th>
+              <th scope="col" className="hidden p-3 font-medium md:table-cell">
+                30 хоног<span className="sr-only"> (үзэлт, чат, үзлэгийн хүсэлт)</span>
+              </th>
               <th scope="col" className="p-3 font-medium">AI</th>
               <th scope="col" className="p-3"><span className="sr-only">Үйлдэл</span></th>
             </tr>
@@ -53,6 +61,7 @@ export default async function MyListingsPage() {
           <tbody>
             {listings.map((l) => {
               const share = shareCounts[l.id];
+              const counts = byListing[l.id] ?? ZERO_COUNTS;
               return (
                 <tr key={l.id} className="border-b border-line last:border-0">
                   <td className="p-3">
@@ -71,9 +80,14 @@ export default async function MyListingsPage() {
                   <td className="p-3 text-ink">{fmtMNT(l.price)}{l.deal_type === "rent" && <span className="text-muted">/сар</span>}</td>
                   <td className="p-3 text-muted">{l.district}</td>
                   <td className="p-3"><Badge tone={statusMeta(l.status).tone}>{statusMeta(l.status).label}</Badge></td>
+                  <td className="hidden p-3 text-xs tabular-nums text-muted md:table-cell">
+                    <span aria-hidden>{formatCountsCompact(counts)}</span>
+                    <span className="sr-only">{formatCountsLine(counts)}</span>
+                  </td>
                   <td className="p-3 text-muted">{l.ai_score ?? "—"}</td>
                   <td className="p-3">
                     <div className="flex items-center justify-end gap-1">
+                      {l.status === "active" ? <DistributeListingButton listingId={l.id} title={l.title} /> : null}
                       <ShareListingButton listingId={l.id} sharedCount={share?.count ?? 0} />
                       <Link href={`/agent/listings/${l.id}/edit`} className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-ink" title="Засах" aria-label={`${l.title} зар засах`}>
                         <Pencil className="size-4" />
@@ -85,11 +99,12 @@ export default async function MyListingsPage() {
               );
             })}
             {listings.length === 0 && (
-              <tr><td colSpan={7} className="p-8 text-center text-muted">Зар алга. «Шинэ зар» дарж эхлүүлнэ үү.</td></tr>
+              <tr><td colSpan={8} className="p-8 text-center text-muted">Зар алга. «Шинэ зар» дарж эхлүүлнэ үү.</td></tr>
             )}
           </tbody>
         </table>
       </Card>
+      <p className="mt-2 hidden text-xs text-muted md:block">30 хоног: үзэлт · чат · үзлэгийн хүсэлт</p>
 
       {sharedWithMe.length > 0 && (
         <>

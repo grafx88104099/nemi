@@ -3,8 +3,8 @@ import { ArrowLeft } from "lucide-react";
 
 /** Дэд хуудаснаас эх хуудас руу буцах холбоос. */
 export function BackLink({
-  href = "/account",
-  label = "Профайл руу буцах",
+  href = "/me",
+  label = "Миний Нэми руу буцах",
   className = "",
 }: {
   href?: string;

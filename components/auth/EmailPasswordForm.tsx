@@ -74,7 +74,10 @@ export function EmailPasswordForm({
           Нууц үг мартсан?
         </Link>
         {showSignup && (
-          <Link href="/signup" className="font-semibold text-brand-600 hover:underline">
+          <Link
+            href={`/signup${redirectTo && redirectTo !== "/" ? `?next=${encodeURIComponent(redirectTo)}` : ""}`}
+            className="font-semibold text-brand-600 hover:underline"
+          >
             Бүртгүүлэх
           </Link>
         )}

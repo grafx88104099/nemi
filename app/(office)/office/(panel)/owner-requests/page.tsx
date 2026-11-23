@@ -2,6 +2,7 @@ import { Phone } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
 import { fmtDateTime, fmtMNT } from "@/lib/format";
+import { channelLabel } from "@/lib/attribution";
 import { Badge } from "@/components/ui/badge";
 import { OwnerRequestStatus } from "@/components/office/OwnerRequestStatus";
 
@@ -70,7 +71,10 @@ export default async function OwnerRequestsPage() {
                 {r.location_text ? <p className="text-sm text-muted">{r.location_text}</p> : null}
                 {r.note ? <p className="mt-2 whitespace-pre-line rounded-xl bg-surface-2 p-3 text-sm text-ink">{r.note}</p> : null}
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs text-muted">{fmtDateTime(r.created_at)}</span>
+                  <span className="flex flex-wrap items-center gap-2 text-xs text-muted">
+                    {fmtDateTime(r.created_at)}
+                    {r.utm_source ? <Badge tone="neutral">{channelLabel(r.utm_source)}</Badge> : null}
+                  </span>
                   <OwnerRequestStatus id={r.id} status={r.status} />
                 </div>
               </li>

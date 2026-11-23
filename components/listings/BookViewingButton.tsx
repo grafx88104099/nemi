@@ -7,6 +7,7 @@ import { Calendar } from "lucide-react";
 import { bookViewing } from "@/lib/actions/viewings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { currentPath, loginHref } from "@/lib/nav";
 
 export function BookViewingButton({
   listingId,
@@ -26,7 +27,7 @@ export function BookViewingButton({
     startTransition(async () => {
       const res = await bookViewing(listingId, agentId, new Date(when).toISOString());
       if (res.error === "auth") {
-        router.push("/login?next=" + encodeURIComponent(window.location.pathname));
+        router.push(loginHref(currentPath()));
         return;
       }
       if (res.ok) {

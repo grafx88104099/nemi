@@ -34,7 +34,7 @@ export default async function OwnerEditListingPage({ params }: { params: Promise
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
-      <BackLink />
+      <BackLink href="/my-listings" label="Миний зарууд руу буцах" />
       <h1 className="text-2xl font-extrabold text-ink">Зар засах</h1>
       <Card className="mt-5">
         <CardBody>

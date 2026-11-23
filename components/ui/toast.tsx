@@ -195,7 +195,7 @@ export function Toaster({ auto = false }: { auto?: boolean }) {
   return (
     <div
       aria-live="polite"
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-[100] flex flex-col items-center gap-2 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-96 sm:items-end sm:px-0 sm:pb-0"
+      className="pointer-events-none fixed inset-x-0 bottom-[var(--mobile-tabbar-h,0px)] z-[100] flex flex-col items-center gap-2 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:inset-x-auto sm:right-4 sm:bottom-[calc(var(--mobile-tabbar-h,0px)_+_1rem)] sm:w-96 sm:items-end sm:px-0 sm:pb-0"
     >
       {list.map((t) => (
         <ToastCard key={t.id} t={t} />

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ShieldCheck, MapPin, Phone, Mail, Globe, Calendar, BadgeCheck, Building2, ArrowLeft, Users } from "lucide-react";
@@ -5,11 +6,15 @@ import { ShieldCheck, MapPin, Phone, Mail, Globe, Calendar, BadgeCheck, Building
 import { getOfficeProfile, getAgents } from "@/lib/queries";
 import { AgentCard } from "@/components/agents/AgentCard";
 import { Avatar } from "@/components/ui/avatar";
+import { getOfficeSeo } from "@/lib/queries-seo";
+import { officeMetaFor } from "@/lib/seo/profiles";
+import { isUuid } from "@/lib/seo/site";
 
-export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+/** Нийтийн client-ээр; түдгэлзсэн оффис → noindex. DB алдааг барихгүй. */
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
-  const office = await getOfficeProfile(id);
-  return { title: office ? `${office.name} — Нэми` : "Оффис — Нэми" };
+  if (!isUuid(id)) return officeMetaFor(id, null);
+  return officeMetaFor(id, await getOfficeSeo(id));
 }
 
 export default async function OfficeProfilePage({ params }: { params: Promise<{ id: string }> }) {

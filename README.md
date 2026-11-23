@@ -31,7 +31,10 @@ npm run dev                          # http://localhost:3000
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✅ | Anon public key |
 | `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Серверийн нууц (webhook, seed) |
 | `SUPABASE_DB_URL` | seed/migration | Pooler холболт |
-| `ANTHROPIC_API_KEY` | AI | Claude API (AI үнэлгээ) |
+| `ANTHROPIC_API_KEY` | AI | Claude API (AI үнэлгээ; `RATE_LIMIT_SALT`-тай хамт сонголттой «AI-аар ойлгуулах» хайлтыг асаана) |
+| `AI_SEARCH` | сонголттой | `off` = ухаалаг хайлтын AI-г унтраана (түлхүүр байсан ч) |
+| `AI_SEARCH_DAILY_CAP` | сонголттой | Өдөрт кэшгүй AI хайлтын дуудлагын дээд тоо (анхдагч 500) |
+| `RATE_LIMIT_SALT` | сонголттой | IP хэшлэх серверийн давс (32+ тэмдэгт); байхгүй бол AI хайлт унтраастай |
 | `QPAY_USERNAME` / `QPAY_PASSWORD` / `QPAY_INVOICE_CODE` | Төлбөр | QPay merchant |
 | `NEXT_PUBLIC_APP_URL` | Төлбөр | Webhook callback-д ашиглах public URL |
 
@@ -64,6 +67,7 @@ supabase/        # migrations
 ## Тохируулах шаардлагатай (production функцийн бүрэн ажиллагаанд)
 - **OAuth:** Supabase → Authentication → Providers дээр Google / Facebook client ID, secret.
 - **AI үнэлгээ:** `ANTHROPIC_API_KEY`.
+- **AI хайлт (сонголттой):** migration `20261123000700_api_rate_limits`, `ANTHROPIC_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `RATE_LIMIT_SALT` (32+ тэмдэгт); унтраах бол `AI_SEARCH=off`.
 - **Төлбөр:** QPay merchant эрх (`QPAY_*`) + webhook public URL.
 - **Имэйл баталгаажуулалт:** Supabase → Auth дээр SMTP (эсвэл dev-д унтраах).
 

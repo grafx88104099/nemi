@@ -7,13 +7,15 @@ import { safeNext } from "@/lib/nav";
 import { Card, CardBody } from "@/components/ui/card";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { OAuthButtons } from "@/components/auth/OAuthButtons";
+import { LoginMethods } from "@/components/auth/LoginMethods";
+import { PHONE_LOGIN_ENABLED } from "@/lib/auth/phone-login";
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; error?: string }>;
+  searchParams: Promise<{ next?: string; error?: string; method?: string }>;
 }) {
-  const { next: rawNext, error } = await searchParams;
+  const { next: rawNext, error, method } = await searchParams;
   // Зөвхөн дотоод зам — redirect болон нэвтэрсний дараах router.push хоёуланд.
   const next = safeNext(rawNext, "/", "/");
 
@@ -50,10 +52,15 @@ export default async function LoginPage({
         <OAuthButtons next={next} />
         <div className="flex items-center gap-3 text-xs text-subtle">
           <span className="h-px flex-1 bg-line" />
-          эсвэл и-мэйлээр
+          {PHONE_LOGIN_ENABLED ? "эсвэл" : "эсвэл и-мэйлээр"}
           <span className="h-px flex-1 bg-line" />
         </div>
-        <LoginForm next={next} />
+        {/* R09 Stage 2: утсаар нэвтрэх таб — NEXT_PUBLIC_PHONE_LOGIN=1 үед л. */}
+        {PHONE_LOGIN_ENABLED ? (
+          <LoginMethods next={next} initialMethod={method === "email" ? "email" : "phone"} />
+        ) : (
+          <LoginForm next={next} />
+        )}
         <div className="border-t border-line pt-4 text-center text-xs text-muted">
           Мэргэжлийн нэвтрэлт:{" "}
           <Link href="/agent/login" className="font-semibold text-brand-600 hover:underline">Агент</Link>

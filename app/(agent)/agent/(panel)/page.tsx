@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { PremierUpgrade } from "@/components/dashboard/PremierUpgrade";
 import { NewListingButtons } from "@/components/dashboard/NewListingButtons";
+import { ChannelStatsCard } from "@/components/distribute/ChannelStatsCard";
 
 const STAFF_HREF = "/agent/crm/staff";
 const SHOWINGS_DAYS = 7;
@@ -207,6 +208,12 @@ export default async function AgentOverview() {
           )}
         </CardBody>
       </Card>
+
+      {isActive ? (
+        <div className="mt-6">
+          <ChannelStatsCard agentId={agent.id as string} />
+        </div>
+      ) : null}
 
       {!(agent.premier as boolean) && <div className="mt-6"><PremierUpgrade /></div>}
 

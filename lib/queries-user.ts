@@ -1,9 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import type { ListingCardData } from "@/components/listings/ListingCard";
+import { LISTING_CARD_SELECT } from "@/lib/listing-card-select";
 
-const CARD =
-  "id, title, price, ai_score, rooms, area, floor, district, photo, hot, verified, " +
-  "agent:agents(display_name, avatar, verified, office:offices(color))";
+/** Нийтийн картын багана л (anon браузер клиент ч ашигладаг) — lib/listing-card-select. */
+const CARD = LISTING_CARD_SELECT;
+
+/** queries-hub-д зориулсан alias (ижил select). */
+export const CARD_SELECT_USER = LISTING_CARD_SELECT;
 
 export async function isFavorited(listingId: string): Promise<boolean> {
   const supabase = await createClient();
@@ -36,7 +39,7 @@ export async function getFavoriteListings(): Promise<ListingCardData[]> {
     .filter(Boolean) as unknown as ListingCardData[];
 }
 
-export async function getRecentlyViewed(): Promise<ListingCardData[]> {
+export async function getRecentlyViewed(limit = 20): Promise<ListingCardData[]> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -47,7 +50,7 @@ export async function getRecentlyViewed(): Promise<ListingCardData[]> {
     .select(`listing:listings(${CARD})`)
     .eq("user_id", user.id)
     .order("viewed_at", { ascending: false })
-    .limit(20);
+    .limit(limit);
   return (data ?? [])
     .map((r: { listing: unknown }) => r.listing)
     .filter(Boolean) as unknown as ListingCardData[];

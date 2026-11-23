@@ -8,7 +8,15 @@ import { createClient } from "@/lib/supabase/client";
 import { markNotificationsRead } from "@/lib/actions/notifications";
 import { panelLink } from "@/lib/crm/notify";
 
-type Note = { id: string; title: string | null; body: string | null; link: string | null; read_at: string | null; created_at: string };
+type Note = {
+  id: string;
+  type?: string | null;
+  title: string | null;
+  body: string | null;
+  link: string | null;
+  read_at: string | null;
+  created_at: string;
+};
 
 /**
  * `panel="office"` — CRM-ийн холбоосыг (DB нь /agent/crm/... гэж бичдэг) оффисын
@@ -37,7 +45,11 @@ export function NotificationBell({ initial, panel }: { initial: Note[]; panel?: 
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notifications" },
-        (p) => setNotes((prev) => [p.new as Note, ...prev])
+        (p) => {
+          setNotes((prev) => [p.new as Note, ...prev]);
+          // Гар утасны доод цэсний мессежийн тоо энэ channel-ийг дахин ашиглана.
+          window.dispatchEvent(new CustomEvent("nemi:notification", { detail: p.new }));
+        }
       );
     (async () => {
       const {
@@ -51,11 +63,24 @@ export function NotificationBell({ initial, panel }: { initial: Note[]; panel?: 
     };
   }, []);
 
+  // /messages тухайн харилцааны мессежийн мэдэгдлийг уншсан болгоход цэгээ шинэчилнэ.
+  useEffect(() => {
+    function onMessagesRead(e: Event) {
+      const link = (e as CustomEvent<{ link?: string } | null>).detail?.link;
+      if (!link) return;
+      const now = new Date().toISOString();
+      setNotes((prev) => prev.map((n) => (n.link === link && !n.read_at ? { ...n, read_at: now } : n)));
+    }
+    window.addEventListener("nemi:messages-read", onMessagesRead);
+    return () => window.removeEventListener("nemi:messages-read", onMessagesRead);
+  }, []);
+
   function toggle() {
     const next = !open;
     setOpen(next);
     if (next && unread > 0) {
       markNotificationsRead();
+      window.dispatchEvent(new Event("nemi:notifications-read"));
       setNotes((prev) => prev.map((n) => ({ ...n, read_at: n.read_at ?? new Date().toISOString() })));
     }
   }

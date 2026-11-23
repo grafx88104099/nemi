@@ -6,15 +6,26 @@ import { Check, Share2 } from "lucide-react";
 /**
  * Зарыг хуваалцах: утсанд системийн хуваалцах цонх (Messenger, Viber…),
  * компьютерт холбоосыг хуулна.
+ *
+ * url — серверийн каноник URL. Зөвхөн одоогийн хуудастай ижил origin бол
+ * ашиглана (localhost, Vercel preview өөрийн origin-оо хуваалцана); үгүй бол
+ * origin + pathname (?query, #hash-гүй — utm/шүүлтүүр дамжихгүй).
  */
-export function ShareButton({ title, text }: { title: string; text?: string }) {
+export function ShareButton({ title, text, url }: { title: string; text?: string; url?: string }) {
   const [copied, setCopied] = React.useState(false);
 
   async function share() {
-    const url = window.location.href;
+    let shareUrl = window.location.origin + window.location.pathname;
+    if (url) {
+      try {
+        if (new URL(url).origin === window.location.origin) shareUrl = url;
+      } catch {
+        // Буруу url → одоогийн хуудасны цэвэр URL.
+      }
+    }
     if (navigator.share) {
       try {
-        await navigator.share({ title, text, url });
+        await navigator.share({ title, text, url: shareUrl });
         return;
       } catch (e) {
         // Хэрэглэгч цуцалсан бол юу ч хийхгүй; бусад алдаанд хуулахыг оролдоно.
@@ -22,11 +33,11 @@ export function ShareButton({ title, text }: { title: string; text?: string }) {
       }
     }
     try {
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2500);
     } catch {
-      window.prompt("Холбоосыг хуулна уу:", url);
+      window.prompt("Холбоосыг хуулна уу:", shareUrl);
     }
   }
 

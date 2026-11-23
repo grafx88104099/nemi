@@ -1,6 +1,7 @@
 import { getMyOffice } from "@/lib/queries-office";
 import { ListingCard } from "@/components/listings/ListingCard";
 import { VerifyToggle } from "@/components/office/VerifyToggle";
+import { DistributeListingButton } from "@/components/distribute/DistributeListingButton";
 import { Badge } from "@/components/ui/badge";
 import { listingStatusMeta } from "@/lib/constants";
 
@@ -30,10 +31,13 @@ export default async function OfficeListingsPage() {
             const st = listingStatusMeta(l.status);
             return (
               <div key={l.id} className="flex flex-col">
-                <ListingCard l={l} />
+                <ListingCard l={l} saveable={false} />
                 <div className="mt-2 flex min-h-11 flex-wrap items-center justify-between gap-2 px-1 py-1">
                   <Badge tone={st.tone}>{st.label}</Badge>
-                  <VerifyToggle kind="listing" id={l.id} initial={l.verified} />
+                  <div className="flex items-center gap-1">
+                    {l.status === "active" ? <DistributeListingButton listingId={l.id} title={l.title} /> : null}
+                    <VerifyToggle kind="listing" id={l.id} initial={l.verified} />
+                  </div>
                 </div>
               </div>
             );

@@ -5,6 +5,8 @@ import { ChatThread } from "@/components/chat/ChatThread";
 import { Avatar } from "@/components/ui/avatar";
 import { LoginPrompt } from "@/components/auth/LoginPrompt";
 import { cn } from "@/lib/utils";
+import { conversationLink } from "@/lib/hub";
+import { MessagesReadSync } from "@/components/chat/MessagesReadSync";
 
 export default async function MessagesPage({
   searchParams,
@@ -20,6 +22,7 @@ export default async function MessagesPage({
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
+      {active ? <MessagesReadSync key={active.id} conversationId={active.id} /> : null}
       <h1 className="mb-4 text-2xl font-extrabold text-ink">Чат</h1>
       <div className="grid gap-4 md:grid-cols-[300px_1fr]">
         {/* List */}
@@ -30,7 +33,7 @@ export default async function MessagesPage({
           {conversations.map((cv) => (
             <Link
               key={cv.id}
-              href={`/messages?c=${cv.id}`}
+              href={conversationLink(cv.id)}
               className={cn(
                 "flex items-center gap-3 rounded-xl p-2.5 transition",
                 active?.id === cv.id ? "bg-brand-50" : "hover:bg-surface-2"

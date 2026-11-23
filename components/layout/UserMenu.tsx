@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { LayoutDashboard, Heart, Home, Settings, LogOut, MessageCircle, Users } from "lucide-react";
+import { LayoutDashboard, LayoutGrid, Heart, Home, Settings, LogOut, MessageCircle, Users } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { Avatar } from "@/components/ui/avatar";
@@ -11,10 +11,13 @@ import { Avatar } from "@/components/ui/avatar";
 export function UserMenu({
   name,
   email,
+  phone = "",
   role,
 }: {
   name: string;
   email: string;
+  /** Утсаар нэвтэрсэн хэрэглэгчийн харуулах дугаар (formatPhone). */
+  phone?: string;
   role: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -36,12 +39,16 @@ export function UserMenu({
     router.refresh();
   }
 
-  const initials = (name || email || "?")
-    .split(" ")
-    .map((s) => s[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  // Утсаар л нэвтэрсэн (нэр, и-мэйлгүй) бол цифр биш «Х» (Хэрэглэгч).
+  const base = name || (email.includes("@") ? email : "");
+  const initials =
+    base
+      .split(" ")
+      .map((s) => s[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "Х";
+  const label = name || (email ? email.split("@")[0] : phone);
 
   const isAgent = role === "agent";
   const isOffice = role === "office_admin" || role === "admin";
@@ -55,14 +62,14 @@ export function UserMenu({
       >
         <Avatar initials={initials} size="sm" color="#0F172A" />
         <span className="hidden text-sm font-medium text-ink sm:block">
-          {name || email.split("@")[0]}
+          {label}
         </span>
       </button>
       {open && (
         <div className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-lg">
           <div className="border-b border-line px-4 py-2.5">
             <p className="truncate text-sm font-semibold text-ink">{name || "Хэрэглэгч"}</p>
-            <p className="truncate text-xs text-muted">{email}</p>
+            <p className="truncate text-xs text-muted">{email || phone}</p>
           </div>
           {isAgent && (
             <>
@@ -84,6 +91,9 @@ export function UserMenu({
               Админ самбар
             </MenuLink>
           )}
+          <MenuLink href="/me" icon={<LayoutGrid className="size-4" />}>
+            Миний Нэми
+          </MenuLink>
           <MenuLink href="/messages" icon={<MessageCircle className="size-4" />}>
             Чат
           </MenuLink>

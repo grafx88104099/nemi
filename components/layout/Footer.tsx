@@ -36,7 +36,7 @@ const cols: { title: string; links: [string, string][] }[] = [
 
 export function Footer() {
   return (
-    <footer className="mt-20 bg-ink text-white/80">
+    <footer className="mt-20 bg-ink pb-[var(--mobile-tabbar-h,0px)] text-white/80">
       <div className="mx-auto max-w-7xl px-4 py-14">
         <div className="grid gap-10 md:grid-cols-[1.4fr_repeat(3,1fr)]">
           <div className="space-y-4">
