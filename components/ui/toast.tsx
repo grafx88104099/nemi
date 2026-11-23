@@ -115,7 +115,7 @@ export const toast: ToastFn = Object.assign((message: string, opts?: ToastOption
 
 const ICON: Record<ToastKind, typeof Info> = { success: CheckCircle2, error: CircleAlert, info: Info };
 const ICON_TONE: Record<ToastKind, string> = {
-  success: "text-emerald-600",
+  success: "text-verified",
   error: "text-danger",
   info: "text-brand-600",
 };

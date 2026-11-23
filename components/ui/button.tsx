@@ -3,11 +3,15 @@ import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 
-type Variant = "primary" | "secondary" | "ghost" | "danger" | "outline";
+type Variant = "primary" | "cta" | "secondary" | "ghost" | "danger" | "outline";
 type Size = "sm" | "touch" | "md" | "lg";
 
 const variants: Record<Variant, string> = {
-  primary: "bg-brand-500 text-white shadow-sm hover:bg-brand-600",
+  /* text-on-primary / brand-hover: CRM-д цагаан + #ea580c (өмнөхтэй ижил); нийтийн
+     сайтад (data-surface="site") ink #f97316 дээр (6.17:1), hover #fb923c (7.64:1). */
+  primary: "bg-brand-500 text-on-primary shadow-sm hover:bg-brand-hover",
+  /** Сайтын тодорхой CTA: primary + фокусын хүрээний зай. */
+  cta: "bg-brand-500 text-on-primary shadow-sm hover:bg-brand-hover focus-visible:ring-offset-2",
   secondary: "bg-brand-50 text-brand-700 hover:bg-brand-100",
   ghost: "text-ink hover:bg-surface-2",
   danger: "bg-danger text-white hover:opacity-90",
@@ -23,7 +27,12 @@ const sizes: Record<Size, string> = {
 };
 
 const base =
-  "inline-flex items-center justify-center rounded-xl font-semibold transition disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40";
+  "inline-flex items-center justify-center rounded-xl font-semibold transition disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-soft";
+
+/** Товчны классууд — <button>/<Link>-ээс өөр элементэд (submit г.м.) ижил загвар өгөх. */
+export function buttonClasses(variant: Variant = "primary", size: Size = "md", className?: string): string {
+  return cn(base, variants[variant], sizes[size], className);
+}
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {

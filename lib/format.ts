@@ -3,11 +3,57 @@ export function fmtMNT(n: number): string {
   return new Intl.NumberFormat("mn-MN").format(n) + "₮";
 }
 
-/** Богино үнэ: 1.65 тэрбум₮ / 285 сая₮. */
+/** Тоог d оронтой тойруулж, илүү тэгийг хасна: 2.50 → «2.5», 4.0 → «4». */
+function trimFixed(x: number, d: number): string {
+  return String(Number(x.toFixed(d)));
+}
+
+/** Богино үнэ (CRM, зайгүй ₮): 1.65 тэрбум₮ / 285 сая₮ / 2.5 сая₮. */
 export function shortMNT(n: number): string {
-  if (n >= 1e9) return (n / 1e9).toFixed(2) + " тэрбум₮";
-  if (n >= 1e6) return (n / 1e6).toFixed(0) + " сая₮";
+  if (n >= 1e9) return trimFixed(n / 1e9, 2) + " тэрбум₮";
+  if (n >= 1e6) return trimFixed(n / 1e6, n >= 1e8 ? 0 : 1) + " сая₮";
   return n.toLocaleString("mn-MN") + "₮";
+}
+
+const PRICE_UNITS = [
+  { v: 1e3, label: "мянга" },
+  { v: 1e6, label: "сая" },
+  { v: 1e9, label: "тэрбум" },
+] as const;
+
+/**
+ * Нийтийн UI-ийн нэг богино үнийн формат: «320 сая ₮», «2.5 сая ₮/сар»,
+ * «1.65 тэрбум ₮», «850 мянга ₮», «950 ₮». Карт, шүүлтийн chip, панелийн туслах
+ * мөр, газрын зургийн popup бүгд үүнийг хэрэглэнэ (whitespace-nowrap tabular-nums-тэй зур).
+ * lib/seo/listing.ts priceShort (гарчиг/OG) болон CRM-ийн shortMNT-ээс тусдаа.
+ *
+ * Нарийвчлал: ≥1 тэрбум 2 орон; 100–999 сая бүхэл; 1–99.9 сая 1 орон;
+ * 100–999 мянга бүхэл; 1–99.9 мянга 1 орон. Тойруулсны дараа нэгж ахина
+ * (999 999 → «1 сая ₮», 999 600 000 → «1 тэрбум ₮»).
+ */
+export function fmtPriceShort(n: number, deal?: string | null): string {
+  if (!Number.isFinite(n) || n < 0) return "—";
+  const suffix = deal === "rent" ? "/сар" : "";
+  // n-д тохирох хамгийн том нэгж (−1 = 1000-аас бага).
+  let i = -1;
+  for (let k = 0; k < PRICE_UNITS.length; k++) if (n >= PRICE_UNITS[k].v) i = k;
+  for (;;) {
+    if (i < 0) {
+      const r = Math.round(n);
+      if (r < 1e3) return `${r} ₮${suffix}`;
+      i = 0; // 999.6 → «1 мянга ₮»
+      continue;
+    }
+    const u = PRICE_UNITS[i];
+    const x = n / u.v;
+    const d = u.v === 1e9 ? 2 : x >= 100 ? 0 : 1;
+    // Тойруулаад 1000 хүрвэл дараагийн том нэгжид ахина (тэрбумаас дээш нэгжгүй).
+    if (i < PRICE_UNITS.length - 1 && Number(x.toFixed(d)) >= 1000) {
+      i++;
+      continue;
+    }
+    return `${trimFixed(x, d)} ${u.label} ₮${suffix}`;
+  }
 }
 
 /** Талбайн м² формат. */

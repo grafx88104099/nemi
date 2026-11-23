@@ -6,6 +6,7 @@ import { after } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
 import type { ListingStatus, DealType } from "@/lib/constants";
+import type { FeatureKey } from "@/lib/listing-features";
 import { validateListingInput } from "@/lib/validation/listing";
 import { aiValuationEnabled, valuateAndStore } from "@/lib/ai/valuate-listing";
 
@@ -44,6 +45,8 @@ export type ListingInput = {
   parking: number;
   description: string;
   amenities: string[];
+  /** Хяналттай онцлог (lib/listing-features.ts); validateListingInput parking-аас 'parking' гаргана. */
+  features: FeatureKey[];
   photos: string[];
   status: ListingStatus;
   deal_type: DealType;
@@ -119,6 +122,8 @@ export async function createListing(raw: ListingInput): Promise<{ id?: string; e
       parking: input.parking,
       description: input.description,
       amenities: input.amenities,
+      // features илгээгээгүй (хуучин клиент) → баганыг хөндөхгүй (insert: DB default + триггер).
+      ...(input.features ? { features: input.features } : {}),
       photo: input.photos[0] || null,
       status: input.status,
       deal_type: input.deal_type,
@@ -174,6 +179,8 @@ export async function updateListing(id: string, raw: ListingInput): Promise<{ ok
       parking: input.parking,
       description: input.description,
       amenities: input.amenities,
+      // features илгээгээгүй (хуучин клиент) → баганыг хөндөхгүй (insert: DB default + триггер).
+      ...(input.features ? { features: input.features } : {}),
       photo: input.photos[0] || null,
       status: input.status,
       deal_type: input.deal_type,

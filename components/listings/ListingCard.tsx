@@ -2,7 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Flame, ShieldCheck, Star, Clock, Sparkles } from "lucide-react";
 
-import { fmtMNT, relativeDate, isFresh } from "@/lib/format";
+import { fmtMNT, fmtPriceShort, relativeDate, isFresh } from "@/lib/format";
 import { rentTermCode } from "@/lib/constants";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -39,10 +39,21 @@ export type ListingCardData = {
  * Зарын карт. Hook-гүй (сервер хуудас ба GuestFavoritesList (клиент) хоёулаа зурна).
  * Зүрх (CardSaveButton) нь <Link>-ийн хажууд (sibling) — <a> дотор <button> үүрлэхгүй.
  * Фокусын хүрээ контейнер дээр (has-[a:focus-visible]) — overflow-hidden таслахгүй.
+ *
+ * priceFormat: "short" (өгөгдмөл, нийтийн сайт) → «320 сая ₮», title-д бүтэн үнэ;
+ * "full" → бүтэн тоо (оффисын самбар). Оффисын шинэ дуудагч бүр "full" дамжуулна.
  */
-export function ListingCard({ l, saveable = true }: { l: ListingCardData; saveable?: boolean }) {
+export function ListingCard({
+  l,
+  saveable = true,
+  priceFormat = "short",
+}: {
+  l: ListingCardData;
+  saveable?: boolean;
+  priceFormat?: "short" | "full";
+}) {
   return (
-    <div className="group relative overflow-hidden rounded-2xl border border-line bg-surface shadow-sm transition hover:shadow-md has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-brand-500">
+    <div className="group relative overflow-hidden rounded-2xl border border-line bg-surface shadow-sm transition hover:shadow-md has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-focus">
       <Link href={`/listings/${l.id}`} className="block focus-visible:outline-none">
         <div className="relative aspect-[4/3] overflow-hidden bg-surface-2">
           {l.photo && (
@@ -75,10 +86,16 @@ export function ListingCard({ l, saveable = true }: { l: ListingCardData; saveab
         <div className="space-y-2 p-4">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-lg font-extrabold text-ink">
-              <span>
-                {fmtMNT(l.price)}
-                {l.deal_type === "rent" && <span className="text-sm font-medium text-muted">/сар</span>}
-              </span>
+              {priceFormat === "full" ? (
+                <span>
+                  {fmtMNT(l.price)}
+                  {l.deal_type === "rent" && <span className="text-sm font-medium text-muted">/сар</span>}
+                </span>
+              ) : (
+                <span className="tabular-nums whitespace-nowrap" title={fmtMNT(l.price)}>
+                  {fmtPriceShort(l.price, l.deal_type)}
+                </span>
+              )}
               {l.deal_type === "rent" && l.rent_advance_months != null && l.rent_deposit_months != null && (
                 <span className="rounded-md bg-surface-2 px-1.5 py-0.5 text-xs font-semibold text-muted">
                   {rentTermCode(l.rent_advance_months, l.rent_deposit_months)}
@@ -118,7 +135,7 @@ export function ListingCard({ l, saveable = true }: { l: ListingCardData; saveab
               <span className="flex-1 truncate text-sm font-medium text-ink">
                 {l.agent.display_name}
               </span>
-              {l.agent.verified && <ShieldCheck className="size-4 text-emerald-600" />}
+              {l.agent.verified && <ShieldCheck className="size-4 text-verified" />}
             </div>
           )}
           {l.created_at && (

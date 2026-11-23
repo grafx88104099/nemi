@@ -31,7 +31,7 @@ export default async function OfficeListingsPage() {
             const st = listingStatusMeta(l.status);
             return (
               <div key={l.id} className="flex flex-col">
-                <ListingCard l={l} saveable={false} />
+                <ListingCard l={l} saveable={false} priceFormat="full" />
                 <div className="mt-2 flex min-h-11 flex-wrap items-center justify-between gap-2 px-1 py-1">
                   <Badge tone={st.tone}>{st.label}</Badge>
                   <div className="flex items-center gap-1">

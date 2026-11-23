@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { BookmarkPlus } from "lucide-react";
+import { BookmarkPlus, Check } from "lucide-react";
 
 import { saveSearch } from "@/lib/actions/saved-searches";
 
@@ -42,9 +42,17 @@ export function SaveSearchButton({
       type="button"
       onClick={onClick}
       disabled={pending || saved}
-      className={`inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:underline disabled:opacity-60${className ? ` ${className}` : ""}`}
+      className={`inline-flex items-center gap-1 text-sm font-semibold text-brand-700 hover:underline disabled:opacity-60${className ? ` ${className}` : ""}`}
     >
-      <BookmarkPlus className="size-4" /> {saved ? "Хадгалсан ✓" : "Хайлтаа хадгалах"}
+      {saved ? (
+        <>
+          <Check className="size-4" aria-hidden /> Хадгалсан
+        </>
+      ) : (
+        <>
+          <BookmarkPlus className="size-4" aria-hidden /> Хайлтаа хадгалах
+        </>
+      )}
     </button>
   );
 }

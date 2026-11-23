@@ -1,17 +1,30 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import Link from "next/link";
-import { Search, ShieldCheck, Sparkles, TrendingUp, ArrowRight, Home as HomeIcon, Tag, KeyRound } from "lucide-react";
+import { ArrowRight, MapPin } from "lucide-react";
 
 import { getFeaturedListings, getLatestListings } from "@/lib/queries";
+import { getPlatformStats } from "@/lib/platform-stats";
 import { ListingCard } from "@/components/listings/ListingCard";
 import { HomeRecentlyViewed } from "@/components/home/HomeRecentlyViewed";
-import { SmartSearchInput } from "@/components/search/SmartSearchInput";
-import { PROPERTY_TYPES } from "@/lib/constants";
+import { HeroSearch } from "@/components/home/HeroSearch";
+import { ProofStrip } from "@/components/home/ProofStrip";
+import { DistrictTiles } from "@/components/home/DistrictTiles";
+import { SmartTools } from "@/components/home/SmartTools";
+import { VerifiedExplainer } from "@/components/home/VerifiedExplainer";
+import { OwnerCtaBand } from "@/components/home/OwnerCtaBand";
+import { UBSkyline } from "@/components/brand/UBSkyline";
+import { manrope } from "@/components/brand/fonts";
 import { absUrl, jsonLdHtml, SITE_NAME } from "@/lib/seo/site";
+import { cn } from "@/lib/utils";
 
-// Гарчиг, тайлбар, OG-г root layout-оос өвлөнө.
-export const metadata: Metadata = { alternates: { canonical: "/" } };
+// OG нь root layout-оос title/description-ийг өвлөнө.
+export const metadata: Metadata = {
+  title: "Нэми — Улаанбаатарын үл хөдлөх хөрөнгө нэг дор",
+  description:
+    "Улаанбаатарын бүх дүүргийн худалдах, түрээсийн орон сууц, хаус, оффисын зар нэг дор. Баталгаажсан агентын зар тусгай тэмдэгтэй.",
+  alternates: { canonical: "/" },
+};
 
 const HOME_JSON_LD = {
   "@context": "https://schema.org",
@@ -34,13 +47,34 @@ const HOME_JSON_LD = {
   ],
 };
 
+/**
+ * Hero-ийн жишээ chip (сервер Link). loan8 нь facets-ийн URL гэрээ; 8%-ийн зээлийн
+ * тохирол бол ТООЦООЛОЛ тул QuickFilterChips-тэй адил «· тооцоолол» гэж үргэлж тэмдэглэнэ.
+ */
+const EXAMPLE_CHIPS: { label: string; href: string; note?: string }[] = [
+  { label: "Баянзүрх 3 өрөө", href: `/listings?district=${encodeURIComponent("Баянзүрх")}&rooms=3` },
+  { label: "Яармагт түрээс", href: `/listings?deal=rent&q=${encodeURIComponent("Яармаг")}` },
+  { label: "8%-ийн зээлд тохирох", href: "/listings?loan8=1", note: "тооцоолол" },
+];
+
+const CHIP =
+  "inline-flex min-h-11 items-center rounded-full border border-line-strong bg-surface px-3.5 text-sm font-semibold text-ink transition hover:border-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus sm:min-h-10";
+
 export default async function Home() {
   // Кэш хоосон үед DB алдаа гарвал нүүр хуудас унахгүй — тухайн хэсэг л нуугдана.
   const none = (e: unknown) => {
     console.error("home listings:", e instanceof Error ? e.message : e);
     return [];
   };
-  const [recent, featured] = await Promise.all([getLatestListings(18).catch(none), getFeaturedListings(10).catch(none)]);
+  const [recent, featured, stats] = await Promise.all([
+    getLatestListings(18).catch(none),
+    getFeaturedListings(10).catch(none),
+    // Алдаа → null: proof strip, хавтангийн тоо, м² медиан нуугдана.
+    getPlatformStats().catch((e: unknown) => {
+      console.error("home stats:", e instanceof Error ? e.message : e);
+      return null;
+    }),
+  ]);
   // «Шинэ зарууд»-д онцлохыг давтахгүй — шинээр нэмэгдсэн зар энд гарч ирнэ.
   const featuredIds = new Set(featured.map((l) => l.id));
   const latest = recent.filter((l) => !featuredIds.has(l.id)).slice(0, 8);
@@ -48,95 +82,49 @@ export default async function Home() {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml(HOME_JSON_LD) }} />
-      {/* Hero */}
-      <section className="bg-gradient-to-b from-brand-50 to-bg">
-        <div className="mx-auto max-w-5xl px-4 py-20 text-center">
-          <span className="inline-flex items-center gap-2 rounded-full bg-surface px-4 py-1.5 text-sm font-semibold text-brand-700 shadow-sm">
-            <ShieldCheck className="size-4" /> Баталгаажсан зар, агентууд
+
+      {/* Hero — LCP нь H1 (текст). Fold-оос дээш растер зураг БАЙХГҮЙ; skyline нь inline SVG. */}
+      <section className={cn(manrope.variable, "relative overflow-hidden bg-bg")} aria-labelledby="hero-h1">
+        <div className="mx-auto flex max-w-5xl flex-col items-start px-4 pt-4 pb-8 md:pt-12 md:pb-0">
+          <span className="order-1 inline-flex items-center gap-1.5 rounded-full border border-line-strong bg-surface px-3 py-1 text-sm font-semibold text-ink">
+            <MapPin className="size-4" aria-hidden /> Улаанбаатар · 9 дүүрэг
           </span>
-          <h1 className="mt-5 text-4xl font-extrabold tracking-tight text-ink sm:text-5xl">
-            Монголын <span className="text-brand-500">үл хөдлөх</span>-ийн
-            <br /> ухаалаг платформ
-          </h1>
-          <p className="mx-auto mt-4 max-w-xl text-lg text-muted">
-            AI үнэлгээ, баталгаатай агентууд, ил тод үнэ. Гэрээ хайхаас гар
-            өгөх хүртэл нэг дороос.
-          </p>
-          <form
-            action="/listings"
-            className="mx-auto mt-8 flex max-w-2xl items-center gap-2 rounded-2xl bg-surface p-2 shadow-lg"
+          <h1
+            id="hero-h1"
+            className="order-2 mt-3 max-w-3xl font-display text-[length:clamp(1.75rem,6.5vw,3.25rem)] leading-[1.08] font-extrabold tracking-[-0.02em] text-ink md:mt-5"
           >
-            <Search className="ml-2 size-5 text-subtle" />
-            <SmartSearchInput
-              placeholder="Дүүрэг, хороолол, «2 өрөө 300 сая хүртэл»…"
-              ariaLabel="Зар хайх"
-              className="min-w-0 flex-1 text-left"
-              inputClassName="h-11 border-0 bg-transparent px-1 focus:ring-0"
-            />
-            <button
-              type="submit"
-              className="h-11 rounded-xl bg-brand-500 px-6 font-semibold text-white transition hover:bg-brand-600"
-            >
-              Хайх
-            </button>
-          </form>
-          <div className="mt-4 flex flex-wrap justify-center gap-2 text-sm">
-            {PROPERTY_TYPES.map((t) => (
-              <Link
-                key={t}
-                href={`/listings?type=${encodeURIComponent(t)}`}
-                className="rounded-full border border-line bg-surface px-3 py-1 text-muted transition hover:border-brand-300 hover:text-brand-700"
-              >
-                {t}
-              </Link>
+            Улаанбаатарын үл хөдлөх хөрөнгө —{" "}
+            <span className="underline decoration-brand-500 decoration-4 underline-offset-[6px]">нэг дор</span>
+          </h1>
+          {/* Утсанд H1-ийн шууд доор (эхний ~360px) тусгай 56px тууз (variant="strip"). */}
+          <UBSkyline variant="strip" className="order-3 -mx-4 mt-3 h-14 w-[calc(100%+2rem)] md:hidden" />
+          {/* md+ доод талд дэлгэцийн бүтэн өргөнөөр (section overflow-hidden). Өндөр нь зургийн
+              6:1 харьцаагаар (хажуу тайрагдахгүй); 260px-ээс өргөн дэлгэцэд зөвхөн тэнгэр тайрагдана
+              (2560px-д ч нурууны орой бүтэн). */}
+          <UBSkyline className="order-last hidden md:mx-[calc(50%-50vw)] md:mt-10 md:block md:aspect-[6/1] md:h-auto md:max-h-[260px] md:w-screen" />
+          <p className="order-4 mt-4 max-w-2xl text-muted md:text-lg">
+            Бүх дүүрэг, хороолол, хотхоны худалдаа, түрээсийн зар нэг дор. Баталгаажсан агентын зар тусгай тэмдэгтэй.
+          </p>
+          <div className="order-5 mt-5 w-full">
+            <HeroSearch />
+          </div>
+          <ul className="order-6 mt-4 flex flex-wrap gap-2" aria-label="Жишээ хайлт">
+            {EXAMPLE_CHIPS.map((c) => (
+              <li key={c.href}>
+                <Link href={c.href} className={CHIP}>
+                  {c.label}
+                  {c.note ? <span className="ml-1 text-xs font-medium text-muted">· {c.note}</span> : null}
+                </Link>
+              </li>
             ))}
+          </ul>
+          <div className="order-7 mt-4">
+            <ProofStrip stats={stats} />
           </div>
         </div>
       </section>
 
-      {/* Авна / Зарна / Түрээслэнэ — Zillow маягийн гурван үндсэн үйлдэл */}
-      <section className="mx-auto -mt-8 max-w-6xl px-4">
-        <div className="grid gap-5 sm:grid-cols-3">
-          {[
-            {
-              icon: HomeIcon,
-              t: "Авна",
-              d: "Баталгаатай зар, AI үнэлгээтэйгээр өөрт тохирох гэрээ ол.",
-              cta: "Зар үзэх",
-              href: "/listings?deal=sale",
-            },
-            {
-              icon: Tag,
-              t: "Зарна",
-              d: "Мэргэжлийн оффист зуучлуул, эсвэл өөрөө зар оруул — үнээ ч тооцоолно.",
-              cta: "Хөрөнгөө зарлах",
-              href: "/sell",
-            },
-            {
-              icon: KeyRound,
-              t: "Түрээслэнэ",
-              d: "Түрээсийн орон сууц хай, эсвэл өөрийнхөө орон сууцыг түрээслүүл.",
-              cta: "Түрээс үзэх",
-              href: "/listings?deal=rent",
-            },
-          ].map((c) => (
-            <Link
-              key={c.t}
-              href={c.href}
-              className="group flex flex-col items-center rounded-3xl border border-line bg-surface p-7 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-lg"
-            >
-              <div className="flex size-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-600 transition group-hover:bg-brand-500 group-hover:text-white">
-                <c.icon className="size-7" />
-              </div>
-              <h3 className="mt-4 text-xl font-extrabold text-ink">{c.t}</h3>
-              <p className="mt-2 text-sm text-muted">{c.d}</p>
-              <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-600">
-                {c.cta} <ArrowRight className="size-4 transition group-hover:translate-x-0.5" />
-              </span>
-            </Link>
-          ))}
-        </div>
-      </section>
+      <DistrictTiles stats={stats} />
 
       {/* Нэвтэрсэн хэрэглэгчийн сүүлд үзсэн зарууд — hero-г хориглохгүй (Suspense). */}
       <Suspense fallback={null}>
@@ -151,7 +139,7 @@ export default async function Home() {
               <h2 id="featured-heading" className="text-2xl font-extrabold text-ink">Онцлох зарууд</h2>
               <p className="text-sm text-muted">Хамгийн сүүлд нэмэгдсэн, баталгаатай сонголтууд</p>
             </div>
-            <Link href="/listings" className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-brand-600 hover:underline">
+            <Link href="/listings" className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-brand-ink hover:underline">
               Бүгдийг үзэх <ArrowRight className="size-4" aria-hidden />
             </Link>
           </div>
@@ -179,7 +167,7 @@ export default async function Home() {
               <Link href="/listings?deal=rent" className="inline-flex min-h-11 items-center text-sm font-semibold text-muted hover:text-ink hover:underline">
                 Түрээс
               </Link>
-              <Link href="/listings" className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-brand-600 hover:underline">
+              <Link href="/listings" className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-brand-ink hover:underline">
                 Бүгдийг үзэх <ArrowRight className="size-4" aria-hidden />
               </Link>
             </div>
@@ -192,24 +180,9 @@ export default async function Home() {
         </section>
       )}
 
-      {/* Why Nemi */}
-      <section className="bg-surface py-14">
-        <div className="mx-auto grid max-w-7xl gap-8 px-4 md:grid-cols-3">
-          {[
-            { icon: ShieldCheck, t: "Баталгаатай мэдээлэл", d: "Зар, агент бүр баталгаажуулалт дамждаг. Хуурамч зар хамгийн бага." },
-            { icon: Sparkles, t: "AI үнэлгээ", d: "Зар бүрт зах зээлийн үнэлгээ, чанарын оноо. Зөв шийдвэр гаргахад тус болно." },
-            { icon: TrendingUp, t: "Ил тод үнэ", d: "м² үнэ, түүх, харьцуулалт. Дутуу мэдээлэлгүйгээр хэлэлцээ хий." },
-          ].map((f) => (
-            <div key={f.t} className="space-y-3">
-              <div className="flex size-12 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
-                <f.icon className="size-6" />
-              </div>
-              <h3 className="text-lg font-bold text-ink">{f.t}</h3>
-              <p className="text-sm text-muted">{f.d}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+      <SmartTools stats={stats} />
+      <VerifiedExplainer />
+      <OwnerCtaBand />
     </>
   );
 }

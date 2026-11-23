@@ -31,6 +31,18 @@ const TABLE: [string, SmartFilters, string][] = [
   ["2 орон сууц", { type: "Орон сууц" }, "2"],
   ["3 сайхан байр", { type: "Орон сууц" }, "3 сайхан"],
   ["", {}, ""],
+  // Facets: онцлог, шинэ барилга, 8%-ийн зээл.
+  ["хан-уул 2 өрөө тавилгатай", { district: "Хан-Уул", rooms: 2, features: ["furnished"] }, ""],
+  ["15-р хороолол, 8%-ийн зээлд тохирох", { loan8: true }, "15-р хороолол"],
+  ["8% ипотекийн зээлд тохирох байр", { loan8: true, type: "Орон сууц" }, ""],
+  ["ипотекийн зээлд тохирох байр", { loan8: true, type: "Орон сууц" }, ""],
+  ["шинэ барилга баянзүрх", { newBuild: true, district: "Баянзүрх" }, ""],
+  ["зогсоолтой байр", { features: ["parking"], type: "Орон сууц" }, ""],
+  ["бүрэн тавилгатай лифттэй гаражтай", { features: ["furnished", "parking", "elevator"] }, ""],
+  ["тагттай агуулахтай харуултай тоглоомын талбайтай", { features: ["balcony", "security", "storage", "kids_playground"] }, ""],
+  ["тавилга", {}, "тавилга"],
+  ["тавилгагүй байр", { type: "Орон сууц" }, "тавилгагүй"],
+  ["Шинэ Яармаг", {}, "Шинэ Яармаг"],
 ];
 
 describe("parseSearchQuery", () => {
@@ -59,6 +71,25 @@ describe("applySmartQuery", () => {
     const r = applySmartQuery(parseListingFilters({ q: "2 байр өрөө" }));
     expect(r.filters).toMatchObject({ type: "Орон сууц", rooms: 2 });
     expect(r.filters.q).toBeUndefined();
+  });
+
+  it("онцлог: URL ба задалсан утгын нэгдэл, тогтвортой цэг", () => {
+    const f = parseListingFilters({ features: "elevator", q: "тавилгатай зогсоолтой" });
+    const r = applySmartQuery(f);
+    expect(r.changed).toBe(true);
+    expect(r.filters.features).toEqual(["furnished", "parking", "elevator"]);
+    expect(r.filters.q).toBeUndefined();
+    expect(applySmartQuery(r.filters).changed).toBe(false);
+  });
+
+  it("q-ийн дүүрэг URL-ийн БҮХ дүүргийн жагсаалтыг солино (баримтжуулсан дүрэм)", () => {
+    const r = applySmartQuery(parseListingFilters({ district: "Хан-Уул,Баянгол", q: "сүхбаатар" }));
+    expect(r.filters.district).toBe("Сүхбаатар");
+  });
+
+  it("олон дүүрэг, туг q-гүй үед өөрчлөгдөхгүй", () => {
+    const f = parseListingFilters({ district: "Хан-Уул,Баянгол", features: "parking", loan8: "1" });
+    expect(applySmartQuery(f).changed).toBe(false);
   });
 
   it("өөрчлөлтгүй бол ижил объект", () => {

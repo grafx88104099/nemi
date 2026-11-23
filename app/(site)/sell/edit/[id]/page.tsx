@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getListingPoint } from "@/lib/queries";
 import type { DealType, ListingStatus } from "@/lib/constants";
+import { normalizeFeatures } from "@/lib/listing-features";
 import { LoginPrompt } from "@/components/auth/LoginPrompt";
 import { Card, CardBody } from "@/components/ui/card";
 import { BackLink } from "@/components/ui/back-link";
@@ -53,6 +54,7 @@ export default async function OwnerEditListingPage({ params }: { params: Promise
               parking: l.parking ?? 0,
               description: l.description ?? "",
               amenities: l.amenities ?? [],
+              features: normalizeFeatures(l.features ?? []),
               photos,
               status: l.status as ListingStatus,
               deal_type: l.deal_type as DealType,

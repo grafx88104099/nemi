@@ -2,11 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
+import { MapPin } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
-import { shortMNT } from "@/lib/format";
+import { fmtPriceShort } from "@/lib/format";
+import { compactRpcArgs, filterRpcArgs } from "@/lib/listing-facets";
 import type { ListingFilters } from "@/lib/listing-filters";
-import { searchPatternGroups } from "@/lib/search/query";
+import { CTA } from "@/components/listings/filters/styles";
+import { cn } from "@/lib/utils";
 
 type Pin = {
   id: string;
@@ -29,34 +32,25 @@ export function pinPopup(l: Pick<Pin, "id" | "title" | "district" | "price" | "d
   title.style.fontWeight = "600";
   title.textContent = l.title;
   const meta = document.createElement("div");
-  meta.style.cssText = "color:#64748b;font-size:12px";
-  meta.textContent = [shortMNT(l.price) + (l.deal_type === "rent" ? "/сар" : ""), l.district]
+  meta.style.cssText = "color:#5b6474;font-size:12px";
+  meta.textContent = [fmtPriceShort(l.price, l.deal_type), l.district]
     .filter(Boolean)
     .join(" · ");
   const link = document.createElement("a");
   link.href = `/listings/${encodeURIComponent(l.id)}`;
-  link.style.cssText = "color:#EA580C;font-size:12px";
+  link.style.cssText = "color:#c2410c;font-size:12px";
   link.textContent = "Дэлгэрэнгүй →";
   root.append(title, meta, link);
   return root;
 }
 
-/** Шүүлт → listings_map_search-ийн аргумент (жагсаалттай ижил утга). */
+/**
+ * Шүүлт → listings_map_search-ийн аргумент (жагсаалт, listing_facets-тэй ижил утга).
+ * Зөвхөн тохируулсан түлхүүрийг илгээнэ (compactRpcArgs) — шүүлтгүй дуудлага {} тул
+ * хуучин ба шинэ RPC гарын үсэгт хоёуланд таарна. Хуучин p_district/p_q-г илгээхгүй (p_districts).
+ */
 function rpcArgs(f: ListingFilters) {
-  return {
-    p_deal: f.deal ?? null,
-    p_district: f.district ?? null,
-    p_type: f.type ?? null,
-    p_rooms: f.rooms ?? null,
-    p_min_price: f.minPrice ?? null,
-    p_max_price: f.maxPrice ?? null,
-    p_min_area: f.minArea ?? null,
-    p_max_area: f.maxArea ?? null,
-    // Жагсаалттай ижил search_text хэв маяг (хуучин p_q нь зөвхөн deploy-ийн үеийн клиентэд).
-    p_q: null,
-    p_q_groups: f.q ? searchPatternGroups(f.q) : null,
-    p_posted: f.posted ?? null,
-  };
+  return compactRpcArgs({ ...filterRpcArgs(f) });
 }
 
 const KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -88,8 +82,8 @@ export function ListingsMap({ filters = {} }: { filters?: ListingFilters }) {
     for (const l of pins) {
       const el = document.createElement("div");
       el.style.cssText =
-        "display:grid;place-items:center;background:#F97316;color:#fff;font-weight:700;font-size:11px;padding:3px 7px;border-radius:9999px;box-shadow:0 1px 4px rgba(0,0,0,.3);white-space:nowrap;cursor:pointer";
-      el.textContent = shortMNT(l.price);
+        "display:grid;place-items:center;background:#f97316;color:#0f1b2d;border:1px solid #0f1b2d;font-weight:700;font-size:11px;padding:3px 7px;border-radius:9999px;box-shadow:0 1px 4px rgba(0,0,0,.3);white-space:nowrap;cursor:pointer";
+      el.textContent = fmtPriceShort(l.price);
 
       const marker = new lib.AdvancedMarkerElement({
         map,
@@ -190,17 +184,22 @@ export function ListingsMap({ filters = {} }: { filters?: ListingFilters }) {
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-3">
         <button
+          type="button"
           onClick={searchNearCenter}
-          className="min-h-11 rounded-lg bg-brand-500 px-4 text-sm font-semibold text-white hover:bg-brand-600"
+          className={cn(CTA, "inline-flex min-h-11 items-center gap-1.5 rounded-lg px-4 text-sm")}
         >
-          📍 Энэ хавьд хайх (4км)
+          <MapPin className="size-4" aria-hidden /> Энэ хавьд хайх (4км)
         </button>
         {near && (
-          <button onClick={reset} className="min-h-11 px-2 text-sm text-muted hover:underline">
+          <button type="button" onClick={reset} className="min-h-11 px-2 text-sm text-muted hover:underline">
             Бүх бүсийг харах
           </button>
         )}
-        {count != null && <span className="text-sm text-muted">{count} зар</span>}
+        {count != null && (
+          <span className="text-sm text-muted tabular-nums" aria-live="polite">
+            {near ? `Энэ хавьд ${count} зар` : `${count} зар`}
+          </span>
+        )}
       </div>
       <div ref={ref} className="h-[70vh] w-full overflow-hidden rounded-2xl border border-line" />
     </div>

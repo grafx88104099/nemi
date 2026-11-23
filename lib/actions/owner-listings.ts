@@ -66,6 +66,8 @@ function parse(raw: OwnerListingInput, uid: string) {
       parking: input.parking,
       description: input.description,
       amenities: input.amenities,
+      // features илгээгээгүй (хуучин клиент) → баганыг хөндөхгүй.
+      ...(input.features ? { features: input.features } : {}),
       photo: input.photos[0] || null,
       // Эзэн «ноорог»-оос бусдыг сонговол хяналтад илгээнэ (DB мөн хүчлэнэ).
       status: (input.status === "draft" ? "draft" : input.status === "sold" ? "sold" : "review") as ListingInput["status"],

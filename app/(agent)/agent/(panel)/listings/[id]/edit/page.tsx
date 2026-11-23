@@ -7,6 +7,7 @@ import { Card, CardBody } from "@/components/ui/card";
 import { ListingForm } from "@/components/dashboard/ListingForm";
 import { AiValuateButton } from "@/components/dashboard/AiValuateButton";
 import type { ListingStatus, DealType } from "@/lib/constants";
+import { normalizeFeatures } from "@/lib/listing-features";
 
 export default async function EditListingPage({
   params,
@@ -41,6 +42,7 @@ export default async function EditListingPage({
               parking: (l.parking as number) ?? 0,
               description: (l.description as string) ?? "",
               amenities: (l.amenities as string[]) ?? [],
+              features: normalizeFeatures((l.features as string[] | null | undefined) ?? []),
               photos: (l.photos ?? [])
                 .sort((a, b) => a.sort_order - b.sort_order)
                 .map((p) => p.url),

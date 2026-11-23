@@ -2,44 +2,52 @@ import Link from "next/link";
 import { X } from "lucide-react";
 
 import { SmartSearchInput } from "@/components/search/SmartSearchInput";
-import { DISTRICTS, PROPERTY_TYPES } from "@/lib/constants";
+import { FilterPanel, SortSelect } from "@/components/listings/filters/FilterPanel";
+import { QuickFilterChips } from "@/components/listings/filters/QuickFilterChips";
+import { CTA } from "@/components/listings/filters/styles";
+import type { ListingFacets } from "@/lib/listing-facets";
 import {
   DEAL_TABS,
-  POSTED_OPTIONS,
-  SORT_OPTIONS,
   activeFilterChips,
   filtersHref,
+  filtersToParams,
+  sanitizeDealFlags,
   type ListingFilters,
 } from "@/lib/listing-filters";
 import { cn } from "@/lib/utils";
 
-const field =
-  "h-11 w-full min-w-0 rounded-lg border border-line bg-surface px-3 text-sm text-ink focus:border-brand-500 focus:outline-none";
-
 /**
  * Нийтийн зарын шүүлтийн самбар — жагсаалт ба газрын зураг хоёулаа ашиглана.
- * JS-гүй GET маягт: Түрээс/Худалдах таб нь холбоос, маягт нь `deal`-ийг
- * далд талбараар хадгална (өмнө нь шүүх дарахад алга болдог байв).
+ *
+ *  1. Түрээс/Худалдах таб — бусад шүүлтийг хадгалсан, мөлхөгдөх (follow) холбоос + тоо.
+ *  2. JS-гүй GET хайлтын маягт: q + бусад бүх шүүлт далд талбараар (өмнө нь шүүх
+ *     дарахад deal алга болдог байв) + эрэмбэ. FilterPanel нь энэ маягтын ДОТОР БИШ,
+ *     дараах ах дүү элемент — түүний submit/change хайлтын маягтад хүрэхгүй.
+ *  3. Түргэн чип (rel=nofollow). 4. Арилгах чипүүд (rel=nofollow) + «Бүгдийг арилгах».
  *
  * Маягт нь каноник href-ээрээ key-тэй: чип, таб, ухаалаг хайлтын redirect зэрэг
  * клиент навигацийн дараа удирдлагагүй талбар бүр шинэ анхдагч утгаар дахин үүснэ.
+ * FilterPanel-ийг URL-аар key-лэхгүй: sheet нээгдэх бүрт f-ээс шинээр эхэлдэг тул
+ * хэрэггүй, key солигдвол «N зар харах»-ын дараа фокус <body> руу унадаг.
  */
 export function SearchFilterBar({
   base,
   f,
+  facets = null,
   showSort = false,
   aiSort = false,
 }: {
   base: "/listings" | "/map";
   f: ListingFilters;
+  facets?: ListingFacets | null;
   showSort?: boolean;
   /** «AI оноо» эрэмбийг санал болгох эсэх (үнэлгээтэй зар байгаа үед л). */
   aiSort?: boolean;
 }) {
   const chips = activeFilterChips(base, f);
-  // URL/задалсан «7 өрөө» гэх мэт 5-аас их утга дахин илгээхэд алга болохгүй.
-  const roomOpts = f.rooms && f.rooms > 5 ? [1, 2, 3, 4, 5, f.rooms] : [1, 2, 3, 4, 5];
-  const sorts = SORT_OPTIONS.filter(([v]) => v !== "ai" || aiSort || f.sort === "ai");
+  const canonical = filtersHref(base, f, { withSort: true });
+  const hidden = [...filtersToParams(f).entries()].filter(([k]) => k !== "q");
+  const dealSum = facets ? Object.values(facets.deal).reduce((a, b) => a + b, 0) : null;
 
   return (
     <div className="space-y-3">
@@ -47,70 +55,59 @@ export function SearchFilterBar({
       <nav aria-label="Зарын төрөл" className="flex gap-1 rounded-xl bg-surface-2 p-1 sm:inline-flex">
         {DEAL_TABS.map(([v, label]) => {
           const on = (f.deal ?? "") === v;
+          const n = facets ? (v ? (facets.deal[v] ?? 0) : dealSum) : null;
           return (
             <Link
               key={label}
-              href={filtersHref(base, { ...f, deal: v || undefined }, { withSort: true })}
+              // Зөрчилтэй туг (Худалдаа + урьдчилгаа 1 сар г.м.) хасагдана — үргэлж хоосон хуудас руу биш.
+              href={filtersHref(base, sanitizeDealFlags({ ...f, deal: v || undefined, page: undefined }), {
+                withSort: true,
+              })}
               aria-current={on ? "page" : undefined}
               className={cn(
-                "flex min-h-11 flex-1 items-center justify-center rounded-lg px-5 text-sm font-semibold transition sm:flex-none",
+                "flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1 rounded-lg px-2 text-sm font-semibold whitespace-nowrap transition sm:flex-none sm:px-4",
                 on ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink"
               )}
             >
               {label}
+              {n != null ? <span className="tabular-nums font-medium text-muted">({n})</span> : null}
             </Link>
           );
         })}
       </nav>
 
-      <form
-        key={filtersHref(base, f, { withSort: true })}
-        action={base}
-        className="grid grid-cols-2 gap-3 rounded-2xl border border-line bg-surface p-4 shadow-sm md:grid-cols-4 lg:grid-cols-6"
-      >
-        {f.deal ? <input type="hidden" name="deal" value={f.deal} /> : null}
-        <SmartSearchInput
-          defaultValue={f.q ?? ""}
-          placeholder="Зайсан 2 өрөө, 300 сая хүртэл…"
-          ariaLabel="Хайх"
-          className="col-span-2"
-          inputClassName="h-11 rounded-lg"
-        />
-        <select name="district" defaultValue={f.district ?? ""} aria-label="Дүүрэг" className={field}>
-          <option value="">Бүх дүүрэг</option>
-          {DISTRICTS.map((d) => <option key={d} value={d}>{d}</option>)}
-        </select>
-        <select name="type" defaultValue={f.type ?? ""} aria-label="Төрөл" className={field}>
-          <option value="">Бүх төрөл</option>
-          {PROPERTY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-        </select>
-        <select name="rooms" defaultValue={f.rooms ? String(f.rooms) : ""} aria-label="Өрөө" className={field}>
-          <option value="">Өрөө</option>
-          {roomOpts.map((r) => <option key={r} value={r}>{r}+ өрөө</option>)}
-        </select>
-        <select name="posted" defaultValue={f.posted ? String(f.posted) : ""} aria-label="Нийтэлсэн хугацаа" className={field}>
-          <option value="">Бүх хугацаа</option>
-          {POSTED_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-        </select>
-        <input name="minPrice" inputMode="numeric" defaultValue={f.minPrice ?? ""} placeholder="Үнэ доод (₮)" aria-label="Үнэ доод" className={field} />
-        <input name="maxPrice" inputMode="numeric" defaultValue={f.maxPrice ?? ""} placeholder="Үнэ дээд (₮)" aria-label="Үнэ дээд" className={field} />
-        <input name="minArea" inputMode="decimal" defaultValue={f.minArea ?? ""} placeholder="Талбай доод (м²)" aria-label="Талбай доод" className={field} />
-        <input name="maxArea" inputMode="decimal" defaultValue={f.maxArea ?? ""} placeholder="Талбай дээд (м²)" aria-label="Талбай дээд" className={field} />
-        {showSort ? (
-          <select name="sort" defaultValue={f.sort ?? "new"} aria-label="Эрэмбэ" className={field}>
-            {sorts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-        ) : null}
-        <button
-          type="submit"
-          className={cn(
-            "h-11 rounded-lg bg-brand-500 px-4 text-sm font-semibold text-white hover:bg-brand-600",
-            showSort ? "" : "col-span-2 md:col-span-1"
-          )}
+      <div className="flex flex-wrap items-start gap-2">
+        <form
+          key={canonical}
+          action={base}
+          role="search"
+          className="flex min-w-0 flex-1 basis-[18rem] flex-wrap gap-2"
         >
-          Шүүх
-        </button>
-      </form>
+          {hidden.map(([k, v]) => (
+            <input key={k} type="hidden" name={k} value={v} />
+          ))}
+          <SmartSearchInput
+            defaultValue={f.q ?? ""}
+            placeholder="Зайсан 2 өрөө, 300 сая хүртэл…"
+            ariaLabel="Хайх"
+            className="min-w-0 flex-1 basis-48"
+            inputClassName="h-11 rounded-xl border-line-control"
+          />
+          <button type="submit" className={cn(CTA, "h-11 rounded-xl px-5 text-sm")}>
+            Хайх
+          </button>
+          {showSort ? (
+            <SortSelect
+              value={f.sort ?? "new"}
+              aiSort={aiSort}
+              className="h-11 rounded-xl border border-line-control bg-surface px-3 text-sm text-ink focus:border-ink focus:outline-none"
+            />
+          ) : null}
+        </form>
+        <FilterPanel base={base} f={f} facets={facets} showSort={showSort} aiSort={aiSort} />
+      </div>
+
+      <QuickFilterChips base={base} f={f} facets={facets} />
 
       {chips.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2" aria-label="Сонгосон шүүлт">
@@ -118,15 +115,17 @@ export function SearchFilterBar({
             <Link
               key={c.key}
               href={c.href}
+              rel="nofollow"
               aria-label={`${c.label} шүүлтийг арилгах`}
-              className="inline-flex min-h-9 items-center gap-1 rounded-full border border-brand-200 bg-brand-50 px-3 text-sm font-medium text-brand-700 hover:bg-brand-100"
+              className="inline-flex min-h-11 items-center gap-1 rounded-full border border-brand-200 bg-brand-50 px-3 text-sm font-medium text-brand-700 hover:bg-brand-100 sm:min-h-9"
             >
               {c.label} <X className="size-3.5" aria-hidden />
             </Link>
           ))}
           <Link
             href={filtersHref(base, { deal: f.deal, sort: f.sort }, { withSort: true })}
-            className="inline-flex min-h-9 items-center px-2 text-sm text-muted underline-offset-2 hover:text-ink hover:underline"
+            rel="nofollow"
+            className="inline-flex min-h-11 items-center px-2 text-sm text-muted underline-offset-2 hover:text-ink hover:underline sm:min-h-9"
           >
             Бүгдийг арилгах
           </Link>

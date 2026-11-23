@@ -229,6 +229,8 @@ export type Database = {
           closed_at: string | null;
           /** 20261123000300_listings_search_text: trigger listings_search_text эзэмшинэ (Insert/Update-д байхгүй). */
           search_text: string | null;
+          /** 20261123000800_listing_features_facets: хяналттай толь (lib/listing-features.ts FEATURE_KEYS); parking > 0 → 'parking' (триггер). */
+          features: string[];
           created_at: string;
           updated_at: string;
         };
@@ -257,6 +259,8 @@ export type Database = {
           shared?: boolean;
           description?: string | null;
           amenities?: string[];
+          /** 20261123000800: CHECK listings_features_chk (толь, ≤8). */
+          features?: string[];
           ai_score?: number | null;
           ai_note?: string | null;
           location?: unknown | null;
@@ -5460,11 +5464,45 @@ export type Database = {
           p_m?: number | null;
           /** 20261123000300_listings_search_text: AND бүлгүүд (≤6), бүлэг бүр OR LIKE хэв маяг (≤8, ≤80 тэмдэгт). */
           p_q_groups?: Json | null;
+          /** 20261123000800_listing_features_facets: OR дүүрэг, AND онцлог, 5 туг (lib/listing-facets.ts compactRpcArgs). */
+          p_districts?: string[] | null;
+          p_features?: string[] | null;
+          p_new_build?: boolean;
+          p_adv1?: boolean;
+          p_no_deposit?: boolean;
+          p_loan8?: boolean;
+          p_owner_only?: boolean;
         };
         Returns: {
           id: string; title: string; price: number; district: string | null; deal_type: string;
           rooms: number; area: number | null; photo: string | null; lng: number; lat: number;
         }[];
+      };
+      /**
+       * 20261123000800_listing_features_facets: SECURITY INVOKER facet тоо (дуудагчийн RLS).
+       * Буцаах JSON: { total, new_from, deal, district, type, rooms, features, flags } — lib/listing-facets.ts parseFacets.
+       */
+      listing_facets: {
+        Args: {
+          p_deal?: string | null;
+          p_districts?: string[] | null;
+          p_type?: string | null;
+          p_rooms?: number | null;
+          p_min_price?: number | null;
+          p_max_price?: number | null;
+          p_min_area?: number | null;
+          p_max_area?: number | null;
+          p_q_groups?: Json | null;
+          p_posted?: number | null;
+          p_features?: string[] | null;
+          p_new_build?: boolean;
+          p_adv1?: boolean;
+          p_no_deposit?: boolean;
+          p_loan8?: boolean;
+          p_owner_only?: boolean;
+          p_has_location?: boolean;
+        };
+        Returns: Json;
       };
       listing_point: {
         Args: { p_id: string };

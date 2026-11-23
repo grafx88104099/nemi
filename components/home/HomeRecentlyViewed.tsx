@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { unstable_rethrow } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 
 import { getRecentlyViewed } from "@/lib/queries-user";
@@ -10,6 +11,8 @@ export async function HomeRecentlyViewed() {
   try {
     listings = await getRecentlyViewed(10);
   } catch (e) {
+    // cookies()-ийн динамик дохиог (build/prerender) залгихгүй — Next өөрөө зохицуулна.
+    unstable_rethrow(e);
     console.error("home recently viewed:", e instanceof Error ? e.message : e);
     return null;
   }

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createPublicClient } from "@/lib/supabase/public";
 import type { ListingCardData } from "@/components/listings/ListingCard";
 import { applyListingFilters, type ListingFilters } from "@/lib/listing-filters";
+import { compactRpcArgs, filterRpcArgs, parseFacets, type ListingFacets } from "@/lib/listing-facets";
 import { LISTINGS_TAG } from "@/lib/listings-cache";
 import { LISTING_CARD_COLUMNS, LISTING_CARD_SELECT } from "@/lib/listing-card-select";
 import { rankSimilar, similarPriceBand } from "@/lib/similar-listings";
@@ -129,6 +130,34 @@ export async function getListings(f: ListingFilters = {}) {
     page,
     pageSize,
   };
+}
+
+/**
+ * Шүүлтүүрийн facet тоо (listing_facets, 20261123000800). getListings-тэй ИЖИЛ
+ * хүсэлтийн client (ижил RLS) — тоо нь жагсаалтад харагдах мөрүүдтэй тэнцүү.
+ * hasLocation: /map — байршилтай + түдгэлзээгүй оффисын дүрэм (пинийн тоотой тэнцүү).
+ * Алдаа гарвал null (UI тоогүй ажиллана) — зөвхөн хамгаалалт; миграц deploy-оос өмнө заавал.
+ * Кэшгүй (шүүлт бүр өөр).
+ */
+export async function getListingFacets(
+  f: ListingFilters,
+  { hasLocation = false }: { hasLocation?: boolean } = {}
+): Promise<ListingFacets | null> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc(
+      "listing_facets",
+      compactRpcArgs({ ...filterRpcArgs(f), p_has_location: hasLocation })
+    );
+    if (error) {
+      console.error("listing_facets:", error.message);
+      return null;
+    }
+    return parseFacets(data);
+  } catch (e) {
+    console.error("listing_facets:", e instanceof Error ? e.message : String(e));
+    return null;
+  }
 }
 
 // Нийтийн хуудас тул агент/оффисоос зөвхөн харуулдаг баганыг л татна

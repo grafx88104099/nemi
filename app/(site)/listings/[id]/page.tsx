@@ -25,6 +25,8 @@ import { ListingViewBeacon } from "@/components/listings/ListingViewBeacon";
 import { getClosedListing, getListingSeo } from "@/lib/queries-seo";
 import { listingHeadline, listingJsonLd, listingMetaFor, type ListingSeo } from "@/lib/seo/listing";
 import { absUrl, isUuid, jsonLdHtml } from "@/lib/seo/site";
+import { FEATURE_LABEL, normalizeFeatures } from "@/lib/listing-features";
+import { FEATURE_ICON } from "@/components/listings/filters/styles";
 
 /**
  * Нийтийн (cookie-гүй) client-ээр: идэвхтэй → бүрэн OG/canonical; хаагдсан →
@@ -89,6 +91,7 @@ export default async function ListingDetailPage({
       ? [l.photo as string]
       : [];
   const amenities = (l.amenities as string[]) ?? [];
+  const features = normalizeFeatures((l.features as string[] | null | undefined) ?? []);
   const advM = l.rent_advance_months as number | null;
   const depM = l.rent_deposit_months as number | null;
   const hasRentTerms = isRent && advM != null && depM != null;
@@ -187,6 +190,24 @@ export default async function ListingDetailPage({
               <p className="text-muted">{l.description as string}</p>
             </div>
           ) : null}
+
+          {features.length > 0 && (
+            <div>
+              <h2 className="mb-2 text-lg font-bold text-ink">Онцлог</h2>
+              <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {features.map((k) => {
+                  const Icon = FEATURE_ICON[k];
+                  return (
+                    <li key={k} className="flex items-center gap-2 text-sm text-ink">
+                      <Check className="size-4 shrink-0 text-emerald-700" aria-hidden />
+                      <Icon className="size-4 shrink-0 text-muted" aria-hidden />
+                      {FEATURE_LABEL[k]}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
 
           {amenities.length > 0 && (
             <div>

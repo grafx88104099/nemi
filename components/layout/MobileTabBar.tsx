@@ -97,7 +97,7 @@ export function MobileTabBar({ signedIn, unreadMessages }: { signedIn: boolean; 
       data-mobile-tabbar
       aria-label="Үндсэн цэс"
       className={cn(
-        "fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden print:hidden",
+        "fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-ink pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] md:hidden print:hidden",
         typing && "invisible"
       )}
     >
@@ -110,11 +110,14 @@ export function MobileTabBar({ signedIn, unreadMessages }: { signedIn: boolean; 
                 href={href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "relative flex h-14 flex-col items-center justify-center gap-0.5 px-0.5 text-[11px] font-medium leading-tight",
-                  active ? "text-brand-600" : "text-muted"
+                  "relative flex h-14 flex-col items-center justify-center gap-0.5 px-0.5 text-[11px] font-medium leading-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white",
+                  // ink дээр: идэвхгүй white/70 (8.96:1), идэвхтэй brand-logo (8.78:1) + дээд талын улбар шар зураас (6.17:1).
+                  active
+                    ? "text-brand-logo before:absolute before:inset-x-3 before:top-0 before:h-0.5 before:rounded-full before:bg-brand-500"
+                    : "text-white/70"
                 )}
               >
-                <Icon className="size-5" aria-hidden />
+                <Icon className="size-5" strokeWidth={active ? 2.5 : 2} aria-hidden />
                 <span aria-hidden={sr ? true : undefined} className="max-w-full truncate whitespace-nowrap">
                   {label}
                 </span>
@@ -124,7 +127,7 @@ export function MobileTabBar({ signedIn, unreadMessages }: { signedIn: boolean; 
                   <>
                     <span
                       aria-hidden
-                      className="absolute top-1.5 left-1/2 ml-2 min-w-4 rounded-full bg-brand-500 px-1 text-center text-[10px] font-bold leading-4 text-white"
+                      className="absolute top-1.5 left-1/2 ml-2 min-w-4 rounded-full bg-brand-500 px-1 text-center text-[10px] font-bold leading-4 text-ink"
                     >
                       {count > 9 ? "9+" : count}
                     </span>

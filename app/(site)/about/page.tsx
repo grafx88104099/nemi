@@ -1,4 +1,10 @@
-export default function AboutPage() {
+import { getPlatformStats } from "@/lib/platform-stats";
+import { aboutStatItems } from "@/lib/platform-stats-core";
+
+export default async function AboutPage() {
+  // БОДИТ тоо (footer, ProofStrip-тэй ижил босго). Алдаа эсвэл бүгд босгоос доош → мөр нуугдана.
+  const items = aboutStatItems(await getPlatformStats().catch(() => null));
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-12">
       <h1 className="text-3xl font-extrabold text-ink">Нэми-ийн тухай</h1>
@@ -13,14 +19,16 @@ export default function AboutPage() {
           Манай зорилго — Монголд гэр худалдан авах, зарах үйл явцыг хамгийн
           найдвартай туршлага болгох.
         </p>
-        <div className="grid grid-cols-3 gap-4 pt-4">
-          {[["12,480+", "Идэвхтэй зар"], ["320+", "Баталгаажсан агент"], ["28", "Хамтрагч оффис"]].map(([n, l]) => (
-            <div key={l} className="rounded-2xl bg-surface-2 p-4 text-center">
-              <div className="text-2xl font-extrabold text-brand-600">{n}</div>
-              <div className="text-sm text-muted">{l}</div>
-            </div>
-          ))}
-        </div>
+        {items.length > 0 ? (
+          <ul className="grid grid-cols-2 gap-4 pt-4 sm:grid-cols-3">
+            {items.map((it) => (
+              <li key={it.label} className="rounded-2xl bg-surface-2 p-4 text-center">
+                <div className="text-2xl font-extrabold text-ink tabular-nums">{it.n}</div>
+                <div className="text-sm text-muted">{it.label}</div>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
     </div>
   );

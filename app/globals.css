@@ -28,6 +28,8 @@
   --color-surface-2: #fafbfc;
   --color-line: #e5e7eb;
   --color-line-strong: #cbd5e1;
+  /* Маягтын талбарын хүрээ (input/select). CRM-д line-strong-той ижил; сайтад ≥3:1 (WCAG 1.4.11). */
+  --color-line-control: #cbd5e1;
 
   /* Текст */
   --color-ink: #0f172a;
@@ -45,8 +47,34 @@
   --shadow-md: 0 4px 14px rgba(15, 23, 42, 0.06), 0 2px 4px rgba(15, 23, 42, 0.04);
   --shadow-lg: 0 20px 40px rgba(15, 23, 42, 0.08);
 
-  /* Фонт — Inter (cyrillic-тэй) layout.tsx-д тохируулсан */
-  --font-sans: var(--font-inter), "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Фонт — Inter (cyrillic-тэй) layout.tsx-д тохируулсан. --font-tugrik нь зөвхөн ₮
+     (unicode-range U+20AE) → Inter-ийн 85 KB latin-ext файл ачаалагдахгүй. */
+  --font-sans: var(--font-tugrik), var(--font-inter), "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* ── «Нарлаг хот» (2026-11-23) шинэ токенууд ─────────────────────────
+     Өгөгдмөл утга нь CRM-ийн ӨНӨӨДРИЙН өнгийг яг давтана (пиксел ижил);
+     нийтийн сайтад доорх [data-surface="site"] хүрээнд дарагдана. */
+  --color-brand-ink: #c2410c; /* цайвар фон дээрх улбар шар текст (AA) */
+  --color-on-primary: #ffffff; /* primary товчны текст (CRM: цагаан) */
+  --color-brand-hover: #ea580c; /* primary hover (CRM: brand-600) */
+  --color-focus: #f97316; /* бүтэн фокусын хүрээ (CRM: brand-500) */
+  --color-focus-soft: color-mix(in oklab, var(--color-brand-500) 40%, transparent); /* = ring-brand-500/40 */
+  --color-verified: var(--color-emerald-600); /* баталгаажсан тэмдэг (CRM: emerald-600) */
+  --color-dawn: #fde4cc;
+  --color-dawn-ink: #9a3412;
+  --color-ridge: #c2410c;
+  --color-ridge-back: #e8a87c;
+
+  --radius-control: 0.75rem;
+  --radius-card: 1rem;
+  --radius-sheet: 1.5rem;
+}
+
+/* Display фонт — ЗААВАЛ `inline`: .font-display utility var() гинжээ өөрөө
+   гаргаж, элемент бүр дээр шийдэгдэнэ (hero <section>-ийн manrope.variable-ийг
+   авна). Энгийн @theme-д :root дээр шийдэгдэж Manrope хэзээ ч ажиллахгүй. */
+@theme inline {
+  --font-display: var(--font-manrope, var(--font-tugrik), var(--font-inter)), "Inter", system-ui, sans-serif;
 }
 
 @layer base {
@@ -71,5 +99,95 @@
     body:has([data-mobile-tabbar]) {
       --mobile-tabbar-h: calc(3.5rem + env(safe-area-inset-bottom));
     }
+  }
+
+  :root {
+    color-scheme: light;
+  }
+
+  /* Нийтийн сайтын хүрээ — app/(site)/layout.tsx-ийн data-surface="site".
+     body:has(...) нь хувьсагчийг <body> дээр тавьж body-н фон болон portal-ууд
+     (toast, Modal, Drawer, FilterSheet) өвлөнө. CRM-д wrapper байхгүй → өөрчлөлтгүй.
+     :has()-гүй хөтөчид зөвхөн wrapper доторх агуулга авна (зөвшөөрөгдсөн). */
+  [data-surface="site"],
+  body:has([data-surface="site"]) {
+    --color-bg: #fbf7f1;
+    --color-ink: #0f1b2d;
+    --color-muted: #5b6474;
+    --color-subtle: #5f6878; /* 5.26:1 цөцгий дээр; #94a3b8 зөвхөн идэвхгүй хүрээнд */
+    --color-brand-600: #c2410c; /* сайтын бүх text-brand-600 AA болно */
+    --color-surface-2: #f6f1e9;
+    --color-line: #ebe3d6;
+    --color-line-strong: #d6c9b5; /* зөвхөн чимэглэлийн хүрээ (чип, карт) */
+    --color-line-control: #8a7b66; /* талбарын хүрээ: 4.11:1 цагаан, 3.85:1 цөцгий, 3.66:1 surface-2 */
+    --color-verified: #0f7a4d;
+    --color-focus: #0f1b2d;
+    --color-focus-soft: #0f1b2d;
+    --color-on-primary: #0f1b2d; /* 6.17:1 #f97316 дээр */
+    --color-brand-hover: #fb923c; /* ink 7.64:1; #c2410c дээр ink ердөө 3.34:1 */
+  }
+
+  /* Багасгасан хөдөлгөөн — portal-ууд орно. */
+  @media (prefers-reduced-motion: reduce) {
+    /* ::before/::after-ийг :is()-д бичвэл хүчингүй (pseudo-element зөвшөөрөгдөхгүй) → тусад нь. */
+    :is([data-surface="site"], body:has([data-surface="site"])) *,
+    :is([data-surface="site"], body:has([data-surface="site"])) *::before,
+    :is([data-surface="site"], body:has([data-surface="site"])) *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* <UBSkyline> өнгө (components/brand/UBSkyline.tsx; hex хуулбар нь public/brand/skyline-dawn.svg). */
+  .ub-skyline {
+    --ub-sky-top: #fbf7f1;
+    --ub-sky-bottom: #fde4cc;
+    --ub-sun: #ffd2a6;
+    --ub-ridge-back: #e8a87c;
+    --ub-ridge: #c2410c;
+    --ub-block: #0f1b2d;
+    --ub-block-back: #2a3a55;
+    --ub-window: #3a4d6e; /* 2.03:1 block дээр */
+    --ub-balcony: #33456a; /* 1.81:1 block дээр — тагтны хэмнэл */
+    --ub-window-back: #4a5f84; /* 1.78:1 block-back дээр */
+    --ub-lit: #ffa52e;
+    --ub-hill: #f1dcc4;
+    --ub-river: #7fb3c8;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .ub-lit {
+      animation: ub-lit 1.4s ease-out 0.5s both;
+    }
+  }
+}
+
+@keyframes ub-lit {
+  from {
+    opacity: 0.2;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ── Давхаргагүй (unlayered) дүрмүүд ──────────────────────────────────
+   @layer utilities нь @layer base-ийг specificity-ээс үл хамааран дардаг тул
+   utility-г (text-white, hover:bg-brand-600 …) дарах ёстой дүрэм энд байна. */
+
+/* AA хамгаалалт: сайтын түүхий `bg-brand-500 text-white` (2.80:1) → ink (6.17:1).
+   Түр арга — дараагийн codemod бүгдийг Button primary руу шилжүүлээд устгана.
+   Variant-тай класс (md:bg-brand-500), inline style хамрагдахгүй. CRM-д data-surface байхгүй. */
+:is([data-surface="site"], body:has([data-surface="site"])) .bg-brand-500.text-white {
+  color: var(--color-on-primary);
+}
+:is([data-surface="site"], body:has([data-surface="site"])) .bg-brand-500.text-white:hover {
+  background-color: var(--color-brand-hover);
+}
+
+@media (forced-colors: active) {
+  .ub-skyline {
+    display: none;
   }
 }

@@ -59,11 +59,32 @@ export async function Topbar({ site = false }: { site?: boolean } = {}) {
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-line bg-surface/90 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-7xl items-center gap-6 px-4">
-          <Link href="/" className="shrink-0">
-            <Logo color="#0F172A" className="h-7 w-auto" />
-          </Link>
+      {/* Сайт: цул цөцгий фон (blur-гүй — гүйлгэхэд GPU ачаалалгүй), iOS notch-ийн дээд зай.
+          Агентын самбар (site=false) өмнөхтэй яг ижил. */}
+      <header
+        className={
+          site
+            ? "sticky top-0 z-40 border-b border-line bg-bg pt-[env(safe-area-inset-top)]"
+            : "sticky top-0 z-40 border-b border-line bg-surface/90 backdrop-blur"
+        }
+      >
+        <div className={site ? "mx-auto flex h-14 max-w-7xl items-center gap-6 px-4 md:h-16" : "mx-auto flex h-16 max-w-7xl items-center gap-6 px-4"}>
+          {site ? (
+            <div className="flex shrink-0 items-center">
+              <Link href="/" aria-label="Нэми — нүүр хуудас" className="shrink-0 text-ink">
+                <Logo color="currentColor" className="h-7 w-auto text-ink" />
+              </Link>
+              {/* Холбоосоос гадна: холбоосын нэр (aria-label) харагдах үгийг агуулах дүрэм (WCAG 2.5.3). */}
+              {/* xl-ээс: lg (1024px) дээр «Зар оруулах»-тай хамт header-ийг хэтрүүлдэг байсан. */}
+              <span className="ml-3 hidden text-[11px] font-semibold uppercase tracking-[0.08em] text-muted xl:inline">
+                Улаанбаатар
+              </span>
+            </div>
+          ) : (
+            <Link href="/" className="shrink-0">
+              <Logo color="#0F172A" className="h-7 w-auto" />
+            </Link>
+          )}
           <NavLinks />
           <div className="ml-auto flex items-center gap-2">
             {/* Агент → агентын самбар; бусад (худалдан авагч, зочин) → эзний «Хөрөнгөө зарлах». */}
@@ -90,7 +111,7 @@ export async function Topbar({ site = false }: { site?: boolean } = {}) {
                 >
                   <Heart className="size-4" /> Хадгалсан
                 </ButtonLink>
-                <LoginLink variant="primary" size="sm">
+                <LoginLink variant={site ? "cta" : "primary"} size="sm">
                   <User className="size-4" /> Нэвтрэх
                 </LoginLink>
               </>

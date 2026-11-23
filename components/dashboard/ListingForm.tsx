@@ -15,6 +15,8 @@ import {
   RENT_TERM_PRESETS, rentTermCode, rentTermLabel, PROPERTY_TYPES, DISTRICTS, type DealType,
 } from "@/lib/constants";
 import { fmtMNT } from "@/lib/format";
+import { LISTING_FEATURES, normalizeFeatures, withDerivedFeatures, type FeatureKey } from "@/lib/listing-features";
+import { FEATURE_ICON } from "@/components/listings/filters/styles";
 import type { WatermarkConfig } from "@/lib/watermark";
 
 const TYPES = PROPERTY_TYPES;
@@ -61,6 +63,7 @@ export function ListingForm({
     parking: initial?.parking ?? 0,
     description: initial?.description ?? "",
     amenities: initial?.amenities ?? [],
+    features: initial?.features ?? [],
     photos: [],
     status: owner
       ? initial?.status === "draft" || initial?.status === "sold"
@@ -79,6 +82,11 @@ export function ListingForm({
   const upfront = isRent && f.price ? (adv + dep) * f.price : 0;
 
   const set = (k: keyof ListingInput, v: unknown) => setF((s) => ({ ...s, [k]: v }));
+  // Зогсоолын тоо > 0 бол «Зогсоолтой» автоматаар (сервер, DB триггер ч ижил дүрэм).
+  const parkingLocked = f.parking > 0;
+  const shownFeatures = withDerivedFeatures(f.features, f.parking);
+  const toggleFeature = (k: FeatureKey, on: boolean) =>
+    setF((s) => ({ ...s, features: normalizeFeatures(on ? [...s.features, k] : s.features.filter((x) => x !== k)) }));
   // Сөрөг/NaN-аас хамгаалсан тоон оролт.
   const num = (v: string) => { const n = Number(v); return Number.isFinite(n) && n >= 0 ? n : 0; };
   // Таслал нь бутархай ч («96,5»), мянгат ч («1,500») байж болно — lib/number-input шийднэ.
@@ -120,7 +128,7 @@ export function ListingForm({
     if (!(f.price > 0)) { setErr("Үнэ 0-ээс их байх ёстой."); return; }
     const amenities = amenitiesText.split(",").map((s) => s.trim()).filter(Boolean);
     const area = areaNumOf(areaText); // бутархай, таслал дэмжих
-    const payload = { ...f, amenities, area, photos };
+    const payload = { ...f, amenities, area, photos, features: withDerivedFeatures(f.features, f.parking) };
     if (owner && photos.length === 0) { setErr("Дор хаяж нэг зураг оруулна уу."); return; }
     startTransition(async () => {
       const ownerPayload = { ...payload, owner_name: ownerName, owner_phone: ownerPhone };
@@ -257,7 +265,43 @@ export function ListingForm({
         />
       </Field>
 
-      <Field label="Тохижилт (таслалаар тусгаарла)">
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium text-ink">Онцлог</legend>
+        <p className="text-xs text-muted">Хайлтын шүүлтүүрт харагдана — зөвхөн үнэн зөвийг тэмдэглэнэ үү.</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {LISTING_FEATURES.map(({ key, label }) => {
+            const Icon = FEATURE_ICON[key];
+            const checked = shownFeatures.includes(key);
+            const locked = key === "parking" && parkingLocked;
+            return (
+              <label
+                key={key}
+                className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 text-sm ${
+                  checked ? "border-ink bg-surface-2 text-ink" : "border-line bg-surface text-ink"
+                } ${locked ? "cursor-not-allowed" : "cursor-pointer"}`}
+              >
+                <input
+                  type="checkbox"
+                  className="size-4 accent-ink"
+                  checked={checked}
+                  disabled={locked}
+                  aria-describedby={locked ? "feature-parking-hint" : undefined}
+                  onChange={(e) => toggleFeature(key, e.target.checked)}
+                />
+                <Icon className="size-4 shrink-0 text-muted" aria-hidden />
+                <span className="min-w-0">{label}</span>
+              </label>
+            );
+          })}
+        </div>
+        {parkingLocked ? (
+          <p id="feature-parking-hint" className="text-xs text-muted">
+            «Зогсоолтой» — Зогсоолын тоо оруулсан тул автоматаар
+          </p>
+        ) : null}
+      </fieldset>
+
+      <Field label="Нэмэлт тохижилт (таслалаар тусгаарла)">
         <Input
           value={amenitiesText}
           onChange={(e) => setAmenitiesText(e.target.value)}

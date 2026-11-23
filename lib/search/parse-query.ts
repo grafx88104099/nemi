@@ -5,7 +5,8 @@
  *   «хан-уулд 2 өрөө 300 саяас доош» → district=Хан-Уул, rooms=2, maxPrice=300 сая
  *   «khan uul bair turees»           → district=Хан-Уул, type=Орон сууц, deal=rent
  *
- * Зөвхөн ТӨРӨЛ, ДҮҮРЭГ, ӨРӨӨ, ТАЛБАЙ, ҮНЭ, ГҮЙЛГЭЭ. Таниагүй үгс `rest`-д
+ * ТӨРӨЛ, ДҮҮРЭГ, ӨРӨӨ, ТАЛБАЙ, ҮНЭ, ГҮЙЛГЭЭ, ОНЦЛОГ («тавилгатай», «зогсоолтой»…),
+ * «шинэ барилга», «8%-ийн зээлд тохирох». Таниагүй үгс `rest`-д
  * анхны бичлэгээрээ үлдэж search_text-ээр хайгдана. Жижиг «нүцгэн» тоо
  * («Мандала 365», «39-р») хэзээ ч шүүлт болохгүй.
  *
@@ -14,12 +15,16 @@
  * хувилбараар таарна.
  */
 import { DISTRICTS } from "@/lib/constants";
+import { normalizeFeatures, type FeatureKey } from "@/lib/listing-features";
 import type { ListingFilters } from "@/lib/listing-filters";
 import { DISTRICT_ABBR, foldSearchText } from "@/lib/search/fold";
 import { STOPWORDS, tokenVariants } from "@/lib/search/query";
 
 export type SmartFilters = Partial<
-  Pick<ListingFilters, "deal" | "district" | "type" | "rooms" | "minPrice" | "maxPrice" | "minArea" | "maxArea">
+  Pick<
+    ListingFilters,
+    "deal" | "district" | "type" | "rooms" | "minPrice" | "maxPrice" | "minArea" | "maxArea" | "features" | "newBuild" | "loan8"
+  >
 >;
 export type ParsedQuery = { filters: SmartFilters; rest: string };
 
@@ -42,6 +47,46 @@ const TYPE_ALIASES: Record<string, string[]> = {
 const TYPE_PHRASES: Phrase[] = Object.entries(TYPE_ALIASES)
   .flatMap(([value, xs]) => xs.map((x) => ({ value, words: words(x) })))
   .sort(byLength);
+
+/** Онцлогийн хэллэг. Нүцгэн «тавилга», «тавилгагүй», тэжээвэр амьтан q-д үлдэнэ. */
+const FEATURE_ALIASES: Partial<Record<FeatureKey, string[]>> = {
+  furnished: ["тавилгатай", "бүрэн тавилгатай", "furnished"],
+  parking: ["зогсоолтой", "гаражтай"],
+  elevator: ["лифттэй"],
+  balcony: ["тагттай"],
+  storage: ["агуулахтай"],
+  security: ["харуултай"],
+  kids_playground: ["тоглоомын талбайтай"],
+};
+const FEATURE_PHRASES: Phrase[] = Object.entries(FEATURE_ALIASES)
+  .flatMap(([value, xs]) => (xs ?? []).map((x) => ({ value, words: words(x) })))
+  .sort(byLength);
+const NEW_BUILD_PHRASES: Phrase[] = ["шинэ барилга", "шинэ барилгад"]
+  .map((x) => ({ value: "1", words: words(x) }))
+  .sort(byLength);
+
+/** «8%-ийн [ипотекийн] зээлд тохирох» (түүхий текстээр — нугалалт % тэмдгийг хасдаг). */
+const LOAN8_RE = /(^|\s)8\s?%(-?(ийн|ын))?(\s+(ипотек\S*|зээл\S*))*(\s+(тохирох|тохирно|тохиромжтой))?/iu;
+const LOAN8_PHRASE_RE = /(^|\s)ипотекийн\s+зээлд\s+тохирох/iu;
+
+/** 8%-ийн зээлийн хэллэгийг олж хасна; үлдсэн текстийн захын таслалыг цэвэрлэнэ. */
+export function extractLoan8(q: string): { loan8: boolean; rest: string } {
+  let rest = q;
+  let loan8 = false;
+  for (const re of [LOAN8_RE, LOAN8_PHRASE_RE]) {
+    const m = re.exec(rest);
+    if (!m) continue;
+    loan8 = true;
+    rest = rest.slice(0, m.index) + " " + rest.slice(m.index + m[0].length);
+  }
+  if (!loan8) return { loan8, rest: q };
+  rest = rest
+    .replace(/\s*[,;]\s*(?=[,;]|$)/gu, "")
+    .replace(/^\s*[,;]+/u, "")
+    .replace(/\s+/gu, " ")
+    .trim();
+  return { loan8, rest };
+}
 
 const DISTRICT_PHRASES: Phrase[] = DISTRICTS.flatMap((d) => [d, d.replace(/-/g, " "), DISTRICT_ABBR[d]].map((x) => ({ value: d as string, words: words(x) })))
   .sort(byLength);
@@ -141,6 +186,22 @@ function matchPhrase(c: Cursor, i: number, ws: string[], suffixes?: readonly str
     if (!ok) return 0;
   }
   return ws.length;
+}
+
+/** Бүх таарцыг идэж, олдсон бүх утгыг буцаана (давхардалгүй). */
+function matchPhraseValues(c: Cursor, phrases: Phrase[]): string[] {
+  const values: string[] = [];
+  for (let i = 0; i < c.length; i++) {
+    for (const p of phrases) {
+      const n = matchPhrase(c, i, p.words);
+      if (!n) continue;
+      c.take(i, i + n);
+      if (!values.includes(p.value)) values.push(p.value);
+      i += n - 1;
+      break;
+    }
+  }
+  return values;
 }
 
 /** Бүх таарцыг идэж, эхний утгыг буцаана. */
@@ -310,9 +371,11 @@ function parseDeal(c: Cursor): "sale" | "rent" | undefined {
 
 /** Чөлөөт текст → шүүлт + таниагүй үлдэгдэл (анхны бичлэгээр). */
 export function parseSearchQuery(q?: string): ParsedQuery {
-  const { raws, subs } = tokenize(q ?? "");
+  const loan = extractLoan8(q ?? "");
+  const { raws, subs } = tokenize(loan.rest);
   const c = new Cursor(subs);
   const filters: SmartFilters = {};
+  if (loan.loan8) filters.loan8 = true;
 
   const type = matchAllPhrases(c, TYPE_PHRASES);
   if (type) filters.type = type;
@@ -321,6 +384,11 @@ export function parseSearchQuery(q?: string): ParsedQuery {
     c.starts(end, [DISTRICT_WORD]) ? end + 1 : end
   );
   if (district) filters.district = district;
+
+  const features = normalizeFeatures(matchPhraseValues(c, FEATURE_PHRASES));
+  if (features.length) filters.features = features;
+
+  if (matchPhraseValues(c, NEW_BUILD_PHRASES).length) filters.newBuild = true;
 
   const rooms = parseRooms(c);
   if (rooms) filters.rooms = rooms;
@@ -347,21 +415,35 @@ export function parseSearchQuery(q?: string): ParsedQuery {
   return { filters, rest };
 }
 
-const SMART_KEYS = ["q", "deal", "district", "type", "rooms", "minPrice", "maxPrice", "minArea", "maxArea"] as const;
+const SMART_KEYS = [
+  "q", "deal", "district", "type", "rooms", "minPrice", "maxPrice", "minArea", "maxArea", "features", "newBuild", "loan8",
+] as const;
+
+const smartValue = (v: unknown) => (Array.isArray(v) ? (v.length ? v.join(",") : undefined) : (v ?? undefined));
 
 function sameSmart(a: ListingFilters, b: ListingFilters) {
-  return SMART_KEYS.every((k) => (a[k] ?? undefined) === (b[k] ?? undefined));
+  return SMART_KEYS.every((k) => smartValue(a[k]) === smartValue(b[k]));
 }
 
 /**
  * q-г тогтвортой цэг хүртэл задлана (давталт бүр ≥1 үг иднэ → төгсгөлтэй).
  * Задалсан утга нь URL-ийн утгыг дарна; өөрчлөгдвөл хуудас хасагдана.
+ *  - Дүүрэг: q-ээс задалсан дүүрэг URL-ийн БҮХ дүүргийн жагсаалтыг СОЛЬНО
+ *    (district=Хан-Уул,Баянгол + q «сүхбаатар» → district=Сүхбаатар); үр дүн чипээр харагдана.
+ *  - Онцлог: URL ба задалсан онцлогийн НЭГДЭЛ (normalizeFeatures).
+ *  - newBuild, loan8: задалсан бол true.
  */
 export function applySmartQuery(f: ListingFilters): { filters: ListingFilters; changed: boolean } {
   let cur: ListingFilters = f;
   for (let pass = 0; pass < 16; pass++) {
     const p = parseSearchQuery(cur.q);
-    const next: ListingFilters = { ...cur, ...p.filters, q: p.rest || undefined };
+    const features = normalizeFeatures([...(cur.features ?? []), ...(p.filters.features ?? [])]);
+    const next: ListingFilters = {
+      ...cur,
+      ...p.filters,
+      features: features.length ? features : undefined,
+      q: p.rest || undefined,
+    };
     if (sameSmart(next, cur)) break;
     cur = next;
   }

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { LISTING_STATUSES, DEAL_TYPES } from "@/lib/constants";
 import type { ListingInput } from "@/lib/actions/listings";
+import { FEATURE_KEYS, withDerivedFeatures, type FeatureKey } from "@/lib/listing-features";
 
 /**
  * Серверийн оролтын баталгаажуулалт. Server Action-ийг формоос гадуур шууд
@@ -28,6 +29,9 @@ const listingSchema = z
     parking: z.number().int().min(0).max(1000),
     description: z.string().max(5000, "Тайлбар хэт урт байна"),
     amenities: z.array(z.string().trim().max(50)).max(30, "Тохижилт хэт олон байна"),
+    // .optional() (default БИШ) — features илгээдэггүй хуучин клиент .strict()-д хүчинтэй хэвээр,
+    // гэхдээ undefined үлдэж UPDATE-д баганыг огт хөндөхгүй (хадгалсан онцлогийг [] болгож устгахгүй).
+    features: z.array(z.enum(FEATURE_KEYS)).max(FEATURE_KEYS.length, "Онцлог хэт олон байна").optional(),
     photos: z.array(httpUrl).max(20, "Зураг хэт олон байна (дээд тал 20)"),
     status: z.enum(LISTING_STATUSES),
     deal_type: z.enum(DEAL_TYPES),
@@ -41,15 +45,27 @@ const listingSchema = z
 const LABEL: Record<string, string> = {
   title: "Гарчиг", type: "Төрөл", district: "Дүүрэг", rooms: "Өрөө", area: "Талбай",
   floor: "Давхар", price: "Үнэ", year: "Ашиглалтын он", parking: "Зогсоол",
-  description: "Тайлбар", amenities: "Тохижилт", photos: "Зураг", status: "Төлөв",
+  description: "Тайлбар", amenities: "Тохижилт", features: "Онцлог", photos: "Зураг", status: "Төлөв",
   deal_type: "Зарын төрөл", rent_advance_months: "Урьдчилгаа", rent_deposit_months: "Барьцаа",
   lat: "Байршил", lng: "Байршил",
 };
 
+/** Баталгаажсан оролт: features нь илгээгээгүй бол undefined — бичихдээ баганыг алгасна. */
+export type ValidatedListing = Omit<ListingInput, "features"> & { features?: FeatureKey[] };
+
 /** Амжилттай бол {data}, эс бөгөөс {error} (хэрэглэгчид ээлтэй мессеж). */
-export function validateListingInput(input: unknown): { data: ListingInput } | { error: string } {
+export function validateListingInput(input: unknown): { data: ValidatedListing } | { error: string } {
   const r = listingSchema.safeParse(input);
-  if (r.success) return { data: r.data as ListingInput };
+  // parking > 0 → 'parking' үргэлж (DB триггер listings_features_parking ч ижил дүрэм хэрэгжүүлнэ).
+  if (r.success) {
+    const { features, ...rest } = r.data;
+    return {
+      data: {
+        ...rest,
+        ...(features ? { features: withDerivedFeatures(features, r.data.parking) } : {}),
+      } as ValidatedListing,
+    };
+  }
   const issue = r.error.issues[0];
   const field = issue?.path?.[0] as string | undefined;
   // Тодорхой мессеж байвал түүнийг, эс бөгөөс талбарын нэрээр.
