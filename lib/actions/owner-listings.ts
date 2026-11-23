@@ -122,11 +122,12 @@ export async function updateOwnerListing(id: string, raw: OwnerListingInput): Pr
     return { ok: false, error: SAVE_ERR };
   }
   if (!data?.length) return { ok: false, error: "Зар олдсонгүй эсвэл танд засах эрхгүй." };
+  // Засвар нийтэлсэн зарыг хяналтад буцаадаг — зургийн алхам алдаа өгсөн ч нүүрний кэшийг цэвэрлэнэ.
+  expirePublicListings();
   const { error: phErr } = await supabase.rpc("replace_listing_photos", { p_listing_id: id, p_urls: p.photos });
   if (phErr) return { ok: false, error: SAVE_ERR };
   revalidatePath("/my-listings");
   revalidatePath(`/listings/${id}`);
-  expirePublicListings();
   return { ok: true };
 }
 

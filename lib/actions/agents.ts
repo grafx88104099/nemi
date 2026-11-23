@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { expirePublicListings } from "@/lib/listings-cache";
 
 import { createClient } from "@/lib/supabase/server";
 
@@ -106,5 +107,6 @@ export async function setSelfAgent(
   revalidatePath("/office");
   revalidatePath("/agent");
   revalidatePath("/agents");
+  expirePublicListings();
   return { ok: true };
 }

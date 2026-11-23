@@ -6,7 +6,12 @@ import { ListingCard } from "@/components/listings/ListingCard";
 import { PROPERTY_TYPES } from "@/lib/constants";
 
 export default async function Home() {
-  const [recent, featured] = await Promise.all([getLatestListings(18), getFeaturedListings(10)]);
+  // Кэш хоосон үед DB алдаа гарвал нүүр хуудас унахгүй — тухайн хэсэг л нуугдана.
+  const none = (e: unknown) => {
+    console.error("home listings:", e instanceof Error ? e.message : e);
+    return [];
+  };
+  const [recent, featured] = await Promise.all([getLatestListings(18).catch(none), getFeaturedListings(10).catch(none)]);
   // «Шинэ зарууд»-д онцлохыг давтахгүй — шинээр нэмэгдсэн зар энд гарч ирнэ.
   const featuredIds = new Set(featured.map((l) => l.id));
   const latest = recent.filter((l) => !featuredIds.has(l.id)).slice(0, 8);

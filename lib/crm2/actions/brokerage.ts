@@ -1,6 +1,7 @@
 "use server";
 
 import { crm2Session, revalidateCrm2 } from "@/lib/crm2/server";
+import { expirePublicListings } from "@/lib/listings-cache";
 import { AUTH_ERROR, NOT_FOUND_ERROR, dbFail, definedOnly, fail, ok, zodErrorText } from "@/lib/crm2/result";
 import {
   brokerageApproveSchema,
@@ -115,6 +116,7 @@ export async function approveBrokerage(input: {
   });
   if (error) return dbFail("approveBrokerage", error);
   revalidateCrm2();
+  expirePublicListings(); // гэрээний төлөв нийтэлсэн зарыг (DB триггерээр) нээж/буцааж болно
   return ok(data as unknown as Crm2BrokerageApproveResult);
 }
 
@@ -151,6 +153,7 @@ export async function terminateBrokerage(
   });
   if (error) return dbFail("terminateBrokerage", error);
   revalidateCrm2();
+  expirePublicListings(); // гэрээний төлөв нийтэлсэн зарыг (DB триггерээр) нээж/буцааж болно
   return ok({ propertyStatus: data as Crm2PropertyStatus });
 }
 
@@ -178,5 +181,6 @@ export async function renewBrokerage(contractId: string): Promise<Crm2Result<{ i
   const { data, error } = await session.supabase.rpc("crm2_brokerage_renew", { p_contract: id.data });
   if (error || !data) return dbFail("renewBrokerage", error);
   revalidateCrm2();
+  expirePublicListings(); // гэрээний төлөв нийтэлсэн зарыг (DB триггерээр) нээж/буцааж болно
   return ok({ id: data as string });
 }

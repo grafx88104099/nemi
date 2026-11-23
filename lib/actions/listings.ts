@@ -132,11 +132,12 @@ export async function createListing(raw: ListingInput): Promise<{ id?: string; e
     console.error("createListing:", error?.message);
     return { error: SAVE_ERR };
   }
+  // Зар аль хэдийн бичигдсэн — дараагийн алхам (зураг) алдаа өгсөн ч нүүрний кэшийг цэвэрлэнэ.
+  expirePublicListings();
 
   const photoRes = await savePhotos(supabase, data.id, input.photos);
   if (photoRes.error) return { error: photoRes.error };
   revalidatePath("/agent/listings");
-  expirePublicListings();
   valuateLater(data.id);
   return { id: data.id };
 }
@@ -188,11 +189,12 @@ export async function updateListing(id: string, raw: ListingInput): Promise<{ ok
     return { ok: false, error: listingErrorText(error.message, SAVE_ERR) };
   }
   if (!data || data.length === 0) return { ok: false, error: "Зар олдсонгүй эсвэл танд засах эрхгүй." };
+  // Зар аль хэдийн бичигдсэн — дараагийн алхам (зураг) алдаа өгсөн ч нүүрний кэшийг цэвэрлэнэ.
+  expirePublicListings();
   const photoRes = await savePhotos(supabase, id, input.photos);
   if (photoRes.error) return { ok: false, error: photoRes.error };
   revalidatePath("/agent/listings");
   revalidatePath(`/listings/${id}`);
-  expirePublicListings();
   const prev = before as Record<string, unknown> | null;
   const next: Record<string, unknown> = {
     title: input.title, type: input.type, district: input.district, deal_type: input.deal_type,

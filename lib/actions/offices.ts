@@ -299,5 +299,6 @@ export async function setAgentStatus(agentId: string, status: "active" | "reject
     });
   }
   revalidatePath("/office");
+  expirePublicListings(); // идэвхгүй агентын зар нүүрний «Онцлох»-оос гарна (RLS)
   return { ok: true };
 }

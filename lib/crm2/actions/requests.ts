@@ -1,6 +1,7 @@
 "use server";
 
 import { crm2Session, revalidateCrm2 } from "@/lib/crm2/server";
+import { expirePublicListings } from "@/lib/listings-cache";
 import { AUTH_ERROR, dbFail, fail, ok, zodErrorText } from "@/lib/crm2/result";
 import { decideRequestSchema, idSchema } from "@/lib/crm2/schemas";
 import { parseRequestCalls, requestCallCounts } from "@/lib/crm2/approvals-view";
@@ -31,6 +32,7 @@ export async function decideRequest(input: {
   });
   if (error) return dbFail("decideRequest", error);
   revalidateCrm2();
+  expirePublicListings(); // батлагдсан төлвийн хүсэлт нийтэлсэн зарыг өөрчилж болно
   const status = data as Crm2RequestStatus;
   let skipped = 0;
   if (status === "approved") {

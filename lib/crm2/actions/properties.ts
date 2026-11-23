@@ -1,6 +1,7 @@
 "use server";
 
 import { crm2Session, revalidateCrm2, type Crm2Supabase } from "@/lib/crm2/server";
+import { expirePublicListings } from "@/lib/listings-cache";
 import { AUTH_ERROR, NOT_FOUND_ERROR, dbErrorText, dbFail, definedOnly, fail, ok, zodErrorText } from "@/lib/crm2/result";
 import {
   idSchema,
@@ -93,6 +94,7 @@ export async function updateProperty(propertyId: string, input: PropertyUpdateIn
   if (error) return dbFail("updateProperty", error);
   if (!data?.length) return fail(NOT_FOUND_ERROR);
   revalidateCrm2();
+  expirePublicListings(); // нийтэлсэн зарын үнэ/төлөв DB триггерээр шинэчлэгдэж болно
   return ok(null);
 }
 
@@ -133,6 +135,7 @@ export async function setPropertyStatus(input: PropertyStatusInput): Promise<Crm
   });
   if (error) return dbFail("setPropertyStatus", error);
   revalidateCrm2();
+  expirePublicListings(); // «зарагдсан/түдгэлзсэн» болсон нийтэлсэн зар нүүрнээс гарна
   return ok((data === "pending" ? "pending" : "applied") as Crm2ApplyOutcome);
 }
 

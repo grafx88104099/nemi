@@ -31,8 +31,8 @@ export const FEATURED_OFFICE_ID = "931b4a39-a38a-442c-9170-ea573522efd0";
  * Гараар тэмдэглэх (listings.featured) биш, дүрмээр — ямар ч замаар (агентын
  * маягт, Staff-аас нийтлэх) нэмэгдсэн зар шууд орно.
  *
- * 60 секунд кэшлэнэ; зар өөрчлөх Server Action бүр шууд цэвэрлэнэ
- * (lib/listings-cache). cookie-гүй public client (unstable_cache дотор cookies() хориотой).
+ * 60 секунд кэшлэнэ (stale-while-revalidate); зар өөрчлөх Server Action бүр
+ * шууд цэвэрлэнэ (lib/listings-cache). cookie-гүй public client (unstable_cache дотор cookies() хориотой).
  */
 export const getFeaturedListings = unstable_cache(
   async (limit = 10): Promise<ListingCardData[]> => {
@@ -48,7 +48,9 @@ export const getFeaturedListings = unstable_cache(
       .order("created_at", { ascending: false })
       .order("id", { ascending: true })
       .limit(limit);
-    if (error) console.error("getFeaturedListings:", error.message);
+    // Алдааг ШИДНЭ: хоосон үр дүнг кэшлэвэл нүүр хуудас хэсэг хугацаанд заргүй харагдана.
+    // unstable_cache алдааг кэшлэхгүй, арын шинэчлэлтийн үед хуучин зөв хуулбараа үлдээнэ.
+    if (error) throw new Error(`getFeaturedListings: ${error.message}`);
     return (data ?? []) as unknown as ListingCardData[];
   },
   ["featured-listings"],
@@ -60,8 +62,9 @@ export const getFeaturedListings = unstable_cache(
  * (идэвхтэй — зарагдсан, ноорог, хянагдаж буйг оруулахгүй) зар. Нүүрэнд
  * зураггүй карт харагдахгүйн тулд нүүр зурагтайг л авна.
  *
- * Зар хадгалах Server Action бүр кэшийг шууд цэвэрлэдэг (lib/listings-cache);
- * Staff-аас DB триггерээр шинэчлэгдсэн зар 60 секундэд гарна.
+ * Зар хадгалах Server Action бүр кэшийг шууд цэвэрлэдэг (lib/listings-cache).
+ * Бусад өөрчлөлтийг (pg_cron, гадны бичилт) 60 секундийн stale-while-revalidate
+ * барина: хугацаа өнгөрсний дараах эхний зочинд хуучин хуулбар нэг удаа очиж, ард нь шинэчлэгдэнэ.
  * RLS (anon) түдгэлзүүлсэн оффисын зарыг өөрөө хасна.
  */
 export const getLatestListings = unstable_cache(
@@ -75,7 +78,9 @@ export const getLatestListings = unstable_cache(
       .order("created_at", { ascending: false })
       .order("id", { ascending: true })
       .limit(limit);
-    if (error) console.error("getLatestListings:", error.message);
+    // Алдааг ШИДНЭ: хоосон үр дүнг кэшлэвэл нүүр хуудас хэсэг хугацаанд заргүй харагдана.
+    // unstable_cache алдааг кэшлэхгүй, арын шинэчлэлтийн үед хуучин зөв хуулбараа үлдээнэ.
+    if (error) throw new Error(`getLatestListings: ${error.message}`);
     return (data ?? []) as unknown as ListingCardData[];
   },
   ["latest-listings"],
@@ -91,11 +96,12 @@ export type { ListingFilters } from "@/lib/listing-filters";
 export const hasAiScores = unstable_cache(
   async (): Promise<boolean> => {
     const supabase = createPublicClient();
-    const { count } = await supabase
+    const { count, error } = await supabase
       .from("listings")
       .select("id", { count: "exact", head: true })
       .eq("status", "active")
       .not("ai_score", "is", null);
+    if (error) throw new Error(`hasAiScores: ${error.message}`);
     return (count ?? 0) > 0;
   },
   ["has-ai-scores"],

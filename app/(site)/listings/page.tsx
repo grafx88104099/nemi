@@ -14,7 +14,7 @@ export default async function ListingsPage({
 }) {
   const filters = parseListingFilters(await searchParams);
 
-  const [{ listings, total, page, pageSize }, aiSort] = await Promise.all([getListings(filters), hasAiScores()]);
+  const [{ listings, total, page, pageSize }, aiSort] = await Promise.all([getListings(filters), hasAiScores().catch(() => false)]);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   function pageHref(p: number) {

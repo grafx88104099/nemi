@@ -176,6 +176,8 @@ export async function deleteAgentFully(
 
   // 1) Агентын зарууд (cascade: listing_photos, ai_valuations, favorites, recently_viewed)
   await admin.from("listings").delete().eq("agent_id", agentId);
+  // Зар устсан — дараагийн алхам алдаа өгсөн ч нүүрний кэшийг цэвэрлэнэ.
+  expirePublicListings();
   // 2) Agent мөр (cascade: leads, conversations, reviews, subscriptions)
   const { error: agErr } = await admin.from("agents").delete().eq("id", agentId);
   if (agErr) return { ok: false, error: agErr.message };
@@ -188,7 +190,6 @@ export async function deleteAgentFully(
   revalidatePath("/office/agents");
   revalidatePath("/office");
   revalidatePath("/agents");
-  expirePublicListings();
   return { ok: true };
 }
 
