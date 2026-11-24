@@ -23,7 +23,7 @@ export async function Topbar({ site = false }: { site?: boolean } = {}) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  let profile: { full_name: string | null; role: string } | null = null;
+  let profile: { full_name: string | null; role: string; avatar_url: string | null } | null = null;
   let notes: {
     id: string;
     type: string | null;
@@ -36,7 +36,7 @@ export async function Topbar({ site = false }: { site?: boolean } = {}) {
   let unreadMessages = 0;
   if (user) {
     const [{ data: p }, { data: n }, { count }] = await Promise.all([
-      supabase.from("profiles").select("full_name, role").eq("id", user.id).single(),
+      supabase.from("profiles").select("full_name, role, avatar_url").eq("id", user.id).single(),
       supabase
         .from("notifications")
         .select("id, type, title, body, link, read_at, created_at")
@@ -97,10 +97,12 @@ export async function Topbar({ site = false }: { site?: boolean } = {}) {
               <>
                 <NotificationBell initial={notes} />
                 <UserMenu
+                  userId={user.id}
                   name={profile?.full_name ?? ""}
                   email={user.email ?? ""}
                   phone={user.phone ? formatPhone(user.phone) : ""}
                   role={profile?.role ?? "buyer"}
+                  avatarUrl={profile?.avatar_url ?? null}
                 />
               </>
             ) : (

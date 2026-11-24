@@ -6,23 +6,36 @@ import Link from "next/link";
 import { LayoutDashboard, LayoutGrid, Heart, Home, Settings, LogOut, MessageCircle, Users } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
+import { accountInitials } from "@/lib/avatar-upload";
 import { Avatar } from "@/components/ui/avatar";
+import { AvatarPicker } from "@/components/account/AvatarPicker";
 
 export function UserMenu({
+  userId,
   name,
   email,
   phone = "",
   role,
+  avatarUrl = null,
 }: {
+  userId: string;
   name: string;
   email: string;
   /** Утсаар нэвтэрсэн хэрэглэгчийн харуулах дугаар (formatPhone). */
   phone?: string;
   role: string;
+  /** profiles.avatar_url — бүртгэлийн зураг (цэсний толгойд дарж солино). */
+  avatarUrl?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const [avatar, setAvatar] = useState(avatarUrl);
+  const [seenAvatarUrl, setSeenAvatarUrl] = useState(avatarUrl);
+  if (avatarUrl !== seenAvatarUrl) {
+    setSeenAvatarUrl(avatarUrl);
+    setAvatar(avatarUrl);
+  }
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
@@ -40,14 +53,7 @@ export function UserMenu({
   }
 
   // Утсаар л нэвтэрсэн (нэр, и-мэйлгүй) бол цифр биш «Х» (Хэрэглэгч).
-  const base = name || (email.includes("@") ? email : "");
-  const initials =
-    base
-      .split(" ")
-      .map((s) => s[0])
-      .slice(0, 2)
-      .join("")
-      .toUpperCase() || "Х";
+  const initials = accountInitials(name || (email.includes("@") ? email : ""));
   const label = name || (email ? email.split("@")[0] : phone);
 
   const isAgent = role === "agent";
@@ -57,19 +63,24 @@ export function UserMenu({
   return (
     <div className="relative" ref={ref}>
       <button
+        type="button"
         onClick={() => setOpen((o) => !o)}
+        aria-label={`Миний бүртгэл — ${label || "Хэрэглэгч"}`}
+        aria-expanded={open}
         className="flex items-center gap-2 rounded-full p-0.5 pr-2 hover:bg-surface-2"
       >
-        <Avatar initials={initials} size="sm" color="#0F172A" />
+        <Avatar initials={initials} src={avatar} size="sm" color="#0F172A" alt="" />
         <span className="hidden text-sm font-medium text-ink sm:block">
           {label}
         </span>
       </button>
       {open && (
         <div className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-lg">
-          <div className="border-b border-line px-4 py-2.5">
-            <p className="truncate text-sm font-semibold text-ink">{name || "Хэрэглэгч"}</p>
-            <p className="truncate text-xs text-muted">{email || phone}</p>
+          {/* Зураг дээр дарж шинэ зураг байршуулна (утсанд камер/цомог). */}
+          <div className="flex flex-col items-center gap-1 border-b border-line px-4 pb-3 pt-3 text-center">
+            <AvatarPicker userId={userId} initials={initials} src={avatar} size="lg" onChange={setAvatar} />
+            <p className="mt-1 w-full truncate text-sm font-semibold text-ink">{name || "Хэрэглэгч"}</p>
+            <p className="w-full truncate text-xs text-muted">{email || phone}</p>
           </div>
           {isAgent && (
             <>

@@ -5,9 +5,10 @@ import { Heart, Bookmark, Clock, CalendarDays, Home as HomeIcon, LayoutGrid, Use
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar } from "@/components/ui/avatar";
+import { AvatarPicker } from "@/components/account/AvatarPicker";
 import { ProfileForm } from "@/components/account/ProfileForm";
 import { formatPhone } from "@/lib/crm2/phone";
+import { accountInitials } from "@/lib/avatar-upload";
 
 export const metadata = { title: "Миний профайл — Нэми" };
 
@@ -30,7 +31,7 @@ export default async function AccountPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, phone, phone_verified_at, role")
+    .select("full_name, phone, phone_verified_at, role, avatar_url")
     .eq("id", user.id)
     .single();
 
@@ -38,20 +39,16 @@ export default async function AccountPage() {
   const authPhone = user.phone ? formatPhone(user.phone) : "";
   const textName = profile?.full_name || user.email?.split("@")[0] || "";
   const name = textName || authPhone || "Хэрэглэгч";
-  const initials =
-    textName
-      .split(" ")
-      .map((s) => s[0])
-      .slice(0, 2)
-      .join("")
-      .toUpperCase() || "Х";
+  const initials = accountInitials(textName);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
       {/* Толгой */}
-      <div className="flex items-center gap-4">
-        <Avatar initials={initials} size="lg" color="#0F172A" />
-        <div className="min-w-0 flex-1">
+      {/* Утсанд зураг дээр, нэр доор (алдааны мессеж, «Зураг арилгах» нэрийг шахахгүй). */}
+      <div className="flex flex-col items-center gap-3 text-center sm:flex-row sm:items-start sm:gap-4 sm:text-left">
+        {/* Зураг дээр дарж солино (утсанд камер/цомог). */}
+        <AvatarPicker userId={user.id} initials={initials} src={profile?.avatar_url ?? null} size="lg" allowRemove />
+        <div className="w-full min-w-0 sm:flex-1 sm:pt-2">
           <h1 className="truncate text-2xl font-extrabold text-ink">{name}</h1>
           <p className="truncate text-sm text-muted">{user.email || authPhone}</p>
         </div>
