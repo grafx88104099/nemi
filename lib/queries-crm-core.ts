@@ -123,26 +123,34 @@ export type StaffRow = {
   leave_note: string | null;
   full_name: string | null;
   email: string | null;
+  /** Оффисын админ «Хасах»-аар гаргасан (crm_staff_removals) — сэргээхгүй. */
+  removed: boolean;
 };
 
 export async function getStaffList(): Promise<StaffRow[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("crm_staff")
-    .select(
-      "id, profile_id, branch_id, team_id, roles, is_active, offboarding, panel_admin, " +
-        "on_leave_from, on_leave_to, leave_substitute_id, leave_note, " +
-        "profile:profiles!crm_staff_profile_id_fkey(full_name, email)"
-    )
-    .order("created_at");
+  const [{ data, error }, removals] = await Promise.all([
+    supabase
+      .from("crm_staff")
+      .select(
+        "id, profile_id, branch_id, team_id, roles, is_active, offboarding, panel_admin, " +
+          "on_leave_from, on_leave_to, leave_substitute_id, leave_note, " +
+          "profile:profiles!crm_staff_profile_id_fkey(full_name, email)"
+      )
+      .order("created_at"),
+    // Тусдаа уншина: хүснэгт байхгүй (migration хэрэглээгүй) үед ч жагсаалт ажиллана.
+    supabase.from("crm_staff_removals").select("staff_id"),
+  ]);
   if (error) console.error("getStaffList:", error.message);
-  type Raw = Omit<StaffRow, "full_name" | "email"> & {
+  const removed = new Set((removals.data ?? []).map((r) => r.staff_id));
+  type Raw = Omit<StaffRow, "full_name" | "email" | "removed"> & {
     profile: { full_name: string | null; email: string | null } | null;
   };
   return ((data ?? []) as unknown as Raw[]).map(({ profile, ...rest }) => ({
     ...rest,
     full_name: profile?.full_name ?? null,
     email: profile?.email ?? null,
+    removed: removed.has(rest.id),
   }));
 }
 

@@ -193,7 +193,9 @@ export function StaffShell({
                       {branchName(s.branch_id)} / {teamName(s.team_id)}
                     </td>
                     <td className="px-5 py-2.5">
-                      {!s.is_active ? (
+                      {s.removed ? (
+                        <Badge tone="rose">Хасагдсан</Badge>
+                      ) : !s.is_active ? (
                         <Badge tone="neutral">Идэвхгүй</Badge>
                       ) : s.offboarding ? (
                         <Badge tone="amber">Гарах урсгалд</Badge>
@@ -206,7 +208,9 @@ export function StaffShell({
                         <p className="mt-1 text-xs text-subtle">Орлон: {nameOf(s.leave_substitute_id)}</p>
                       ) : null}
                     </td>
-                    {canEdit ? (
+                    {canEdit && s.removed ? (
+                      <td className="px-5 py-2.5 text-right text-xs text-subtle">Түүх хадгалагдсан</td>
+                    ) : canEdit ? (
                       <td className="px-5 py-2.5 text-right">
                         <div className="flex justify-end gap-1">
                           <Button

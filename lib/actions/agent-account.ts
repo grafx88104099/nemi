@@ -1,22 +1,39 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { expirePublicListings } from "@/lib/listings-cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendAgentInvite } from "@/lib/email/resend";
 import { getOffboardingBlockers, offboardingBlockMessage } from "@/lib/crm2/offboarding";
+import {
+  confirmNameMatches,
+  decideExistingAccount,
+  isAlreadyRegisteredError,
+  mapRemovalError,
+  parseRemovalCheck,
+  type ExistingAccount,
+  type RemovalCheck,
+  type TransferTarget,
+} from "@/lib/office/agent-removal";
 
 /**
  * CRM-ийн хүлээлцэх шалгалт: нээлттэй Staff хэлцэл эсвэл Staff хөрөнгийн үүрэгтэй
- * ажилтны нэвтрэлтийг хаахгүй; CRM-д бүртгэлтэй ажилтныг бүрэн устгахгүй.
+ * ажилтны нэвтрэлтийг хаахгүй. (Бүрэн хасалтыг office_remove_agent RPC шалгана.)
  */
-async function crmOffboardingGuard(profileId: string, action: "disable" | "delete"): Promise<string | null> {
+async function crmOffboardingGuard(profileId: string): Promise<string | null> {
   const b = await getOffboardingBlockers(createAdminClient(), profileId);
   if ("error" in b) return b.error;
-  return offboardingBlockMessage(b, action);
+  return offboardingBlockMessage(b, "disable");
 }
+
+const GUARD_ERR: Record<string, string> = {
+  auth: "Нэвтэрнэ үү.",
+  forbidden: "Танд энэ агентыг удирдах эрх алга.",
+  not_found: "Агент олдсонгүй.",
+};
 
 /** Office_admin (эсвэл admin) эсэхийг шалгаж office_id буцаана. */
 async function requireOffice() {
@@ -123,7 +140,7 @@ export async function setAgentLoginEnabled(agentId: string, enabled: boolean): P
   if ("error" in ctx) return { ok: false, error: ctx.error };
   if (!ctx.agent.profile_id) return { ok: false, error: "no_account" };
   if (!enabled) {
-    const blocked = await crmOffboardingGuard(ctx.agent.profile_id, "disable");
+    const blocked = await crmOffboardingGuard(ctx.agent.profile_id);
     if (blocked) return { ok: false, error: blocked };
   }
   const { error } = await ctx.admin.auth.admin.updateUserById(ctx.agent.profile_id, {
@@ -135,62 +152,102 @@ export async function setAgentLoginEnabled(agentId: string, enabled: boolean): P
 }
 
 /**
- * Агентыг БҮРЭН устгана — зар (+зураг/лид/сэтгэгдэл cascade), agent мөр, мөн
- * нэвтрэлтийн auth.users бүртгэл + profile хүртэл. ЭРГЭШГҮЙ. office_admin
- * зөвхөн өөрийн оффист; өөрийгөө болон админ бүртгэлийг устгахыг хориглоно.
- * confirmName нь агентын нэртэй яг таарах ёстой (санамсаргүй устгалаас сэргийлэх).
+ * «Хасах»-ын өмнөх шалгалт (баталгаажуулах цонх нээгдэхэд): хориг + засах
+ * холбоос, CRM түүх, зарын тоо, хүлээн авах боломжтой агентууд. Эрх, оффисын
+ * хязгаарыг DB (office_agent_removal_check) шалгана — хэрэглэгчийн эрхээр дуудна.
  */
-export async function deleteAgentFully(
-  agentId: string,
-  confirmName: string
-): Promise<{ ok: boolean; error?: string }> {
-  const ctx = await guard(agentId);
-  if ("error" in ctx) return { ok: false, error: ctx.error };
-  const { admin, agent } = ctx;
+export async function getAgentRemovalCheck(
+  agentId: string
+): Promise<{ check: RemovalCheck; targets: TransferTarget[] } | { error: string }> {
+  if (!z.string().uuid().safeParse(agentId).success) return { error: GUARD_ERR.not_found };
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("office_agent_removal_check", { p_agent: agentId });
+  if (error) {
+    console.error("office_agent_removal_check:", error.message);
+    return { error: mapRemovalError(error.message) };
+  }
+  const check = parseRemovalCheck(data);
+  if (!check) return { error: "Шалгалтын хариу буруу байна. Дахин оролдоно уу." };
 
-  if (confirmName.trim() !== (agent.display_name ?? "").trim()) {
+  let targets: TransferTarget[] = [];
+  if (check.agent.office_id) {
+    const { data: rows } = await supabase
+      .from("agents")
+      .select("id, display_name")
+      .eq("office_id", check.agent.office_id)
+      .eq("status", "active")
+      .neq("id", agentId)
+      .order("display_name");
+    targets = (rows ?? []).map((r) => ({ id: r.id as string, name: (r.display_name as string) ?? "Агент" }));
+  }
+  return { check, targets };
+}
+
+const removeSchema = z
+  .object({
+    agentId: z.string().uuid(),
+    confirmName: z.string().max(200),
+    listings: z.enum(["transfer", "delete"]).nullable(),
+    targetId: z.string().uuid().nullable(),
+  })
+  .strict();
+
+/**
+ * Агентыг оффисоос «Хасах» — ЭРГЭШГҮЙ. Бүх алхам нэг DB транзакцид
+ * (office_remove_agent): хориг дахин шалгана; CRM түүхгүй бол CRM бүртгэл +
+ * нэвтрэлтийг бүрэн устгана, түүхтэй бол түүхийг үлдээж нэрийг «(хасагдсан)»
+ * болгон нэвтрэлтийг хааж и-мэйл/утсыг чөлөөлнө. Зарыг сонголтоор шилжүүлэх
+ * эсвэл устгана. Өөрийгөө, админыг хасахгүй; office_admin зөвхөн өөрийн оффист.
+ */
+export async function removeAgentFromOffice(
+  raw: z.input<typeof removeSchema>
+): Promise<
+  | { ok: true; mode: "deleted" | "archived"; moved: number; deleted: number; targetName: string | null }
+  | { ok: false; error: string }
+> {
+  const parsed = removeSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: "Мэдээлэл буруу байна." };
+  const input = parsed.data;
+
+  const ctx = await guard(input.agentId);
+  if ("error" in ctx) return { ok: false, error: GUARD_ERR[String(ctx.error)] ?? GUARD_ERR.forbidden };
+  if (!confirmNameMatches(input.confirmName, ctx.agent.display_name)) {
     return { ok: false, error: "Баталгаажуулах нэр таарсангүй." };
   }
 
-  // Өөрийгөө устгахаас сэргийлэх (оффис админ өөрийн agent профайлтай байж болно)
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (user && agent.profile_id === user.id) {
-    return { ok: false, error: "Та өөрийгөө устгаж болохгүй." };
+  const { data, error } = await supabase.rpc("office_remove_agent", {
+    p_agent: input.agentId,
+    p_listings: input.listings,
+    p_target: input.listings === "transfer" ? input.targetId : null,
+    p_confirm: input.confirmName,
+  });
+  if (error) {
+    console.error("office_remove_agent:", error.message);
+    return { ok: false, error: mapRemovalError(error.message) };
   }
+  const res = (data ?? {}) as {
+    mode?: string;
+    listings_moved?: number;
+    listings_deleted?: number;
+    target_name?: string | null;
+  };
 
-  // CRM-ийн бүртгэл, нотолгоо ON DELETE RESTRICT-ээр хамгаалагдсан тул хагас
-  // устгал үүсгэхгүйн тулд ЭХЛЭЭД шалгана (зар, agent мөр устахаас өмнө).
-  if (agent.profile_id) {
-    const blocked = await crmOffboardingGuard(agent.profile_id, "delete");
-    if (blocked) return { ok: false, error: blocked };
-  }
-
-  // Өөр админ бүртгэлийг устгахыг хориглох
-  if (agent.profile_id) {
-    const { data: target } = await admin.from("profiles").select("role").eq("id", agent.profile_id).single();
-    if (target?.role === "admin") return { ok: false, error: "Админ бүртгэлийг устгаж болохгүй." };
-  }
-
-  // 1) Агентын зарууд (cascade: listing_photos, ai_valuations, favorites, recently_viewed)
-  await admin.from("listings").delete().eq("agent_id", agentId);
-  // Зар устсан — дараагийн алхам алдаа өгсөн ч нүүрний кэшийг цэвэрлэнэ.
+  // Зар шилжсэн/устсан, агент нийтээс алга — нүүр, жагсаалтын кэшийг цэвэрлэнэ.
   expirePublicListings();
-  // 2) Agent мөр (cascade: leads, conversations, reviews, subscriptions)
-  const { error: agErr } = await admin.from("agents").delete().eq("id", agentId);
-  if (agErr) return { ok: false, error: agErr.message };
-  // 3) Нэвтрэлт + профайл (profiles → auth.users on delete cascade)
-  if (agent.profile_id) {
-    const { error: delErr } = await admin.auth.admin.deleteUser(agent.profile_id);
-    if (delErr) return { ok: false, error: delErr.message };
-  }
-
   revalidatePath("/office/agents");
   revalidatePath("/office");
   revalidatePath("/agents");
-  return { ok: true };
+  revalidatePath(`/agents/${input.agentId}`);
+  if (input.listings === "transfer" && input.targetId) revalidatePath(`/agents/${input.targetId}`);
+  revalidatePath("/office/crm/settings/staff");
+  return {
+    ok: true,
+    mode: res.mode === "archived" ? "archived" : "deleted",
+    moved: res.listings_moved ?? 0,
+    deleted: res.listings_deleted ?? 0,
+    targetName: res.target_name ?? null,
+  };
 }
 
 /**
@@ -210,6 +267,8 @@ export async function createAgentByOffice(input: {
   error?: string;
   /** CRM-д автоматаар бүртгэж чадаагүй бол — агент үүссэн, зөвхөн сануулга. */
   crmWarning?: string;
+  /** И-мэйл аль хэдийн бүртгэлтэй байсан: энгийн хэрэглэгчийг агент болгосон / идэвхгүй агентыг сэргээсэн. */
+  existing?: "converted" | "reactivated";
 }> {
   const ctx = await requireOffice();
   if ("error" in ctx) return { error: ctx.error };
@@ -231,7 +290,12 @@ export async function createAgentByOffice(input: {
     },
   });
   if (linkErr || !linkData.user) {
-    return { error: /already|registered|exist/i.test(linkErr?.message ?? "") ? "Энэ и-мэйл аль хэдийн бүртгэлтэй байна." : (linkErr?.message ?? "Үүсгэж чадсангүй.") };
+    // И-мэйл аль хэдийн бүртгэлтэй (жишээ нь худалдан авагчийн данс) — данс
+    // устгалгүйгээр энэ оффисын агент болгоно (эсвэл идэвхгүй агентыг сэргээнэ).
+    if (isAlreadyRegisteredError(linkErr?.message)) {
+      return convertExistingAccount(admin, ctx.officeId, input, site);
+    }
+    return { error: linkErr?.message ?? "Үүсгэж чадсангүй." };
   }
   const uid = linkData.user.id;
   const actionLink = linkData.properties.action_link;
@@ -276,6 +340,127 @@ export async function createAgentByOffice(input: {
     actionLink,
     reason: res.sent ? undefined : mapEmailReason(res.reason),
     crmWarning,
+  };
+}
+
+/**
+ * Бүртгэлтэй и-мэйлийг энэ оффисын агент болгоно (createAgentByOffice-ийн салаа).
+ *
+ * ЯАГААД: худалдан авагчаар бүртгүүлсэн хүнийг агентаар нэмэхэд урилга
+ * «аль хэдийн бүртгэлтэй» алдаа өгч, дансыг гараар устгах шаардлагатай болдог
+ * байв (2026-11-24). Одоо: энгийн хэрэглэгч → агент + crm_staff; энэ оффисын
+ * идэвхгүй/хүлээгдэж буй агент → сэргээнэ; админ, өөр оффисынх → татгалзана.
+ * Нэвтрэх линк (magic link) и-мэйлээр явна — данс нууц үгтэй байж болно.
+ */
+async function convertExistingAccount(
+  admin: ReturnType<typeof createAdminClient>,
+  officeId: string,
+  input: { name: string; email: string; phone: string; specialty: string },
+  site: string
+): Promise<Awaited<ReturnType<typeof createAgentByOffice>>> {
+  const email = input.email.trim();
+  const name = input.name.trim();
+
+  // magiclink нь байгаа хэрэглэгчийг (id) + нэвтрэх линкийг нэг дор буцаана.
+  const { data: link, error: linkErr } = await admin.auth.admin.generateLink({
+    type: "magiclink",
+    email,
+    options: { redirectTo: `${site}/auth/confirm?next=/agent` },
+  });
+  if (linkErr || !link.user) {
+    console.error("convertExistingAccount link:", linkErr?.message);
+    return { error: "Энэ и-мэйлтэй бүртгэлийг олж чадсангүй." };
+  }
+  const uid = link.user.id;
+
+  const [{ data: profile }, { data: agent }, { data: staff }] = await Promise.all([
+    admin.from("profiles").select("role, office_id, full_name").eq("id", uid).maybeSingle(),
+    admin.from("agents").select("id, office_id, status").eq("profile_id", uid).maybeSingle(),
+    admin.from("crm_staff").select("id, is_active").eq("profile_id", uid).eq("office_id", officeId).maybeSingle(),
+  ]);
+  if (!profile) return { error: "Энэ и-мэйлтэй бүртгэлийг олж чадсангүй." };
+  let staffRemoved = false;
+  if (staff) {
+    const { data: removed } = await admin.from("crm_staff_removals").select("staff_id").eq("staff_id", staff.id).maybeSingle();
+    staffRemoved = !!removed;
+  }
+
+  const account: ExistingAccount = {
+    role: profile.role as ExistingAccount["role"],
+    officeId: (profile.office_id as string | null) ?? null,
+    agent: agent
+      ? {
+          id: agent.id as string,
+          officeId: (agent.office_id as string | null) ?? null,
+          status: agent.status as "pending" | "active" | "rejected",
+        }
+      : null,
+    staffRemoved,
+  };
+  const decision = decideExistingAccount(account, officeId);
+  if (decision.kind === "refuse") return { error: decision.error };
+
+  // Профайлыг агент болгож оффист холбоно (нэр хоосон бол оффисын оруулсан нэр).
+  const { error: pErr } = await admin
+    .from("profiles")
+    .update({ role: "agent", office_id: officeId, ...(profile.full_name ? {} : { full_name: name }) })
+    .eq("id", uid);
+  if (pErr) return { error: pErr.message };
+
+  if (decision.kind === "convert") {
+    const { error: agErr } = await admin.from("agents").insert({
+      profile_id: uid,
+      display_name: name,
+      phone: input.phone || null,
+      specialty: input.specialty || null,
+      office_id: officeId,
+      status: "active",
+    });
+    if (agErr) return { error: agErr.message };
+  } else {
+    const { error: agErr } = await admin
+      .from("agents")
+      .update({
+        status: "active",
+        display_name: name,
+        ...(input.phone ? { phone: input.phone } : {}),
+        ...(input.specialty ? { specialty: input.specialty } : {}),
+      })
+      .eq("id", decision.agentId);
+    if (agErr) return { error: agErr.message };
+  }
+
+  // CRM: идэвхгүй болсон мөрийг сэргээнэ, эс бөгөөс шинээр (CRM ашигладаг оффист).
+  let crmWarning: string | undefined;
+  if (staff && !staff.is_active) {
+    const { error: sErr } = await admin.from("crm_staff").update({ is_active: true, offboarding: false }).eq("id", staff.id);
+    if (sErr) {
+      console.error("convertExistingAccount crm_staff:", sErr.message);
+      crmWarning = "CRM-ийн бүртгэлийг сэргээж чадсангүй — CRM → Тохиргоо → Ажилтан хэсгээс сэргээнэ үү.";
+    }
+  } else if (!staff) {
+    crmWarning = await addToCrmStaff(admin, officeId, uid);
+  }
+
+  const { data: office } = await admin.from("offices").select("name").eq("id", officeId).single();
+  const actionLink = link.properties.action_link;
+  const res = await sendAgentInvite({
+    to: email,
+    agentName: name,
+    officeName: office?.name ?? "Таны оффис",
+    actionLink,
+    existingAccount: true,
+  });
+
+  revalidatePath("/office/agents");
+  revalidatePath("/office/crm/settings/staff");
+  return {
+    ok: true,
+    emailed: res.sent,
+    actionLink,
+    reason: res.sent ? undefined : mapEmailReason(res.reason),
+    crmWarning,
+    existing: decision.kind === "convert" ? "converted" : "reactivated",
   };
 }
 

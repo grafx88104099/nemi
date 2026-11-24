@@ -1024,6 +1024,27 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["crm_staff"]["Insert"]>;
         Relationships: [];
       };
+      // 20261124005000: оффисын админ «Хасах» — CRM түүхтэй хасагдсан ажилтан (зөвхөн RPC бичнэ)
+      crm_staff_removals: {
+        Row: {
+          staff_id: string;
+          office_id: string;
+          profile_id: string;
+          name: string | null;
+          removed_by: string | null;
+          removed_at: string;
+        };
+        Insert: {
+          staff_id: string;
+          office_id: string;
+          profile_id: string;
+          name?: string | null;
+          removed_by?: string | null;
+          removed_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm_staff_removals"]["Insert"]>;
+        Relationships: [];
+      };
       crm_lookups: {
         Row: {
           id: string;
@@ -5667,6 +5688,12 @@ export type Database = {
         }[];
       };
       crm_offboarding_blockers: { Args: { p_profile: string }; Returns: Json };
+      // 20261124005000: оффисын админ агентыг «Хасах»
+      office_agent_removal_check: { Args: { p_agent: string }; Returns: Json };
+      office_remove_agent: {
+        Args: { p_agent: string; p_listings: string | null; p_target: string | null; p_confirm: string };
+        Returns: Json;
+      };
       crm_decide_export_request: {
         Args: { p_request: string; p_approve: boolean; p_note?: string | null; p_max_rows?: number | null };
         Returns: undefined;

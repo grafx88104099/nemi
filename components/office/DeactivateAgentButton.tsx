@@ -30,7 +30,7 @@ export function DeactivateAgentButton({ agentId }: { agentId: string }) {
       type="button"
       onClick={onClick}
       disabled={pending}
-      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-muted hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+      className="inline-flex min-h-11 items-center justify-center gap-1 rounded-lg px-3 text-xs font-semibold text-muted hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50 sm:min-h-0 sm:px-2 sm:py-1"
       title="Идэвхгүйжүүлэх"
     >
       <UserX className="size-3.5" /> Идэвхгүй

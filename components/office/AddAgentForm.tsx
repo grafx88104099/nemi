@@ -12,7 +12,14 @@ export function AddAgentForm() {
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ name: "", email: "", phone: "", specialty: "" });
   const [pending, startTransition] = useTransition();
-  const [result, setResult] = useState<{ emailed: boolean; link?: string; reason?: string; email?: string; crmWarning?: string } | null>(null);
+  const [result, setResult] = useState<{
+    emailed: boolean;
+    link?: string;
+    reason?: string;
+    email?: string;
+    crmWarning?: string;
+    existing?: "converted" | "reactivated";
+  } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const router = useRouter();
@@ -27,7 +34,7 @@ export function AddAgentForm() {
       const r = await createAgentByOffice(f);
       if (r.error) setErr(r.error);
       else {
-        setResult({ emailed: !!r.emailed, link: r.actionLink, reason: r.reason, email: sentTo, crmWarning: r.crmWarning });
+        setResult({ emailed: !!r.emailed, link: r.actionLink, reason: r.reason, email: sentTo, crmWarning: r.crmWarning, existing: r.existing });
         setF({ name: "", email: "", phone: "", specialty: "" });
         router.refresh();
       }
@@ -48,7 +55,17 @@ export function AddAgentForm() {
       {result ? (
         <div className="space-y-3">
           <div className={`rounded-xl p-4 text-sm ${result.emailed ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>
-            {result.emailed ? (
+            {result.existing ? (
+              <>
+                ✓ <b>{result.email}</b> аль хэдийн Нэмид бүртгэлтэй байсан —{" "}
+                {result.existing === "converted"
+                  ? "тэр бүртгэлийг танай оффисын агент болголоо."
+                  : "танай оффисын агентыг дахин идэвхжүүллээ."}{" "}
+                {result.emailed
+                  ? "Нэвтрэх линкийг и-мэйлээр илгээлээ."
+                  : `Гэхдээ и-мэйл илгээгдсэнгүй${result.reason ? ` (${result.reason})` : ""}. Доорх нэвтрэх линкийг агентад дамжуулна уу:`}
+              </>
+            ) : result.emailed ? (
               <>✓ Агент үүслээ. Нэвтрэх урилгыг <b>{result.email}</b> хаяг руу илгээлээ. Агент и-мэйл дээрх товчоор нууц үгээ үүсгэн самбартаа нэвтэрнэ.</>
             ) : (
               <>✓ Агент үүслээ. Гэхдээ и-мэйл илгээгдсэнгүй{result.reason ? ` (${result.reason})` : ""}. Доорх линкийг агентад дамжуулна уу:</>

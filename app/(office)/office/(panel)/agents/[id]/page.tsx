@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Phone, Sparkles, ExternalLink, Building2, Star, Award, Clock, KeyRound, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Phone, Sparkles, ExternalLink, Building2, Star, Award, Clock, KeyRound } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
 import { getOfficeAgent } from "@/lib/queries-office";
 import { getAgentAccount } from "@/lib/actions/agent-account";
 import { AgentAccountManager } from "@/components/office/AgentAccountManager";
-import { DeleteAgentButton } from "@/components/office/DeleteAgentButton";
+import { RemoveAgentButton } from "@/components/office/RemoveAgentButton";
 import { Card, CardBody } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -34,7 +34,7 @@ export default async function OfficeAgentManagePage({
   const { agent, listings } = data;
   const account = await getAgentAccount(id);
 
-  // Оффис админ өөрийн agent профайлаа устгахаас сэргийлэх — товчийг нуух
+  // Оффис админ өөрийн agent профайлаа хасахаас сэргийлэх — товчийг нуух (DB ч хориглоно)
   const supabase = await createClient();
   const {
     data: { user },
@@ -53,7 +53,7 @@ export default async function OfficeAgentManagePage({
   ];
 
   return (
-    <div className="mx-auto max-w-5xl p-8">
+    <div className="mx-auto max-w-5xl p-4 sm:p-8">
       <Link href="/office/agents" className="inline-flex items-center gap-1 text-sm text-muted hover:underline">
         <ArrowLeft className="size-4" /> Агентууд
       </Link>
@@ -79,18 +79,22 @@ export default async function OfficeAgentManagePage({
           </div>
 
           {/* Статусын дагуу үйлдэл */}
-          <div className="flex flex-col items-end gap-2">
+          <div className="flex w-full flex-col items-start gap-2 sm:w-auto sm:items-end">
             {status === "pending" && <AgentApproval agentId={id} />}
             {status === "rejected" && (
-              <div className="text-right">
+              <div className="sm:text-right">
                 <p className="mb-1 text-xs text-muted">Дахин идэвхжүүлэх:</p>
-                <AgentApproval agentId={id} />
+                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                  <AgentApproval agentId={id} />
+                  {!isSelf && <RemoveAgentButton agentId={id} agentName={agent.display_name as string} redirectTo="/office/agents" />}
+                </div>
               </div>
             )}
             {status === "active" && (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <VerifyToggle kind="agent" id={id} initial={agent.verified as boolean} />
                 <DeactivateAgentButton agentId={id} />
+                {!isSelf && <RemoveAgentButton agentId={id} agentName={agent.display_name as string} redirectTo="/office/agents" />}
               </div>
             )}
             {status === "active" && (
@@ -174,25 +178,6 @@ export default async function OfficeAgentManagePage({
         </table>
       </Card>
 
-      {/* Аюултай бүс — агентыг бүрэн устгах (өөрийгөө устгах боломжгүй) */}
-      {!isSelf && (
-        <Card className="mt-6 border-rose-200">
-          <CardBody className="space-y-3">
-            <h2 className="flex items-center gap-2 font-bold text-rose-600">
-              <AlertTriangle className="size-4" /> Аюултай бүс
-            </h2>
-            <p className="text-sm text-muted">
-              Агентыг системээс бүрмөсөн устгана — бүх зар, лид, сэтгэгдэл, мөн нэвтрэлтийн
-              бүртгэл устах ба сэргээх боломжгүй.
-            </p>
-            <DeleteAgentButton
-              agentId={id}
-              agentName={agent.display_name as string}
-              listingsCount={listings.length}
-            />
-          </CardBody>
-        </Card>
-      )}
     </div>
   );
 }

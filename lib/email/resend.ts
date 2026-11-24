@@ -11,13 +11,21 @@ export async function sendAgentInvite(opts: {
   agentName: string;
   officeName: string;
   actionLink: string;
+  /** Нэмигийн данстай хүнийг агент болгосон — нууц үг биш, нэвтрэх линк. */
+  existingAccount?: boolean;
 }): Promise<SendResult> {
   if (!apiKey) return { sent: false, reason: "no_api_key" };
   const resend = new Resend(apiKey);
+  const intro = opts.existingAccount
+    ? "таны Нэми дээрх бүртгэлийг агентын бүртгэл болголоо. Доорх товчийг дарж агентын самбартаа нэвтэрнэ үү."
+    : "танд Нэми платформ дээр агентын бүртгэл үүсгэлээ. Доорх товчийг дарж нууц үгээ тохируулан нэвтэрнэ үү.";
+  const button = opts.existingAccount ? "Агентын самбарт нэвтрэх" : "Нууц үг тохируулах";
   const { error } = await resend.emails.send({
     from,
     to: opts.to,
-    subject: `${opts.officeName} танд Нэми дээр агентын бүртгэл үүсгэлээ`,
+    subject: opts.existingAccount
+      ? `${opts.officeName} таныг Нэми дээр агентаар нэмлээ`
+      : `${opts.officeName} танд Нэми дээр агентын бүртгэл үүсгэлээ`,
     html: `
 <div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F172A">
   <div style="background:#F97316;color:#fff;padding:24px;border-radius:16px 16px 0 0;text-align:center">
@@ -26,12 +34,11 @@ export async function sendAgentInvite(opts: {
   <div style="border:1px solid #E5E7EB;border-top:0;border-radius:0 0 16px 16px;padding:28px">
     <p style="font-size:16px">Сайн байна уу, <b>${opts.agentName}</b>!</p>
     <p style="color:#64748B;line-height:1.6">
-      <b>${opts.officeName}</b> танд Нэми платформ дээр агентын бүртгэл үүсгэлээ.
-      Доорх товчийг дарж нууц үгээ тохируулан нэвтэрнэ үү.
+      <b>${opts.officeName}</b> ${intro}
     </p>
     <div style="text-align:center;margin:28px 0">
       <a href="${opts.actionLink}" style="background:#F97316;color:#fff;text-decoration:none;padding:12px 28px;border-radius:12px;font-weight:700;display:inline-block">
-        Нууц үг тохируулах
+        ${button}
       </a>
     </div>
     <p style="color:#94A3B8;font-size:12px;line-height:1.5">
