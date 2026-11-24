@@ -40,14 +40,15 @@ export function ListingAgentRow({
 
   return (
     <div className={unconfirmed ? "rounded-xl ring-2 ring-amber-300 ring-offset-1" : undefined}>
-      <div className="flex min-h-12 items-center justify-between gap-2 rounded-xl border border-line bg-surface px-3 py-1.5">
+      {/* Утсанд «шалгана уу · Зөв» багтахгүй бол дараагийн мөрөнд — «…агент: Би» тасрахгүй. */}
+      <div className="flex min-h-12 flex-wrap items-center justify-between gap-x-2 gap-y-1 rounded-xl border border-line bg-surface px-3 py-1.5">
         <p className="flex min-w-0 items-center gap-2 text-sm text-ink">
           <UserRound className="size-4 shrink-0 text-brand-600" aria-hidden />
-          <span className="min-w-0 truncate">
+          <span className="min-w-0 break-words">
             <span className="text-muted">{label}:</span> <span className="font-semibold">{who}</span>
           </span>
         </p>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           {unconfirmed ? <UnconfirmedTag onConfirm={onConfirm} disabled={disabled} /> : null}
           <button
             type="button"
