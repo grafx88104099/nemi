@@ -40,6 +40,11 @@ const removalCheckSchema = z
     }),
     staff: z.object({ id: z.string(), is_active: z.boolean(), offboarding: z.boolean() }).nullable(),
     blockers: z.array(blockerSchema),
+    /** Нийтийн зар эсвэл Staff хөрөнгө оруулж байсан эсэх. */
+    had_listings: z.boolean(),
+    /** Одоогийн CRM-д оффисын бүртгэл (харилцагч, хэлцэл, гэрээ...) хариуцсан/үүсгэсэн эсэх. */
+    has_crm_work: z.boolean(),
+    mode: z.enum(["delete", "archive"]),
     has_history: z.boolean(),
     history: z.record(z.string(), z.number()),
     listings: z.object({ total: z.number(), active: z.number(), linked: z.number() }),
@@ -109,9 +114,14 @@ export function listingsChoiceError(
   return null;
 }
 
-/** Хасалтын үр дүн: CRM түүхгүй бол бүрэн устгал, түүхтэй бол архивлах. */
+/**
+ * Хасалтын үр дүн (эзний дүрэм, 2026-11-24): ЯМАР Ч зар оруулж байгаагүй хүнийг
+ * түүхтэй нь бүрэн устгана; зар оруулж байсан эсвэл одоогийн CRM-д оффисын
+ * бүртгэл хариуцсан хүний CRM түүхийг хадгалж архивлана. DB-ийн `mode`-оор.
+ */
 export function removalOutcome(c: RemovalCheck): "delete" | "archive" {
-  return c.agent.has_login && c.has_history ? "archive" : "delete";
+  if (!c.agent.has_login) return "delete";
+  return c.mode === "archive" || c.had_listings || c.has_crm_work ? "archive" : "delete";
 }
 
 /** CRM түүхийн нийт бичлэг (харуулах). */
@@ -145,12 +155,17 @@ export function removalSummary(
   if (!c.agent.has_login) {
     lines.push("Нэвтрэх бүртгэлгүй агент — зөвхөн агентын карт устна.");
   } else if (removalOutcome(c) === "archive") {
+    const why = c.had_listings ? "Зар оруулж байсан" : "CRM-д оффисын бүртгэл (харилцагч, хэлцэл г.м.) хариуцсан";
+    const n = historyTotal(c);
     lines.push(
-      `CRM-ийн түүх (${historyTotal(c)} бичлэг) хадгалагдана — нэр нь «(хасагдсан) ${c.agent.name ?? ""}» гэж харагдана.`
+      `${why} тул CRM-ийн түүх${n > 0 ? ` (${n} бичлэг)` : ""} хадгалагдана — нэр нь «(хасагдсан) ${c.agent.name ?? ""}» гэж харагдана.`
     );
-    lines.push("Нэвтрэлт бүрмөсөн хаагдаж, и-мэйл/утас чөлөөлөгдөнө (дахин бүртгүүлж болно).");
+    lines.push("Нэвтрэлт бүрмөсөн хаагдаж, оффисын хандалт хасагдана; и-мэйл/утас чөлөөлөгдөнө (дахин бүртгүүлж болно).");
   } else {
-    lines.push("CRM-д түүхгүй — CRM бүртгэл, нэвтрэх бүртгэл бүрэн устна.");
+    const n = historyTotal(c);
+    lines.push(
+      `Зар оруулж байгаагүй — агентын карт, CRM бүртгэл, нэвтрэх бүртгэл${n > 0 ? ` болон түүх (${n} бичлэг)` : ""} бүрэн устна.`
+    );
   }
   lines.push("Нийтийн сайт, оффисын жагсаалтаас шууд алга болно. Буцаах боломжгүй.");
   return lines;

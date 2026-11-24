@@ -182,6 +182,8 @@ declare
   v_deals int;
   v_roles int;
   v_legacy int;
+  v_had_listings boolean := false;
+  v_work boolean := false;
   n int;
 begin
   if v_me is null then
@@ -318,6 +320,16 @@ begin
     v_refs := public.office_person_refs(a.profile_id, s.id);
   end if;
 
+  -- Эзний дүрэм (2026-11-24): ЯМАР Ч зар оруулж байгаагүй хүнийг түүхтэй нь
+  -- бүрэн устгана; зар оруулж байсан (нийтийн зар эсвэл Staff хөрөнгө) эсвэл
+  -- одоогийн CRM-д оффисын бүртгэл (харилцагч, хэлцэл, гэрээ, ажил...)
+  -- хариуцсан/үүсгэсэн хүний CRM түүхийг хадгалж архивлана.
+  v_had_listings := ((v_listings ->> 'total')::int > 0)
+    or (a.profile_id is not null and exists (
+          select 1 from public.crm2_properties cp
+           where a.profile_id in (cp.listing_agent_id, cp.contract_agent_id, cp.photo_agent_id, cp.created_by)));
+  v_work := exists (select 1 from jsonb_object_keys(v_refs) k where k like 'crm2\_%' and k <> 'crm2_history');
+
   return jsonb_build_object(
     'agent', jsonb_build_object(
       'id', a.id, 'name', a.display_name, 'status', a.status,
@@ -325,6 +337,10 @@ begin
     'staff', case when s.id is null then null
                   else jsonb_build_object('id', s.id, 'is_active', s.is_active, 'offboarding', s.offboarding) end,
     'blockers', v_blockers,
+    'had_listings', v_had_listings,
+    'has_crm_work', v_work,
+    -- delete: бүрэн устгал (түүхтэй нь); archive: CRM түүх хадгалагдана
+    'mode', case when a.profile_id is not null and (v_had_listings or v_work) then 'archive' else 'delete' end,
     'has_history', v_refs <> '{}'::jsonb,
     'history', v_refs,
     'listings', v_listings,
@@ -365,6 +381,8 @@ declare
   v_deleted int := 0;
   v_mode text;
   v_name text;
+  v_fallback text;
+  r record;
 begin
   -- Зэрэг хоёр хасалт / өөрчлөлтөөс сэргийлж agent мөрийг түгжинэ.
   perform 1 from public.agents where id = p_agent for update;
@@ -442,24 +460,84 @@ begin
       execute 'delete from public.crm2_nudge_log where profile_id = $1' using a.profile_id;
     end if;
 
-    if not (c ->> 'has_history')::boolean then
-      -- CRM түүхгүй → бүгдийг устгана
-      v_mode := 'deleted';
-      if s.id is not null then
-        -- Эхлээд идэвхгүй болгоно: хүлээлцэх trigger дахин шалгаж, багийн
-        -- ахлагч/чатын гишүүнчлэлийг crm_staff_team_sync цэвэрлэнэ.
-        update public.crm_staff set is_active = false, offboarding = false
-         where id = s.id and (is_active or offboarding);
-        delete from public.crm_agent_daily_stats where agent_id = a.profile_id;
-        insert into public.crm_audit_log (office_id, actor_id, entity, entity_id, action, old_value, reason)
-        values (s.office_id, v_me, 'crm_staff', s.id, 'delete',
-                to_jsonb(s) || jsonb_build_object('name', a.display_name),
-                'Оффисын админ агентыг хассан — CRM түүхгүй тул бүрэн устгав');
-        delete from public.crm_staff where id = s.id;
-      end if;
-      delete from auth.users where id = a.profile_id; -- profiles болон хувийн мөрүүд cascade
-    else
-      -- CRM түүхтэй → түүх хэвээр, хүн «(хасагдсан)» булш болж үлдэнэ
+    if c ->> 'mode' = 'delete' then
+      -- Зар оруулж байгаагүй, CRM-д оффисын бүртгэл хариуцаагүй → түүхтэй нь
+      -- бүрэн устгана. Дотоод блок (savepoint): хуучин CRM-ийн хамгаалалт эсвэл
+      -- FK татгалзвал бүгд буцаж, доорх архивлах замаар явна (хагас устгалгүй).
+      begin
+        if s.id is not null then
+          -- Эхлээд идэвхгүй болгоно: хүлээлцэх trigger дахин шалгаж, багийн
+          -- ахлагч/чатын гишүүнчлэлийг crm_staff_team_sync цэвэрлэнэ.
+          update public.crm_staff set is_active = false, offboarding = false
+           where id = s.id and (is_active or offboarding);
+          delete from public.crm_agent_daily_stats where agent_id = a.profile_id;
+          insert into public.crm_audit_log (office_id, actor_id, entity, entity_id, action, old_value, reason)
+          values (s.office_id, v_me, 'crm_staff', s.id, 'delete',
+                  to_jsonb(s) || jsonb_build_object('name', a.display_name),
+                  'Оффисын админ агентыг хассан — зар оруулж байгаагүй тул түүхтэй нь бүрэн устгав');
+          delete from public.crm_staff where id = s.id;
+        end if;
+        -- Хүний үйлдлийн түүх (одоогийн CRM). Аудитын бүртгэл (crm_audit_log) хэвээр.
+        delete from public.crm2_history where actor_id = a.profile_id;
+        -- Үлдсэн NO ACTION/RESTRICT холбоос (ихэнхдээ хуучин CRM): заавал биш
+        -- баганыг хоослоно, заавал баганатай мөр нь тухайн хүнийх тул устгана.
+        -- CASCADE / SET NULL холбоосыг auth.users → profiles устгал өөрөө шийднэ.
+        -- Хуучин CRM-ийн эзэмшигч солих хамгаалалт шилжүүлэлтийн горим, шалтгаан
+        -- шаарддаг; trigger-ийн шинээр үүсгэсэн мөрийг (эзэмшлийн түүх) барихын
+        -- тулд хоёр удаа гүйлгэнэ.
+        perform set_config('crm.reassign', '1', true);
+        perform set_config('crm.reason', 'offboarding', true);
+        -- Хүний даалгавар (tasks) профайлын хамт cascade устна — түүн рүү заасан
+        -- NO ACTION холбоосыг (хуучин CRM-ийн дараагийн алхам г.м.) эхлээд хоослоно.
+        for r in
+          select k.conrelid::regclass as tbl, att.attname::text as col
+            from pg_constraint k
+            join pg_attribute att on att.attrelid = k.conrelid and att.attnum = k.conkey[1]
+           where k.contype = 'f'
+             and k.confrelid = 'public.tasks'::regclass
+             and cardinality(k.conkey) = 1
+             and k.confdeltype in ('a', 'r')
+             and not att.attnotnull
+        loop
+          execute format(
+            'update %s set %I = null where %I in (select t2.id from public.tasks t2 where $1 in (t2.responsible_id, t2.created_by))',
+            r.tbl, r.col, r.col) using a.profile_id;
+        end loop;
+        for i in 1..2 loop
+          for r in
+            select k.conrelid::regclass as tbl, att.attname::text as col, att.attnotnull as required
+              from pg_constraint k
+              join pg_class cl on cl.oid = k.conrelid
+              join pg_namespace ns on ns.oid = cl.relnamespace and ns.nspname = 'public'
+              join pg_attribute att on att.attrelid = k.conrelid and att.attnum = k.conkey[1]
+             where k.contype = 'f'
+               and k.confrelid = 'public.profiles'::regclass
+               and cardinality(k.conkey) = 1
+               and k.confdeltype in ('a', 'r')
+               and not (cl.relname = 'crm_staff' and att.attname = 'profile_id')
+          loop
+            if r.required then
+              execute format('delete from %s where %I = $1', r.tbl, r.col) using a.profile_id;
+            else
+              execute format('update %s set %I = null where %I = $1', r.tbl, r.col, r.col) using a.profile_id;
+            end if;
+          end loop;
+        end loop;
+        perform set_config('crm.reassign', '', true);
+        perform set_config('crm.reason', '', true);
+        delete from auth.users where id = a.profile_id; -- profiles болон хувийн мөрүүд cascade
+        v_mode := 'deleted';
+      exception
+        when foreign_key_violation or restrict_violation or not_null_violation
+             or check_violation or raise_exception then
+          v_fallback := sqlerrm;
+          v_mode := null;
+      end;
+    end if;
+
+    if v_mode is null then
+      -- Зар оруулж байсан / CRM-д ажилласан → түүх хэвээр, хүн «(хасагдсан)»
+      -- булш болж үлдэнэ; нэвтрэлт хаагдаж, оффисын хандалт хасагдана.
       v_mode := 'archived';
       v_name := coalesce(nullif(btrim(a.display_name), ''), nullif(btrim(p.full_name), ''), 'Ажилтан');
       if v_name not like '(хасагдсан)%' then
@@ -517,6 +595,8 @@ begin
     'name', a.display_name,
     'listings_moved', v_moved,
     'listings_deleted', v_deleted,
+    -- Бүрэн устгал боломжгүй болж архивласан шалтгаан (null = төлөвлөсөн ёсоор)
+    'fallback_reason', v_fallback,
     'target_name', t.display_name
   );
 end $$;

@@ -202,7 +202,15 @@ const removeSchema = z
 export async function removeAgentFromOffice(
   raw: z.input<typeof removeSchema>
 ): Promise<
-  | { ok: true; mode: "deleted" | "archived"; moved: number; deleted: number; targetName: string | null }
+  | {
+      ok: true;
+      mode: "deleted" | "archived";
+      moved: number;
+      deleted: number;
+      targetName: string | null;
+      /** Бүрэн устгах байсан ч хуучин бүртгэл саад болж архивласан бол. */
+      fellBack: boolean;
+    }
   | { ok: false; error: string }
 > {
   const parsed = removeSchema.safeParse(raw);
@@ -231,7 +239,9 @@ export async function removeAgentFromOffice(
     listings_moved?: number;
     listings_deleted?: number;
     target_name?: string | null;
+    fallback_reason?: string | null;
   };
+  if (res.fallback_reason) console.warn("office_remove_agent archived instead of delete:", res.fallback_reason);
 
   // Зар шилжсэн/устсан, агент нийтээс алга — нүүр, жагсаалтын кэшийг цэвэрлэнэ.
   expirePublicListings();
@@ -247,6 +257,7 @@ export async function removeAgentFromOffice(
     moved: res.listings_moved ?? 0,
     deleted: res.listings_deleted ?? 0,
     targetName: res.target_name ?? null,
+    fellBack: !!res.fallback_reason,
   };
 }
 

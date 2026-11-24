@@ -103,9 +103,11 @@ export function RemoveAgentButton({
         return;
       }
       toast.success(
-        res.mode === "archived"
-          ? `«${agentName}» хасагдлаа — CRM-ийн түүх хадгалагдсан.`
-          : `«${agentName}» бүрэн устгагдлаа.`
+        res.mode === "deleted"
+          ? `«${agentName}» бүрэн устгагдлаа.`
+          : res.fellBack
+            ? `«${agentName}» хасагдлаа — хуучин CRM-ийн бүртгэлтэй тул түүхийг нь хадгалсан.`
+            : `«${agentName}» хасагдлаа — CRM-ийн түүх хадгалагдсан.`
       );
       setOpen(false);
       if (redirectTo) router.push(redirectTo);

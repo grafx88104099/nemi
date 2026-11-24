@@ -28,6 +28,9 @@ function check(over: Partial<RemovalCheck> = {}): RemovalCheck {
     agent: { id: AGENT, name: "Эгшиглэн", status: "active", office_id: OFFICE, has_login: true },
     staff: { id: "33333333-3333-4333-8333-333333333333", is_active: true, offboarding: false },
     blockers: [],
+    had_listings: false,
+    has_crm_work: false,
+    mode: "delete",
     has_history: false,
     history: {},
     listings: { total: 0, active: 0, linked: 0 },
@@ -100,11 +103,20 @@ describe("listings choice", () => {
 });
 
 describe("outcome and summary", () => {
-  it("archives when CRM history exists, deletes otherwise", () => {
+  it("deletes an agent who never posted a listing — even with history", () => {
     expect(removalOutcome(check())).toBe("delete");
-    expect(removalOutcome(check({ has_history: true, history: { crm2_deals: 2 } }))).toBe("archive");
+    expect(removalOutcome(check({ has_history: true, history: { tasks: 2, crm_leads: 1 } }))).toBe("delete");
+  });
+
+  it("archives an agent who had listings or owns CRM office records", () => {
+    expect(removalOutcome(check({ had_listings: true, mode: "archive" }))).toBe("archive");
+    expect(removalOutcome(check({ has_crm_work: true, mode: "archive", has_history: true }))).toBe("archive");
+    // Even if mode were stale, listings alone keep the history.
+    expect(removalOutcome(check({ had_listings: true }))).toBe("archive");
     // No login → nothing to keep, only the agent card goes.
-    expect(removalOutcome(check({ has_history: true, agent: { ...check().agent, has_login: false } }))).toBe("delete");
+    expect(
+      removalOutcome(check({ had_listings: true, mode: "archive", agent: { ...check().agent, has_login: false } }))
+    ).toBe("delete");
   });
 
   it("totals history rows", () => {
@@ -113,6 +125,8 @@ describe("outcome and summary", () => {
 
   it("describes a transfer with history", () => {
     const c = check({
+      had_listings: true,
+      mode: "archive",
       has_history: true,
       history: { crm2_history: 5 },
       listings: { total: 4, active: 3, linked: 0 },
@@ -123,15 +137,27 @@ describe("outcome and summary", () => {
     expect(lines).toMatch(/4 зар \(3 идэвхтэй\) «Бат»-д шилжинэ/);
     expect(lines).toMatch(/2 лид мөн шилжинэ/);
     expect(lines).toMatch(/1 чат устна/);
+    expect(lines).toMatch(/Зар оруулж байсан тул CRM-ийн түүх \(5 бичлэг\)/);
     expect(lines).toMatch(/«\(хасагдсан\) Эгшиглэн»/);
+    expect(lines).toMatch(/оффисын хандалт хасагдана/);
     expect(lines).toMatch(/и-мэйл\/утас чөлөөлөгдөнө/);
   });
 
-  it("describes a full delete", () => {
-    const lines = removalSummary(check({ listings: { total: 1, active: 1, linked: 0 } }), "delete", null).join("\n");
-    expect(lines).toMatch(/1 зар зураг/);
-    expect(lines).toMatch(/бүрэн устна/);
+  it("describes a full delete of a never-posted agent with its history", () => {
+    const lines = removalSummary(check({ has_history: true, history: { tasks: 2 } }), null, null).join("\n");
+    expect(lines).toMatch(/Зар оруулж байгаагүй/);
+    expect(lines).toMatch(/түүх \(2 бичлэг\) бүрэн устна/);
     expect(lines).not.toMatch(/хасагдсан/);
+  });
+
+  it("explains archiving for CRM work without listings", () => {
+    const c = check({ has_crm_work: true, mode: "archive", has_history: true, history: { crm2_contacts: 5 } });
+    expect(removalSummary(c, null, null).join("\n")).toMatch(/оффисын бүртгэл .* хариуцсан тул/);
+  });
+
+  it("describes deleting listings when chosen", () => {
+    const c = check({ had_listings: true, mode: "archive", listings: { total: 1, active: 1, linked: 0 } });
+    expect(removalSummary(c, "delete", null).join("\n")).toMatch(/1 зар зураг/);
   });
 });
 
