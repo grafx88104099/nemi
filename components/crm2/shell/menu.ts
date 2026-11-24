@@ -1,12 +1,13 @@
 import { crm2MenuItems, crm2Paths, type Crm2MenuKey, type Crm2Panel } from "@/lib/crm2/paths";
 import type { Crm2Context } from "@/lib/crm2/types";
+import { staffChatHref, TEAM_CHAT_LABEL } from "@/lib/staff-chat";
 
 /**
  * CRM-ийн цэсний угсралт — цэвэр функц (сервер эрхээр шийдэж CrmNav-д өгнө).
  * Үндсэн 7 хэсгийн дараалал, эрх нь lib/crm2/paths-ийн crm2MenuItems-д.
  */
 
-export type CrmNavIcon = Crm2MenuKey | "calendar" | "team" | "approvals";
+export type CrmNavIcon = Crm2MenuKey | "calendar" | "team" | "teamChat" | "approvals";
 
 export type CrmNavItem = {
   href: string;
@@ -15,6 +16,8 @@ export type CrmNavItem = {
   /** Идэвхтэй эсэхийг энэ замын угтвараар шалгана (анхдагч — href). */
   matchPrefix?: string;
   badge?: string;
+  /** Энэ чатын уншаагүй мессежийн тоог амьдаар харуулна («Багийн чат»). */
+  unreadChatId?: string;
 };
 
 /** Хуучин crm_staff-ийн дүрээс (crm2_my_context уншигдаагүй үед) цэсний хамгийн бага эрх. */
@@ -52,6 +55,8 @@ export function crmNavItems(
     canOpenTeam: boolean;
     /** crm2_my_context-оор гишүүн нь батлагдсан (нөөц дүрээр биш) — батлах эрхгүй ч өөрийн хүсэлтээ харна. */
     canOpenRequests?: boolean;
+    /** Хэрэглэгчийн багийн чат (гишүүн бол) — «Багийн чат» туслах хэсгийн эхэнд. */
+    teamChatId?: string | null;
   }
 ): { primary: CrmNavItem[]; secondary: CrmNavItem[] } {
   const p = crm2Paths(panel);
@@ -60,7 +65,16 @@ export function crmNavItems(
     label: it.label,
     icon: it.key,
   }));
-  const secondary: CrmNavItem[] = [{ href: p.calendar(), label: "Календарь", icon: "calendar" }];
+  const secondary: CrmNavItem[] = [];
+  if (opts.teamChatId) {
+    secondary.push({
+      href: staffChatHref(panel, opts.teamChatId),
+      label: TEAM_CHAT_LABEL,
+      icon: "teamChat",
+      unreadChatId: opts.teamChatId,
+    });
+  }
+  secondary.push({ href: p.calendar(), label: "Календарь", icon: "calendar" });
   if (opts.canOpenTeam) {
     secondary.push(
       panel === "office"

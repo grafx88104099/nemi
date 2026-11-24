@@ -114,3 +114,11 @@ export function newStaffMessageId(source: Pick<Crypto, "getRandomValues"> & Part
   const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
+
+export const TEAM_CHAT_LABEL = "Багийн чат";
+
+/** Панелийн чатын зам; chatId өгвөл тухайн яриа. */
+export function staffChatHref(panel: "agent" | "office", chatId?: string | null): string {
+  const base = panel === "office" ? "/office/chat" : "/agent/chat";
+  return chatId ? `${base}/${chatId}` : base;
+}

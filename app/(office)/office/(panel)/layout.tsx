@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { getMyTeamChatId } from "@/lib/queries-team-chat";
 import { OfficeSidebar, OfficeMobileNav } from "@/components/office/OfficeSidebar";
 import { NotificationBell } from "@/components/layout/NotificationBell";
 
@@ -40,18 +41,26 @@ export default async function OfficePanelLayout({
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id)
       .is("read_at", null),
-    supabase.from("crm_staff").select("profile_id").eq("profile_id", user.id).eq("is_active", true).limit(1),
+    supabase.from("crm_staff").select("profile_id, team_id").eq("profile_id", user.id).eq("is_active", true).limit(1),
   ]);
   const officeName = office?.name ?? "Оффис";
   const email = user.email ?? "";
   const hasCrm = (staff ?? []).length > 0;
+  // Багийн гишүүн бол «Багийн чат» (CRM-ийн бүрхүүл ч мөн уншина — нэг хүсэлтэд кэшлэгдэнэ).
+  const teamChatId = await getMyTeamChatId(staff?.[0]?.team_id ?? null);
 
   return (
     <div className="flex min-h-screen bg-bg">
-      <OfficeSidebar officeName={officeName} email={email} unread={unread ?? 0} hasCrm={hasCrm} />
+      <OfficeSidebar officeName={officeName} email={email} unread={unread ?? 0} hasCrm={hasCrm} teamChatId={teamChatId} />
       <main className="min-w-0 flex-1 overflow-x-clip">
         <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-line bg-surface/90 px-3 backdrop-blur md:px-6">
-          <OfficeMobileNav officeName={officeName} email={email} unread={unread ?? 0} hasCrm={hasCrm} />
+          <OfficeMobileNav
+            officeName={officeName}
+            email={email}
+            unread={unread ?? 0}
+            hasCrm={hasCrm}
+            teamChatId={teamChatId}
+          />
           <div className="ml-auto flex items-center gap-1">
             {hasCrm ? (
               <Link

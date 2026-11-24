@@ -10,6 +10,7 @@ import {
   CheckCheck,
   Clock3,
   ListTodo,
+  MessageCircle,
   Settings2,
   Users,
   UsersRound,
@@ -18,6 +19,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { StaffChatUnreadBadge } from "@/components/staff-chat/StaffChatUnreadBadge";
 
 import type { CrmNavIcon, CrmNavItem } from "./menu";
 
@@ -31,6 +33,7 @@ const ICON: Record<CrmNavIcon, LucideIcon> = {
   settings: Settings2,
   calendar: CalendarDays,
   team: UsersRound,
+  teamChat: MessageCircle,
   approvals: CheckCheck,
 };
 
@@ -75,6 +78,7 @@ export function CrmNav({ primary, secondary }: { primary: CrmNavItem[]; secondar
         {it.badge ? (
           <span className="rounded-full bg-brand-50 px-1.5 text-xs font-semibold text-brand-700">{it.badge}</span>
         ) : null}
+        {it.unreadChatId ? <StaffChatUnreadBadge chatId={it.unreadChatId} /> : null}
       </Link>
     );
   };

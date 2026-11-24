@@ -61,6 +61,22 @@ describe("CRM цэс", () => {
     }
   });
 
+  it("багийн гишүүнд «Багийн чат» туслах хэсгийн эхэнд, панелийн чат руу, уншаагүй тоотой", () => {
+    const chat = "22222222-2222-4222-8222-222222222222";
+    const agent = crmNavItems("agent", ctx({ teamId: "t1" }), { canOpenTeam: false, teamChatId: chat }).secondary;
+    expect(agent.map((i) => [i.label, i.href])).toEqual([
+      ["Багийн чат", `/agent/chat/${chat}`],
+      ["Календарь", "/agent/crm/calendar"],
+    ]);
+    expect(agent[0]).toMatchObject({ icon: "teamChat", unreadChatId: chat });
+    const office = crmNavItems("office", ctx(), { canOpenTeam: true, teamChatId: chat }).secondary;
+    expect(office.map((i) => i.href)).toEqual([`/office/chat/${chat}`, "/office/crm/calendar", "/office/crm/teams"]);
+    // Багийн чатгүй (багт хуваарилагдаагүй, эсвэл гишүүн биш) бол цэс гарахгүй.
+    for (const teamChatId of [null, undefined, ""]) {
+      expect(labels(crmNavItems("agent", ctx(), { canOpenTeam: false, teamChatId }).secondary)).toEqual(["Календарь"]);
+    }
+  });
+
   it("туслах: Миний баг (панелиар ялгаатай зам), Батлах зөвхөн батлах эрхтэнд", () => {
     const agent = crmNavItems("agent", ctx({ canApprove: true }), { canOpenTeam: true }).secondary;
     expect(agent.map((i) => i.href)).toEqual(["/agent/crm/calendar", "/agent/crm/team/monitor", "/agent/crm/approvals"]);

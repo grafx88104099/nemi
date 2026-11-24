@@ -15,6 +15,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  MessageCircle,
   MessagesSquare,
   Settings,
   UserCheck,
@@ -25,8 +26,9 @@ import { Logo } from "@/components/brand/Logo";
 import { Drawer } from "@/components/ui/drawer";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { StaffChatUnreadBadge } from "@/components/staff-chat/StaffChatUnreadBadge";
+import { staffChatHref, TEAM_CHAT_LABEL } from "@/lib/staff-chat";
 
-const CHAT_HREF = "/office/chat";
+const CHAT_HREF = staffChatHref("office");
 
 const items = [
   { href: "/office", label: "Хяналтын самбар", icon: LayoutDashboard },
@@ -43,16 +45,41 @@ const items = [
 
 const NOTIFICATIONS_HREF = "/office/crm/notifications";
 
-type NavProps = { officeName: string; email: string; unread?: number; hasCrm?: boolean };
+type NavProps = {
+  officeName: string;
+  email: string;
+  unread?: number;
+  hasCrm?: boolean;
+  /** Багийн гишүүн бол багийн чат — «Багийн чат» цэс, «Чат»-ын тоонд давхар орохгүй. */
+  teamChatId?: string | null;
+};
 
-function NavList({ unread = 0, hasCrm = false, onNavigate }: { unread?: number; hasCrm?: boolean; onNavigate?: () => void }) {
+function NavList({
+  unread = 0,
+  hasCrm = false,
+  teamChatId = null,
+  onNavigate,
+}: {
+  unread?: number;
+  hasCrm?: boolean;
+  teamChatId?: string | null;
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
+  const teamChatHref = teamChatId ? staffChatHref("office", teamChatId) : null;
+  const under = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
   const isActive = (href: string) => {
     if (href === "/office") return pathname === "/office";
     // CRM-ийн мэдэгдлийн хуудас «CRM»-ийг давхар идэвхжүүлэхгүй.
     if (href === "/office/crm" && pathname.startsWith(NOTIFICATIONS_HREF)) return false;
+    if (href === CHAT_HREF && teamChatHref && under(teamChatHref)) return false;
     return pathname.startsWith(href);
   };
+  const navItems = teamChatHref
+    ? items.flatMap((it) =>
+        it.href === CHAT_HREF ? [{ href: teamChatHref, label: TEAM_CHAT_LABEL, icon: MessageCircle }, it] : [it]
+      )
+    : items;
   const linkClass = (active: boolean) =>
     cn(
       "flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
@@ -61,10 +88,14 @@ function NavList({ unread = 0, hasCrm = false, onNavigate }: { unread?: number; 
 
   return (
     <nav className="flex-1 space-y-1 p-3">
-      {items.map((it) => (
+      {navItems.map((it) => (
         <Link key={it.href} href={it.href} onClick={onNavigate} className={linkClass(isActive(it.href))}>
           <it.icon className="size-4" /> {it.label}
-          {it.href === CHAT_HREF ? <StaffChatUnreadBadge className="ml-auto" /> : null}
+          {it.href === CHAT_HREF ? (
+            <StaffChatUnreadBadge className="ml-auto" excludeChatId={teamChatId} />
+          ) : it.href === teamChatHref ? (
+            <StaffChatUnreadBadge className="ml-auto" chatId={teamChatId} />
+          ) : null}
         </Link>
       ))}
       {hasCrm ? (
@@ -100,7 +131,7 @@ function AccountFooter({ email }: { email: string }) {
 }
 
 /** Ширээний дэлгэцийн зүүн цэс (md-ээс дээш). */
-export function OfficeSidebar({ officeName, email, unread = 0, hasCrm = false }: NavProps) {
+export function OfficeSidebar({ officeName, email, unread = 0, hasCrm = false, teamChatId = null }: NavProps) {
   return (
     <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-line bg-surface md:flex">
       <div className="flex h-14 items-center gap-2 border-b border-line px-5">
@@ -114,7 +145,7 @@ export function OfficeSidebar({ officeName, email, unread = 0, hasCrm = false }:
         <div className="truncate text-sm font-bold text-ink">{officeName}</div>
       </div>
       <div className="flex-1 overflow-y-auto">
-        <NavList unread={unread} hasCrm={hasCrm} />
+        <NavList unread={unread} hasCrm={hasCrm} teamChatId={teamChatId} />
       </div>
       <AccountFooter email={email} />
     </aside>
@@ -122,7 +153,7 @@ export function OfficeSidebar({ officeName, email, unread = 0, hasCrm = false }:
 }
 
 /** Гар утасны цэс: толгойн товч → хажуугийн цонх (md-ээс доош). */
-export function OfficeMobileNav({ officeName, email, unread = 0, hasCrm = false }: NavProps) {
+export function OfficeMobileNav({ officeName, email, unread = 0, hasCrm = false, teamChatId = null }: NavProps) {
   const [open, setOpen] = useState(false);
   return (
     <div className="flex items-center gap-2 md:hidden">
@@ -138,7 +169,7 @@ export function OfficeMobileNav({ officeName, email, unread = 0, hasCrm = false 
       <span className="max-w-[45vw] truncate text-sm font-bold text-ink">{officeName}</span>
       <Drawer open={open} onClose={() => setOpen(false)} title="Цэс" widthClassName="max-w-xs">
         <div className="-m-5 flex min-h-[calc(100%+2.5rem)] flex-col">
-          <NavList unread={unread} hasCrm={hasCrm} onNavigate={() => setOpen(false)} />
+          <NavList unread={unread} hasCrm={hasCrm} teamChatId={teamChatId} onNavigate={() => setOpen(false)} />
           <AccountFooter email={email} />
         </div>
       </Drawer>

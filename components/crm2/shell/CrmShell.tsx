@@ -1,6 +1,7 @@
 import { getCrm2Context } from "@/lib/crm2/context";
 import type { Crm2Panel } from "@/lib/crm2/paths";
 import type { CrmStaffContext } from "@/lib/queries-crm-core";
+import { getMyTeamChatId } from "@/lib/queries-team-chat";
 import { cn } from "@/lib/utils";
 
 import { CrmNav } from "./CrmNav";
@@ -23,9 +24,14 @@ export async function CrmShell({
   canOpenTeam: boolean;
   children: React.ReactNode;
 }) {
-  const ctx2 = await getCrm2Context();
+  // Багийн гишүүнд «Багийн чат» (дээд цэс ба утасны доод цэс). Гишүүн биш бол null — цэс гарахгүй.
+  const [ctx2, teamChatId] = await Promise.all([getCrm2Context(), getMyTeamChatId(staff.teamId)]);
   const ctx = ctx2?.isMember ? ctx2 : fallbackCrm2Context(staff);
-  const { primary, secondary } = crmNavItems(panel, ctx, { canOpenTeam, canOpenRequests: !!ctx2?.isMember });
+  const { primary, secondary } = crmNavItems(panel, ctx, {
+    canOpenTeam,
+    canOpenRequests: !!ctx2?.isMember,
+    teamChatId,
+  });
 
   return (
     <div className="flex min-h-full min-w-0 flex-col">
@@ -36,7 +42,7 @@ export async function CrmShell({
       </div>
       {/* Утсанд доод хурдан цэсний ард агуулга хаагдахгүй байх зай. */}
       <div className={cn("min-w-0 flex-1", ctx.canWork && "pb-20 md:pb-0")}>{children}</div>
-      {ctx.canWork ? <CrmQuickBar panel={panel} /> : null}
+      {ctx.canWork ? <CrmQuickBar panel={panel} teamChatId={teamChatId} /> : null}
     </div>
   );
 }

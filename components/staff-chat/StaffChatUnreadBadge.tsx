@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 
 import { getStaffChatList } from "@/lib/queries-staff-chat";
@@ -8,7 +8,7 @@ import { totalUnread } from "@/lib/staff-chat";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
-import { useStaffChatActivity } from "./useStaffChatActivity";
+import { startStaffChatActivity } from "./useStaffChatActivity";
 
 type UnreadEntry = { id: string; unread_count: number };
 
@@ -17,15 +17,64 @@ const NONE: UnreadEntry[] = [];
 let lastUnread = NONE;
 const listeners = new Set<() => void>();
 
+// Нэг хуудсанд хэд хэдэн тэмдэг («Чат», «Багийн чат», утасны доод цэс) байж болно: бүгд нэг realtime
+// холболт, нэг staff_chat_list уншилтыг хуваалцана. Сүүлчийн тэмдэг салахад холболтыг түр хүлээгээд
+// хаана — хуудас шилжихэд цэс дахин mount хийгдэхэд холболтыг дахин нээхгүй.
+const STOP_GRACE_MS = 2_000;
+let stopActivity: (() => void) | null = null;
+let stopTimer: ReturnType<typeof setTimeout> | undefined;
+
+// Хуудас шилжихэд шинэ цэс дахин mount хийгдэнэ: хуучин нэг тэмдэг тутамд уншдаг байсны оронд
+// нэг удаа шинэчилнэ (realtime-д ирдэггүй өөрчлөлт, жишээ нь багаас хасагдсаныг нөхнө).
+const REFRESH_DEBOUNCE_MS = 300;
+const REFRESH_MIN_GAP_MS = 1_000;
+let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+let lastLoadAt = 0;
+
+function refreshSoon() {
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => {
+    if (Date.now() - lastLoadAt >= REFRESH_MIN_GAP_MS) void load();
+  }, REFRESH_DEBOUNCE_MS);
+}
+
+async function load() {
+  lastLoadAt = Date.now();
+  const chats = await getStaffChatList(createClient());
+  if (!chats) return;
+  lastUnread = chats.map(({ id, unread_count }) => ({ id, unread_count }));
+  listeners.forEach((listener) => listener());
+}
+
 function subscribe(listener: () => void) {
   listeners.add(listener);
+  clearTimeout(stopTimer);
+  if (!stopActivity) stopActivity = startStaffChatActivity(load);
+  else refreshSoon();
   return () => {
     listeners.delete(listener);
+    if (listeners.size) return;
+    clearTimeout(stopTimer);
+    stopTimer = setTimeout(() => {
+      if (listeners.size || !stopActivity) return;
+      stopActivity();
+      stopActivity = null;
+    }, STOP_GRACE_MS);
   };
 }
 
-/** Цэсний «Чат» холбоосын уншаагүй мессежийн тоо. */
-export function StaffChatUnreadBadge({ className }: { className?: string }) {
+/** Цэсний чатын холбоосын уншаагүй мессежийн тоо. Анхдагч — бүх чат. */
+export function StaffChatUnreadBadge({
+  className,
+  chatId,
+  excludeChatId,
+}: {
+  className?: string;
+  /** Зөвхөн энэ чатын тоо («Багийн чат»). */
+  chatId?: string | null;
+  /** Энэ чатыг тоолохгүй: тусдаа цэстэй тул «Чат»-д давхар тоологдохгүй. */
+  excludeChatId?: string | null;
+}) {
   const unread = useSyncExternalStore(
     subscribe,
     () => lastUnread,
@@ -34,16 +83,11 @@ export function StaffChatUnreadBadge({ className }: { className?: string }) {
   // Нээлттэй чатыг яриа өөрөө уншсанд тэмдэглэдэг тул жагсаалтын адил тоолохгүй.
   const activeId = usePathname().match(/\/chat\/([^/]+)/)?.[1] ?? null;
 
-  const load = useCallback(async () => {
-    const chats = await getStaffChatList(createClient());
-    if (!chats) return;
-    lastUnread = chats.map(({ id, unread_count }) => ({ id, unread_count }));
-    listeners.forEach((listener) => listener());
-  }, []);
-
-  useStaffChatActivity(load);
-
-  const count = totalUnread(unread.filter((chat) => chat.id !== activeId));
+  const count = totalUnread(
+    unread.filter(
+      (chat) => chat.id !== activeId && (chatId ? chat.id === chatId : chat.id !== excludeChatId)
+    )
+  );
   if (count <= 0) return null;
   return (
     <span

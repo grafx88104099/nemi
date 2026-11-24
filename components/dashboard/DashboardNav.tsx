@@ -9,6 +9,7 @@ import {
   FolderKanban,
   LayoutDashboard,
   ListTodo,
+  MessageCircle,
   MessagesSquare,
   UserCircle,
   Users,
@@ -16,28 +17,54 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { staffChatHref, TEAM_CHAT_LABEL } from "@/lib/staff-chat";
 import { StaffChatUnreadBadge } from "@/components/staff-chat/StaffChatUnreadBadge";
 
-const CHAT_HREF = "/agent/chat";
+const CHAT_HREF = staffChatHref("agent");
 const MY_WORK_HREF = "/agent/crm/my-work";
 
-/** Агентын layout-аас: CRM-ийн ажилтан эсэх (цэсийг тохируулахад). */
-const AgentNavContext = React.createContext<{ crm: boolean }>({ crm: false });
+export type AgentNav = {
+  /** CRM-ийн ажилтан эсэх (цэсийг тохируулахад). */
+  crm: boolean;
+  /** Багийн чат (гишүүн бол) — «Багийн чат» цэс. */
+  teamChatId: string | null;
+};
 
-export function AgentNavProvider({ crm, children }: { crm: boolean; children: React.ReactNode }) {
-  return <AgentNavContext.Provider value={{ crm }}>{children}</AgentNavContext.Provider>;
+/** Агентын layout-аас. */
+const AgentNavContext = React.createContext<AgentNav>({ crm: false, teamChatId: null });
+
+export function AgentNavProvider({
+  crm,
+  teamChatId = null,
+  children,
+}: {
+  crm: boolean;
+  teamChatId?: string | null;
+  children: React.ReactNode;
+}) {
+  const value = React.useMemo(() => ({ crm, teamChatId }), [crm, teamChatId]);
+  return <AgentNavContext.Provider value={value}>{children}</AgentNavContext.Provider>;
 }
 
-type Item = { href: string; label: string; icon: LucideIcon; active: (p: string) => boolean };
+export type AgentNavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  active: (p: string) => boolean;
+  /** Уншаагүй тоо: { all } — багийн чатаас бусад бүх чат, { chatId } — зөвхөн тэр чат. */
+  unread?: { all: true } | { chatId: string };
+};
 
 const starts = (prefix: string) => (p: string) => p === prefix || p.startsWith(prefix + "/");
 
 /**
  * Агентын дээд цэс. CRM-ийн ажилтанд «Даалгавар» тусдаа цэс биш — оффисын
  * даалгавар CRM «Миний ажил»-д дараагийн алхмуудтайгаа нэг жагсаалтад
- * харагдана. CRM-гүй оффисын агентад хуучнаараа.
+ * харагдана. CRM-гүй оффисын агентад хуучнаараа. Багийн гишүүнд «Багийн чат»
+ * шууд багийнхаа яриа руу; «Чат» бусад ярианд (тоо нь давхардахгүй).
  */
-function itemsFor(crm: boolean): Item[] {
+export function agentNavItems({ crm, teamChatId }: AgentNav): AgentNavItem[] {
+  const teamChat = teamChatId ? staffChatHref("agent", teamChatId) : null;
   return [
     { href: "/agent", label: "Тойм", icon: LayoutDashboard, active: (p) => p === "/agent" },
     ...(crm
@@ -49,17 +76,35 @@ function itemsFor(crm: boolean): Item[] {
     { href: "/agent/listings", label: "Миний зар", icon: Building2, active: starts("/agent/listings") },
     { href: "/agent/projects", label: "Төслүүд", icon: FolderKanban, active: starts("/agent/projects") },
     ...(crm ? [] : [{ href: "/agent/tasks", label: "Даалгавар", icon: ClipboardList, active: starts("/agent/tasks") }]),
-    { href: CHAT_HREF, label: "Чат", icon: MessagesSquare, active: starts(CHAT_HREF) },
+    ...(teamChat && teamChatId
+      ? [{ href: teamChat, label: TEAM_CHAT_LABEL, icon: MessageCircle, active: starts(teamChat), unread: { chatId: teamChatId } }]
+      : []),
+    {
+      href: CHAT_HREF,
+      label: "Чат",
+      icon: MessagesSquare,
+      active: (p: string) => starts(CHAT_HREF)(p) && !(teamChat && starts(teamChat)(p)),
+      unread: { all: true },
+    },
     { href: "/agent/profile", label: "Миний профайл", icon: UserCircle, active: starts("/agent/profile") },
   ];
 }
 
 export function DashboardNav() {
   const pathname = usePathname();
-  const { crm } = React.useContext(AgentNavContext);
+  const nav = React.useContext(AgentNavContext);
+  const navRef = React.useRef<HTMLElement>(null);
+
+  // Утсанд цэс хэвтээ гүйлгэгдэнэ: шууд нээсэн хуудасны (жишээ нь CRM-ийн доод цэснээс «Багийн чат») таб харагдана.
+  React.useEffect(() => {
+    navRef.current
+      ?.querySelector<HTMLElement>('[aria-current="page"]')
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [pathname]);
+
   return (
-    <nav aria-label="Агентын цэс" className="flex gap-1 overflow-x-auto border-b border-line">
-      {itemsFor(crm).map(({ href, label, icon: Icon, active }) => {
+    <nav ref={navRef} aria-label="Агентын цэс" className="flex gap-1 overflow-x-auto border-b border-line">
+      {agentNavItems(nav).map(({ href, label, icon: Icon, active, unread }) => {
         const on = active(pathname);
         return (
           <Link
@@ -72,7 +117,13 @@ export function DashboardNav() {
             )}
           >
             <Icon className="size-4" /> {label}
-            {href === CHAT_HREF ? <StaffChatUnreadBadge /> : null}
+            {unread ? (
+              "chatId" in unread ? (
+                <StaffChatUnreadBadge chatId={unread.chatId} />
+              ) : (
+                <StaffChatUnreadBadge excludeChatId={nav.teamChatId} />
+              )
+            ) : null}
           </Link>
         );
       })}
