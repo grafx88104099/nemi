@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 type TabId = "sale" | "rent" | "post";
 
 export const HERO_TABS: readonly { id: TabId; label: string }[] = [
-  { id: "sale", label: "Авах" },
+  { id: "sale", label: "Зарах" },
   { id: "rent", label: "Түрээслэх" },
   { id: "post", label: "Зар өгөх" },
 ];
@@ -30,8 +30,8 @@ const tabId = (t: TabId) => `hero-tab-${t}`;
 const panelId = (t: TabId) => (t === "post" ? "hero-panel-post" : "hero-panel-search");
 
 /**
- * Нүүрний hero хайлт. SSR-ийн өгөгдмөл таб «Авах» → JS-гүй ч GET /listings?deal=sale&q=…
- * маягт ажиллана. «Авах»/«Түрээслэх» нэг маягт (зөвхөн hidden deal өөр) — бичсэн
+ * Нүүрний hero хайлт. SSR-ийн өгөгдмөл таб «Зарах» → JS-гүй ч GET /listings?deal=sale&q=…
+ * маягт ажиллана. «Зарах»/«Түрээслэх» нэг маягт (зөвхөн hidden deal өөр) — бичсэн
  * текст таб солиход үлдэнэ. Табууд: roving tabindex + ←/→/Home/End (автомат идэвхжүүлэлт).
  * Идэвхтэй табын тэмдэг ink (16:1) — улбар шар (2.80:1) БИШ.
  *

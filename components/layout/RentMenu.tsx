@@ -36,9 +36,9 @@ export function RentMenu() {
       <button
         onClick={() => setOpen((o) => !o)}
         onMouseEnter={() => setOpen(true)}
-        className="flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium text-ink transition hover:bg-surface-2"
+        className="flex items-center gap-1 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium text-ink transition hover:bg-surface-2"
       >
-        Түрээс
+        Түрээслэх
         <ChevronDown className={cn("size-4 transition", open && "rotate-180")} />
       </button>
       {open && (

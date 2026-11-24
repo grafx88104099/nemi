@@ -27,7 +27,7 @@ import { RENT_SEARCH_LINKS, RENT_TOOL_LINKS } from "@/components/layout/RentMenu
 type MenuItem = { href: string; label: string; icon: LucideIcon };
 
 const SEARCH: MenuItem[] = [
-  { href: "/listings?deal=sale", label: "Худалдах", icon: Search },
+  { href: "/listings?deal=sale", label: "Зарах", icon: Search },
   { href: "/map", label: "Газрын зураг", icon: MapIcon },
   ...RENT_SEARCH_LINKS,
 ];
@@ -88,7 +88,7 @@ export function MobileMenu({ sellHref }: { sellHref: string }) {
               <nav aria-label="Цэс" className="space-y-5">
                 <MenuGroup title="Хайх" items={SEARCH} onNavigate={close} />
                 <MenuGroup title="Хэрэгсэл" items={TOOLS} onNavigate={close} />
-                <MenuGroup title="Зарах" items={sell} onNavigate={close} />
+                <MenuGroup title="Зар өгөх" items={sell} onNavigate={close} />
                 <MenuGroup title="Бусад" items={OTHER} onNavigate={close} />
               </nav>
             </Drawer>,

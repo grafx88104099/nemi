@@ -117,7 +117,8 @@ describe("SearchFilterBar", () => {
 
   it("таб тоотой, түргэн чип ба арилгах чип rel=nofollow", () => {
     expect(html).toContain("Бүгд");
-    expect(html).toMatch(/Түрээс<span[^>]*>\(<!-- -->44<!-- -->\)/);
+    expect(html).toMatch(/Түрээслэх<span[^>]*>\(<!-- -->44<!-- -->\)/);
+    expect(html).toMatch(/Зарах<span[^>]*>\(<!-- -->89<!-- -->\)/);
     expect(html).toMatch(/Бүгд<span[^>]*>\(<!-- -->133<!-- -->\)/);
     const chipList = html.slice(html.indexOf('aria-label="Түргэн шүүлт"'));
     const anchors = tags(chipList.slice(0, chipList.indexOf("</ul>")), /<a[^>]*>/g);

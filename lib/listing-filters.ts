@@ -103,8 +103,8 @@ export const POSTED_OPTIONS: [string, string][] = [
 
 export const DEAL_TABS: [ListingDeal | "", string][] = [
   ["", "Бүгд"],
-  ["sale", "Худалдах"],
-  ["rent", "Түрээс"],
+  ["sale", "Зарах"],
+  ["rent", "Түрээслэх"],
 ];
 
 export type RawParams = Record<string, string | string[] | undefined>;

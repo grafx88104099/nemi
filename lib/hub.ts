@@ -12,7 +12,7 @@ export type HubIntent = "buy" | "rent" | "sell" | "browse";
 export const HUB_INTENTS: [HubIntent, string][] = [
   ["buy", "Авах"],
   ["rent", "Түрээслэх"],
-  ["sell", "Зарах"],
+  ["sell", "Зар өгөх"],
   ["browse", "Зүгээр үзэж байна"],
 ];
 

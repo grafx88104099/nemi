@@ -87,10 +87,12 @@ export async function Topbar({ site = false }: { site?: boolean } = {}) {
           )}
           <NavLinks />
           <div className="ml-auto flex items-center gap-2">
-            {/* Агент → агентын самбар; бусад (худалдан авагч, зочин) → эзний «Хөрөнгөө зарлах». */}
-            <ButtonLink href={sellHref} variant="ghost" size="sm" className="hidden lg:inline-flex">
-              <Plus className="size-4" /> Зар оруулах
-            </ButtonLink>
+            {/* Зөвхөн агент/оффис → агентын самбар. Бусдад цэсний «Зар өгөх» (/sell) байгаа тул давхардуулахгүй. */}
+            {sellHref !== "/sell" ? (
+              <ButtonLink href={sellHref} variant="ghost" size="sm" className="hidden whitespace-nowrap lg:inline-flex">
+                <Plus className="size-4" /> Зар оруулах
+              </ButtonLink>
+            ) : null}
             {user ? (
               <>
                 <NotificationBell initial={notes} />

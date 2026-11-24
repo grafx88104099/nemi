@@ -19,13 +19,13 @@ describe("HeroSearch (SSR, JS-гүй)", () => {
     expect(html).not.toContain("<label");
   });
 
-  it("өгөгдмөл таб «Авах» → hidden deal=sale", () => {
+  it("өгөгдмөл таб «Зарах» → hidden deal=sale", () => {
     expect(html).toMatch(/<input type="hidden" name="deal" value="sale"\/?>/);
   });
 
   it("гурван tab, яг нэг нь aria-selected=true, roving tabindex", () => {
     const tabs = [...html.matchAll(/<button[^>]*role="tab"[^>]*>([\s\S]*?)<\/button>/g)];
-    expect(tabs.map((t) => t[1].replace(/<[^>]+>/g, "").trim())).toEqual(["Авах", "Түрээслэх", "Зар өгөх"]);
+    expect(tabs.map((t) => t[1].replace(/<[^>]+>/g, "").trim())).toEqual(["Зарах", "Түрээслэх", "Зар өгөх"]);
     const opens = tabs.map((t) => t[0].match(/^<button[^>]*>/)?.[0] ?? "");
     expect(opens.filter((o) => o.includes('aria-selected="true"'))).toHaveLength(1);
     expect(opens[0]).toContain('aria-selected="true"');
