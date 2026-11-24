@@ -1,7 +1,7 @@
 "use server";
 
 import { crm2Session, revalidateCrm2 } from "@/lib/crm2/server";
-import { AUTH_ERROR, NOT_FOUND_ERROR, dbFail, definedOnly, fail, ok, zodErrorText } from "@/lib/crm2/result";
+import { AUTH_ERROR, NOT_FOUND_ERROR, dbErrorField, dbFail, definedOnly, fail, ok, zodErrorText } from "@/lib/crm2/result";
 import { isFullPhone } from "@/lib/crm2/phone";
 import { searchContacts as searchContactsQuery, type ContactListItem } from "@/lib/crm2/queries/contacts";
 import {
@@ -32,21 +32,36 @@ import type { Crm2ApplyOutcome, Crm2CreateContactResult, Crm2PhoneMatch, Crm2Res
  * Шинэ харилцагч. Ижил дугаартай харилцагч байвал (allow_duplicate=false) ҮҮСГЭХГҮЙ —
  * data.contact_id = null, data.duplicates-д далд нэртэй жагсаалт. Хэрэглэгч
  * «Тусдаа хүн» гэж батлавал allow_duplicate=true-гээр дахин дуудна.
+ * source/source_note — contact.sources-ийн код (DB guard шалгана). name_unverified=true ба нэр хоосон бол
+ * DB «Нэр баталгаажаагүй» тэмдэглэгээтэй үүсгэнэ (нэрийг дараа нь засна).
  */
-export async function createContact(input: ContactCreateInput): Promise<Crm2Result<Crm2CreateContactResult>> {
-  const parsed = contactCreateSchema.safeParse(input);
+export async function createContact(
+  input: ContactCreateInput & { name_unverified?: boolean }
+): Promise<Crm2Result<Crm2CreateContactResult>> {
+  const { name_unverified, ...rest } = input;
+  const nameUnverified = name_unverified === true && !String(rest.full_name ?? "").trim();
+  // Нэргүй (баталгаажаагүй) бүртгэлд схемийн «нэр заавал» шалгалтыг түр нэрээр давж, RPC-д null өгнө.
+  const parsed = contactCreateSchema.safeParse(nameUnverified ? { ...rest, full_name: "-" } : rest);
   if (!parsed.success) return fail(zodErrorText(parsed.error));
   const session = await crm2Session();
   if (!session) return fail(AUTH_ERROR);
   const v = parsed.data;
   const { data, error } = await session.supabase.rpc("crm2_create_contact", {
-    p_full_name: v.full_name,
+    p_full_name: nameUnverified ? null : v.full_name,
     p_phones: v.phones.map((p) => ({ phone: p.phone, label: p.label ?? null })),
     p_note: v.note ?? null,
     p_agent: v.agent_id ?? null,
     p_allow_duplicate: v.allow_duplicate ?? false,
+    // Шинэ аргументыг зөвхөн утгатай үед (хуучин 5 аргументтай дуудлага хэвээр таарна).
+    ...(v.source ? { p_source: v.source } : {}),
+    ...(v.source_note ? { p_source_note: v.source_note } : {}),
+    ...(nameUnverified ? { p_name_unverified: true } : {}),
   });
-  if (error) return dbFail("createContact", error);
+  if (error) {
+    console.error("crm2 createContact:", error.message);
+    const { field, text } = dbErrorField(error);
+    return { ok: false, error: text, field };
+  }
   const res = data as unknown as Crm2CreateContactResult;
   if (res?.contact_id) revalidateCrm2();
   return ok({ contact_id: res?.contact_id ?? null, code: res?.code ?? null, duplicates: res?.duplicates ?? [] });
@@ -75,7 +90,7 @@ export async function searchContacts(query: string, limit = 10): Promise<Crm2Res
   return ok(await searchContactsQuery(q.data, limit));
 }
 
-/** Нэр, тэмдэглэл, архивлах/сэргээх (status). */
+/** Нэр, тэмдэглэл, архивлах/сэргээх (status), эх сурвалж (source, source_note), зөвшөөрөл (consent). */
 export async function updateContact(input: ContactUpdateInput): Promise<Crm2Result<null>> {
   const parsed = contactUpdateSchema.safeParse(input);
   if (!parsed.success) return fail(zodErrorText(parsed.error));
@@ -85,7 +100,11 @@ export async function updateContact(input: ContactUpdateInput): Promise<Crm2Resu
   const session = await crm2Session();
   if (!session) return fail(AUTH_ERROR);
   const { data, error } = await session.supabase.from("crm2_contacts").update(patch).eq("id", contact_id).select("id");
-  if (error) return dbFail("updateContact", error);
+  if (error) {
+    console.error("crm2 updateContact:", error.message);
+    const { field, text } = dbErrorField(error);
+    return { ok: false, error: text, field };
+  }
   if (!data?.length) return fail(NOT_FOUND_ERROR);
   revalidateCrm2();
   return ok(null);

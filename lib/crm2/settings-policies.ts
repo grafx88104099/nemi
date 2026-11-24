@@ -1,8 +1,11 @@
 import {
   CRM_ROLE_LABEL,
   MISSING_ITEM_LABEL,
+  PROPERTY_CATEGORIES,
+  PROPERTY_CATEGORY_LABEL,
   PROPERTY_STATUS_LABEL,
 } from "@/lib/crm2/labels";
+import { commissionDefaultError, parseCommissionDefault } from "@/lib/crm2/commission-defaults";
 import {
   CRM2_SETTING_DEFAULTS,
   CRM2_SETTING_LABEL,
@@ -28,7 +31,13 @@ export type SettingEditor =
   | { kind: "choice"; options: SettingOption[] }
   | { kind: "multi"; options: SettingOption[]; minItems: number; forbidden: string[] }
   | { kind: "stringList"; minItems: number; maxItems: number; maxLength: number }
-  | { kind: "codeLabel"; fixedCodes: string[] | null; requiredCodes: string[]; maxItems: number; maxLabel: number };
+  | { kind: "codeLabel"; fixedCodes: string[] | null; requiredCodes: string[]; maxItems: number; maxLabel: number }
+  /** Оффисын идэвхтэй ажилтны profile id-ийн жагсаалт (staff.quick_add_pilot). */
+  | { kind: "staffPicker"; maxItems: number }
+  /** Ангилал бүрт '<төрөл>:<утга>' (brokerage.default_commission). */
+  | { kind: "commissionDefaults" }
+  /** 4 ангиллын дурын дэд олонлогт тайлбар (property.category_hints). */
+  | { kind: "categoryHints"; maxLabel: number };
 
 // ── Сонголтын жагсаалт ─────────────────────────────────────────────────────
 
@@ -71,6 +80,9 @@ export const ACTIVATION_FIELD_VALUES = [
   "owner",
   "showing_instructions",
   "images",
+  "owner_source",
+  "owner_name",
+  "unconfirmed",
 ] as const;
 
 const capitalize = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
@@ -89,7 +101,15 @@ const UNIT: Partial<Record<Crm2SettingKey, string>> = {
   "media.max_video_mb": "МБ",
   "docs.max_file_mb": "МБ",
   "docs.max_files_per_contract": "ширхэг",
+  "property.min_images": "ширхэг",
+  "brokerage.default_term_months": "сар",
+  "digest.owner_days": "хоног",
+  "digest.pending_days": "хоног",
 };
+
+/** profile id (crm2_set_setting-тэй ижил: жижиг үсгээр uuid). */
+const PROFILE_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const CATEGORY_CODES: readonly string[] = PROPERTY_CATEGORIES;
 
 /** Код/нэрийн жагсаалтын кодын хэлбэр (DB-тэй ижил). */
 export const SETTING_CODE_RE = /^[a-z][a-z0-9_]{0,39}$/;
@@ -105,7 +125,18 @@ export function settingEditor(key: Crm2SettingKey): SettingEditor {
     case "brokerage.on_expiry":
     case "approvals.allow_self":
     case "contact.foreign_deal":
+    case "brokerage.activation_mode":
+    case "staff.quick_add":
+    case "digest.scope":
       return { kind: "choice", options: choiceOptions(key) };
+    case "staff.quick_add_pilot":
+      return { kind: "staffPicker", maxItems: 20 };
+    case "brokerage.default_commission":
+      return { kind: "commissionDefaults" };
+    case "property.category_hints":
+      return { kind: "categoryHints", maxLabel: 80 };
+    case "contact.sources":
+      return { kind: "codeLabel", fixedCodes: null, requiredCodes: ["other"], maxItems: 40, maxLabel: 80 };
     case "roles.work":
       return { kind: "multi", options: ROLE_OPTIONS, minItems: 1, forbidden: [] };
     case "roles.approve":
@@ -146,7 +177,13 @@ export const SETTING_GROUPS: SettingGroup[] = [
     id: "categories",
     title: "Ангилал ба төрөл",
     description: "Хөрөнгө, шаардлагын маягтад сонгох жагсаалтууд.",
-    keys: ["property.category_labels", "property.types", "property.districts", "property.features"],
+    keys: [
+      "property.category_labels",
+      "property.category_hints",
+      "property.types",
+      "property.districts",
+      "property.features",
+    ],
   },
   {
     id: "staff",
@@ -157,8 +194,14 @@ export const SETTING_GROUPS: SettingGroup[] = [
       "property.activation_required",
       "property.agent_direct_statuses",
       "property.same_agent_multi_role",
+      "property.min_images",
       "brokerage.require_owner",
       "brokerage.require_file",
+      "brokerage.require_ownership_doc",
+      "brokerage.require_special_terms",
+      "brokerage.default_term_months",
+      "brokerage.default_commission",
+      "brokerage.activation_mode",
       "brokerage.on_expiry",
     ],
   },
@@ -182,6 +225,7 @@ export const SETTING_GROUPS: SettingGroup[] = [
     keys: [
       "contact.require_phone",
       "contact.foreign_deal",
+      "contact.sources",
       "deal.open_property_statuses",
       "deal.auto_advance",
       "deal.property_agents_can_view",
@@ -204,6 +248,21 @@ export const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
   {
+    id: "quick",
+    title: "Шуурхай бүртгэл ба сануулга",
+    description:
+      "Утаснаас хөрөнгө хурдан бүртгэх дэлгэц, давхардлын шалгалт, өдрийн дутуу бүртгэлийн сануулга ба зарын текстийг AI-аар задлах.",
+    keys: [
+      "staff.quick_add",
+      "staff.quick_add_pilot",
+      "property.duplicate_check",
+      "digest.scope",
+      "digest.owner_days",
+      "digest.pending_days",
+      "ai.listing_parse",
+    ],
+  },
+  {
     id: "reminders",
     title: "Сануулга",
     description: "Апп доторх мэдэгдлийн хугацаа.",
@@ -220,7 +279,7 @@ export const SETTING_DESCRIPTION: Record<Crm2SettingKey, string> = {
   "property.activation_required":
     "Хөрөнгө идэвхжихээс өмнө бөглөгдсөн байх ёстой талбарууд. Батлагдсан хүчинтэй гэрээ ба ангилалд тохирох үнийн хугацаа үргэлж шаардлагатай.",
   "property.same_agent_multi_role":
-    "Нэг агент листлэгч, гэрээ хийсэн, зураг авсан үүргээс хэд хэдийг зэрэг авч болох эсэх. Хориглосон үед одоо байгаа бичлэгт нөлөөлөхгүй, зөвхөн агент шинээр оноох үед шалгана.",
+    "Нэг агент хөрөнгө авчирсан, гэрээ байгуулсан, зураг авсан үүргээс хэд хэдийг зэрэг авч болох эсэх. Хориглосон үед одоо байгаа бичлэгт нөлөөлөхгүй, зөвхөн агент шинээр оноох үед шалгана.",
   "property.category_labels":
     "Дөрвөн ангиллын дэлгэцэнд харагдах нэр. Ангиллын код ба тоо өөрчлөгдөхгүй.",
   "property.types": "Хөрөнгийн төрлийн сонголт (код ба нэр). Ашиглагдаж буй кодыг хасвал хуучин бичлэг кодоороо харагдана.",
@@ -258,6 +317,33 @@ export const SETTING_DESCRIPTION: Record<Crm2SettingKey, string> = {
   "media.max_video_mb": "Нэг бичлэгийн дээд хэмжээ (сангийн хязгаар 50 МБ).",
   "docs.max_file_mb": "Зуучлалын гэрээний нэг файлын дээд хэмжээ (PDF, JPEG, PNG, WebP).",
   "docs.max_files_per_contract": "Нэг зуучлалын гэрээнд хавсаргах файлын дээд тоо.",
+  "property.category_hints":
+    "Ангилал сонгох товчны доор харагдах богино тайлбар. Хоосон үлдээсэн ангилалд тайлбар харагдахгүй.",
+  "property.duplicate_check":
+    "Хөрөнгө хадгалсны дараа ижил төсөл, давхар, талбай эсвэл эзний утастай хөрөнгийг оффис дотор шалгаж, агентад мэдэгдэнэ. Харах эрхгүй хөрөнгийн мэдээллийг харуулахгүй.",
+  "property.min_images":
+    "Хөрөнгийг нийтлэх (ба «зураг» шаардлагатай үед идэвхжүүлэх)-эд хэрэгтэй хамгийн цөөн зураг. 0 бол зураггүй ч болно.",
+  "brokerage.default_term_months": "Шинэ зуучлалын гэрээний дуусах огноог эхлэх өдрөөс хэдэн сарын дараа гэж урьдчилан бөглөх вэ.",
+  "brokerage.default_commission":
+    "Ангилал бүрийн шимтгэлийг гэрээнд урьдчилан бөглөнө (хувь, сарын түрээсийн дахин, тогтмол дүн). Агент утга бүрийг баталгаажуулна; хоосон бол бөглөхгүй.",
+  "brokerage.activation_mode":
+    "Зуучлалын гэрээ батлагдахад хөрөнгийг автоматаар идэвхжүүлэх үү, эсвэл агент өөрөө «Идэвхжүүлэх» дарах уу. Дутуу зүйлтэй бол аль ч горимд мэдэгдэл очно.",
+  "brokerage.require_special_terms":
+    "Ноорог гэрээг илгээхэд онцгой нөхцөлийг бичих эсвэл «онцгой нөхцөлгүй» гэж тэмдэглэхийг шаардах эсэх.",
+  "brokerage.require_ownership_doc":
+    "Ноорог гэрээг илгээхэд өмчлөлийн баримт хавсаргахыг шаардах эсэх. Баримтыг хариуцагч, батлагч, менежер л харна.",
+  "contact.sources":
+    "Эзэн (харилцагч) хаанаас ирснийг сонгох жагсаалт. «other» (Бусад) заавал байх ба сонговол тайлбар бичнэ.",
+  "staff.quick_add":
+    "Утаснаас нэг дэлгэцээр хөрөнгө бүртгэх «Шуурхай бүртгэл». Унтраастай үед хуучин бүрэн форм нээгдэнэ; хуваалцсан зарын текст хэн ч байсан шуурхай бүртгэлээр нээгдэнэ.",
+  "staff.quick_add_pilot":
+    "«Туршилтын агентуудад» горимд шуурхай бүртгэлийг ашиглах ажилтнууд (20 хүртэл). Хуучин бүрэн форм хүн бүрт «Бүрэн форм» холбоосоор үргэлж нээлттэй.",
+  "digest.scope":
+    "Өдөрт нэг удаа (19:00 цагт) дутуу бүртгэл, батлагдаагүй гэрээний товч сануулга хэнд очих вэ. Шөнө (21:00–09:00) мэдэгдэл явахгүй.",
+  "digest.owner_days": "Эзэн тодорхойгүй эсвэл шалгах шаардлагатай хөрөнгийг бүртгэснээс хэдэн хоногийн дараа сануулах вэ.",
+  "digest.pending_days": "Батлуулахаар илгээсэн гэрээ хэдэн хоног хүлээгдвэл батлагчид сануулах вэ.",
+  "ai.listing_parse":
+    "Агентын наасан зарын текстийг (утас, хувийн мэдээллийг нуусны дараа) Anthropic-ийн AI-аар задлах эсэх. Асаахаас өмнө нууцлалын зөвшөөрлийг шийднэ; сервер дээр түлхүүр тохируулаагүй бол ажиллахгүй.",
 };
 
 /** Тохиргоог энэ хэрэглэгч засах эсэх (CEO-only түлхүүрийг ялгана). */
@@ -300,6 +386,21 @@ export function normalizeSettingValue(key: Crm2SettingKey, value: unknown): unkn
         : value;
     case "multi":
       return Array.isArray(value) ? [...new Set(value.filter((x): x is string => typeof x === "string"))] : value;
+    case "staffPicker":
+      return Array.isArray(value)
+        ? [...new Set(value.filter((x): x is string => typeof x === "string").map((x) => x.trim().toLowerCase()).filter(Boolean))]
+        : value;
+    case "commissionDefaults":
+    case "categoryHints": {
+      // Хоосон утга = тухайн ангилалд урьдчилан бөглөхгүй / тайлбаргүй.
+      if (!isRecord(value)) return value;
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(value)) {
+        const t = typeof v === "string" ? v.trim() : v;
+        if (t !== "" && t !== null && t !== undefined) out[k.trim()] = t;
+      }
+      return out;
+    }
     case "stringList":
       return Array.isArray(value)
         ? value.map((x) => (typeof x === "string" ? x.trim() : x)).filter((x) => x !== "")
@@ -318,7 +419,7 @@ export function normalizeSettingValue(key: Crm2SettingKey, value: unknown): unkn
 /** Харьцуулахад хэрэглэх тогтвортой хэлбэр (жагсаалтын дараалал, объектын түлхүүрийн дараалал хамаарахгүй). */
 function canonical(key: Crm2SettingKey, value: unknown): string {
   const ed = settingEditor(key);
-  if (Array.isArray(value) && (ed.kind === "multi" || ed.kind === "numberList")) {
+  if (Array.isArray(value) && (ed.kind === "multi" || ed.kind === "numberList" || ed.kind === "staffPicker")) {
     return JSON.stringify([...value].map(String).sort());
   }
   if (isRecord(value)) {
@@ -407,7 +508,47 @@ export function validateSettingValue(key: Crm2SettingKey, value: unknown): strin
       }
       return null;
     }
+    case "staffPicker": {
+      if (!Array.isArray(value)) return "Жагсаалт буруу.";
+      if (value.length > ed.maxItems) return `${ed.maxItems}-оос олон агент сонгохгүй.`;
+      if (value.some((x) => typeof x !== "string" || !PROFILE_ID_RE.test(x))) return "Ажилтны жагсаалт буруу.";
+      if (new Set(value).size !== value.length) return "Нэг агентыг давхар сонгосон байна.";
+      return null;
+    }
+    case "commissionDefaults": {
+      if (!isRecord(value)) return "Жагсаалт буруу.";
+      for (const [code, raw] of Object.entries(value)) {
+        if (!CATEGORY_CODES.includes(code)) return "Зөвхөн 4 ангиллын шимтгэлийг тохируулна.";
+        if (typeof raw !== "string") return "Шимтгэлийн анхдагч буруу.";
+        const err = commissionDefaultError(raw);
+        if (err) return `${categoryName(code)}: ${err}`;
+      }
+      return null;
+    }
+    case "categoryHints": {
+      if (!isRecord(value)) return "Жагсаалт буруу.";
+      for (const [code, hint] of Object.entries(value)) {
+        if (!CATEGORY_CODES.includes(code)) return "Зөвхөн 4 ангилалд тайлбар өгнө.";
+        if (typeof hint !== "string" || hint.trim().length < 1 || hint.trim().length > ed.maxLabel) {
+          return `Тайлбар 1–${ed.maxLabel} тэмдэгт байна.`;
+        }
+      }
+      return null;
+    }
   }
+}
+
+function categoryName(code: string): string {
+  return PROPERTY_CATEGORY_LABEL[code as keyof typeof PROPERTY_CATEGORY_LABEL] ?? code;
+}
+
+/** Шимтгэлийн анхдагчийн текст: «3%», «сарын түрээсийн 1 дахин», «500 000 ₮». */
+export function commissionDefaultText(raw: string): string {
+  const d = parseCommissionDefault(raw);
+  if (!d) return raw;
+  if (d.kind === "percent") return `${d.value}%`;
+  if (d.kind === "rent_x") return `сарын түрээсийн ${d.value} дахин`;
+  return `${String(d.value).replace(/\B(?=(\d{3})+(?!\d))/g, " ")} ₮`;
 }
 
 // ── Харуулах текст ─────────────────────────────────────────────────────────
@@ -437,6 +578,22 @@ export function settingValueText(key: Crm2SettingKey, value: unknown): string {
     case "codeLabel":
       if (!isRecord(value)) return "—";
       return Object.values(value).filter((v) => typeof v === "string").join(", ") || "—";
+    case "staffPicker":
+      return Array.isArray(value) && value.length ? `${value.length} агент` : "Сонгоогүй";
+    case "commissionDefaults": {
+      if (!isRecord(value)) return "—";
+      const parts = Object.entries(value)
+        .filter(([, v]) => typeof v === "string")
+        .map(([k, v]) => `${categoryName(k)}: ${commissionDefaultText(v as string)}`);
+      return parts.length ? parts.join("; ") : "Урьдчилан бөглөхгүй";
+    }
+    case "categoryHints": {
+      if (!isRecord(value)) return "—";
+      const parts = Object.entries(value)
+        .filter(([, v]) => typeof v === "string")
+        .map(([k, v]) => `${categoryName(k)} — ${v as string}`);
+      return parts.length ? parts.join("; ") : "Тайлбаргүй";
+    }
   }
 }
 
@@ -491,7 +648,7 @@ export const DEFAULT_DECISIONS: DefaultDecision[] = [
   },
   {
     title: "Нэг агент олон үүрэгтэй байх",
-    note: "Анхдагчаар нэг хүн листлэгч, гэрээ хийсэн, зураг авсан агентын аль ч хослолыг хавсарч болно.",
+    note: "Анхдагчаар нэг хүн хөрөнгө авчирсан, гэрээ байгуулсан, зураг авсан агентын аль ч хослолыг хавсарч болно.",
     keys: ["property.same_agent_multi_role"],
   },
   {
@@ -508,6 +665,41 @@ export const DEFAULT_DECISIONS: DefaultDecision[] = [
     title: "Зураг, бичлэг, гэрээний файлын хязгаар",
     note: "HEIC зургийг хүлээж авахгүй; урт бичлэгийг холбоосоор нэмнэ.",
     keys: ["media.max_images", "media.max_image_mb", "media.max_video_mb", "docs.max_file_mb"],
+  },
+  {
+    title: "Шуурхай бүртгэлийн туршилт",
+    note: "Анхдагчаар унтраастай (бүгд хуучин форм). Оффис 3 агентыг сонгож 2 долоо хоног туршаад, бүртгэлийн дундаж хугацаа 90 секундээс доош орвол бүх агентад нээнэ. «Бүрэн форм» үргэлж нээлттэй.",
+    keys: ["staff.quick_add", "staff.quick_add_pilot"],
+  },
+  {
+    title: "Шимтгэлийн анхдагч",
+    note: "Анхдагчаар гэрээнд шимтгэл урьдчилан бөглөхгүй. Удирдлага ангилал бүрийн утгыг баталсны дараа тохируулна; агент урьдчилан бөглөсөн утга бүрийг баталгаажуулна.",
+    keys: ["brokerage.default_commission"],
+  },
+  {
+    title: "Гэрээний анхдагч хугацаа",
+    note: "Шинэ гэрээний дуусах огноог эхлэх өдрөөс 12 сарын дараа гэж урьдчилан бөглөнө (агент баталгаажуулна).",
+    keys: ["brokerage.default_term_months"],
+  },
+  {
+    title: "Гэрээ батлагдсаны дараах идэвхжүүлэлт",
+    note: "Анхдагчаар хөрөнгө гэрээ батлагдмагц автоматаар идэвхжинэ (одоогийнх шиг). «Гар» горимд агент өөрөө идэвхжүүлнэ.",
+    keys: ["brokerage.activation_mode"],
+  },
+  {
+    title: "Зарын текстийг AI-аар задлах",
+    note: "Анхдагчаар унтраастай. Асаахаас өмнө утас, хувийн мэдээллийг нуусан текстийг гадны AI үйлчилгээ рүү илгээхэд оффис зөвшөөрөх эсэхээ шийднэ.",
+    keys: ["ai.listing_parse"],
+  },
+  {
+    title: "Нийтлэх зургийн доод тоо",
+    note: "Анхдагчаар 1 зураг (одоогийнх шиг). Оффис шаардлагаа нэмж болно, жишээ нь 3.",
+    keys: ["property.min_images"],
+  },
+  {
+    title: "Өмчлөлийн баримт",
+    note: "Анхдагчаар заавал биш. Асаавал ноорог гэрээг илгээхэд өмчлөлийн баримт хавсаргана; баримтыг хариуцагч, батлагч, менежер л харна.",
+    keys: ["brokerage.require_ownership_doc"],
   },
 ];
 

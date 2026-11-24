@@ -24,6 +24,8 @@ import {
 } from "@/components/crm2/ui";
 
 import { BrokerageDecision, CancelRequestButton, RequestDecision } from "./ApprovalActions";
+import type { ApproveFile } from "./ApproveBrokerageDialog";
+import { pendingContractFiles } from "./approval-files";
 
 /**
  * Батлах (/…/crm/approvals): илгээсэн зуучлалын гэрээ, агентын хүсэлт (хөрөнгийн
@@ -49,11 +51,14 @@ function BrokerageItem({
   paths,
   settings,
   decide,
+  files,
 }: {
   c: PendingBrokerage;
   paths: Crm2Paths;
   settings: Crm2Settings;
   decide: boolean;
+  /** Батлагчид харагдах файлууд (RLS); батлах эрхгүй бол undefined. */
+  files?: ApproveFile[];
 }) {
   const p = c.property;
   const href = paths.property(c.property_id, "agreement");
@@ -107,7 +112,14 @@ function BrokerageItem({
           <ArrowRight className="size-4" aria-hidden />
         </Link>
         {decide ? (
-          <BrokerageDecision contractId={c.id} number={c.number} propertyCode={p?.code ?? null} updatedAt={c.updated_at} />
+          <BrokerageDecision
+            contractId={c.id}
+            number={c.number}
+            propertyCode={p?.code ?? null}
+            updatedAt={c.updated_at}
+            requireFile={settings["brokerage.require_file"]}
+            files={files ?? []}
+          />
         ) : null}
       </div>
     </li>
@@ -318,6 +330,7 @@ export async function ApprovalsView({ panel }: { panel: Crm2Panel }) {
   const brokerageList = [...contracts.toDecide, ...(ctx.isManager ? contracts.others : [])];
   const requestList = [...requests.toDecide, ...(ctx.isManager ? requests.others : [])];
   const myCount = requests.mine.length + contracts.mine.length;
+  const filesByContract = await pendingContractFiles(brokerageList.filter((c) => c.canDecide).map((c) => c.id));
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:py-6 md:px-6">
@@ -359,7 +372,7 @@ export async function ApprovalsView({ panel }: { panel: Crm2Panel }) {
             ) : (
               <ul className="space-y-2">
                 {brokerageList.map((c) => (
-                  <BrokerageItem key={c.id} c={c} paths={paths} settings={settings} decide={c.canDecide} />
+                  <BrokerageItem key={c.id} c={c} paths={paths} settings={settings} decide={c.canDecide} files={filesByContract[c.id]} />
                 ))}
               </ul>
             )}

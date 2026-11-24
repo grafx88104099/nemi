@@ -8,12 +8,13 @@ import {
   docPath,
   fileExt,
   fileMime,
+  isRestrictedDocKind,
   mediaPath,
   validateDocFile,
   validateMediaFile,
 } from "@/lib/crm2/files";
 import type { Crm2FileLimits } from "@/lib/crm2/settings";
-import type { Crm2Result } from "@/lib/crm2/types";
+import type { Crm2BrokerageFileKind, Crm2Result } from "@/lib/crm2/types";
 
 /**
  * Клиент талын хуулалт (хөтчийн client — storage policy, RLS хэрэгжинэ):
@@ -91,6 +92,8 @@ export type DocUploadOptions = {
   contractId: string;
   limits: Pick<Crm2FileLimits, "maxDocMb" | "maxDocsPerContract">;
   existing?: number;
+  /** Файлын төрөл (анхдагч contract). ownership/id нь «restricted» хавтаст, харах эрх хязгаартай. */
+  kind?: Crm2BrokerageFileKind;
 };
 
 /**
@@ -101,7 +104,8 @@ export async function uploadBrokerageFile(opts: DocUploadOptions): Promise<Crm2R
   const invalid = validateDocFile(opts.file, opts.limits, opts.existing);
   if (invalid) return { ok: false, error: invalid };
   const supabase = createClient();
-  const path = docPath(opts.officeId, opts.contractId, newId(), fileExt(opts.file));
+  const kind = opts.kind ?? "contract";
+  const path = docPath(opts.officeId, opts.contractId, newId(), fileExt(opts.file), isRestrictedDocKind(kind));
   const up = await supabase.storage.from(CRM2_DOCS_BUCKET).upload(path, opts.file, {
     contentType: fileMime(opts.file),
     cacheControl: "3600",
@@ -114,7 +118,9 @@ export async function uploadBrokerageFile(opts: DocUploadOptions): Promise<Crm2R
   const res = await addBrokerageFileRow({
     contract_id: opts.contractId,
     storage_path: path,
+    // restricted файлын нэрийг DB «Өмчлөлийн баримт.<ext>» г.м. болгож солино (баримтын нэр түүхэнд орохгүй).
     file_name: opts.file.name.slice(0, 200),
+    kind,
   });
   if (!res.ok) {
     // Илгээсэн гэрээнд батлагч устгах эрхгүй тул файл үлдэж болно (мөргүй файл харагдахгүй).

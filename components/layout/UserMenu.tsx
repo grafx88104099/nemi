@@ -1,12 +1,11 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { LayoutDashboard, LayoutGrid, Heart, Home, Settings, LogOut, MessageCircle, Users } from "lucide-react";
 
-import { createClient } from "@/lib/supabase/client";
 import { accountInitials } from "@/lib/avatar-upload";
+import { useGuardedLogout } from "@/components/crm2/shell/LogoutGuard";
 import { Avatar } from "@/components/ui/avatar";
 import { AvatarPicker } from "@/components/account/AvatarPicker";
 
@@ -29,7 +28,8 @@ export function UserMenu({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const router = useRouter();
+  // Гарахаас өмнө CRM-ийн илгээгдээгүй зураг/бүртгэлийг шалгаж, төхөөрөмжийн өгөгдлийг цэвэрлэнэ.
+  const { logout, pending: loggingOut, dialog: logoutDialog } = useGuardedLogout();
   const [avatar, setAvatar] = useState(avatarUrl);
   const [seenAvatarUrl, setSeenAvatarUrl] = useState(avatarUrl);
   if (avatarUrl !== seenAvatarUrl) {
@@ -44,13 +44,6 @@ export function UserMenu({
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
-
-  async function logout() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/");
-    router.refresh();
-  }
 
   // Утсаар л нэвтэрсэн (нэр, и-мэйлгүй) бол цифр биш «Х» (Хэрэглэгч).
   const initials = accountInitials(name || (email.includes("@") ? email : ""));
@@ -120,13 +113,18 @@ export function UserMenu({
             Миний профайл
           </MenuLink>
           <button
-            onClick={logout}
+            onClick={() => {
+              setOpen(false);
+              logout();
+            }}
+            disabled={loggingOut}
             className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-danger hover:bg-surface-2"
           >
             <LogOut className="size-4" /> Гарах
           </button>
         </div>
       )}
+      {logoutDialog}
     </div>
   );
 }

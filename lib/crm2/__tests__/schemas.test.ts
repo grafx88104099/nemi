@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  brokerageApproveSchema,
+  brokerageFileSchema,
+  confirmFieldsSchema,
+  contactUpdateSchema,
+  duplicateFlagSchema,
+  importListingSchema,
+  ownerInputSchema,
+  ownerSetSchema,
+  publishPropertySchema,
+  quickCreateSchema,
+  resolveDuplicateSchema,
+  uiEventSchema,
+  brokerageUpdateSchema,
   brokerageCreateSchema,
   brokerageFileRowSchema,
   cancelDealSchema,
@@ -278,5 +291,169 @@ describe("тоон талбарын таслал (гомдол: «81,47» → 81
     const r = propertyCreateSchema.safeParse({ category: "sale", area_m2: "1,2.3" });
     expect(r.success).toBe(false);
     expect(firstError(r)).toContain("тоо байна");
+  });
+});
+
+// ── Staff шуурхай бүртгэл (P1/P6/P7/P8/P11/P12) ───────────────────────────
+
+const KEY = "0b6f3c1e-5a4d-4e2b-9c8f-7d6e5f4a3b2c";
+
+describe("ownerInputSchema", () => {
+  it("7 оронтой дугаар → «Дугаар 8 оронтой байх ёстой»", () => {
+    const r = ownerInputSchema.safeParse({ phone: "9911223" });
+    expect(r.success).toBe(false);
+    expect(firstError(r)).toBe("Дугаар 8 оронтой байх ёстой");
+  });
+  it("+976, зай, зураастай дугаар зөв", () => {
+    expect(ownerInputSchema.safeParse({ phone: "+976 9911-2233" }).success).toBe(true);
+    expect(ownerInputSchema.safeParse({ phone: "99112233", full_name: "", source: "referral" }).success).toBe(true);
+  });
+  it("сонгосон харилцагч", () => {
+    expect(ownerInputSchema.safeParse({ contact_id: ID }).data).toEqual({ contact_id: ID });
+    expect(ownerInputSchema.safeParse({ contact_id: "x" }).success).toBe(false);
+  });
+  it("«Бусад» эх сурвалжид тайлбар заавал; тайлбар ≤ 200", () => {
+    expect(ownerInputSchema.safeParse({ phone: "99112233", source: "other" }).success).toBe(false);
+    expect(ownerInputSchema.safeParse({ phone: "99112233", source: "other", source_note: "Найз" }).success).toBe(true);
+    expect(ownerInputSchema.safeParse({ phone: "99112233", source_note: "x".repeat(201) }).success).toBe(false);
+  });
+  it("хүлээгдэж буй эзнийг цэвэрлэх", () => {
+    expect(ownerSetSchema.safeParse({ clear: true }).success).toBe(true);
+    expect(ownerSetSchema.safeParse({ clear: false }).success).toBe(false);
+  });
+});
+
+describe("quickCreateSchema", () => {
+  const base = { property: { category: "rent", client_key: KEY } };
+  it("client_key заавал, source анхдагч manual", () => {
+    expect(quickCreateSchema.safeParse({ property: { category: "rent" } }).success).toBe(false);
+    const r = quickCreateSchema.safeParse(base);
+    expect(r.success).toBe(true);
+    expect(r.data?.property.source).toBe("manual");
+    expect(quickCreateSchema.safeParse({ property: { ...base.property, source: "listing" } }).success).toBe(false);
+  });
+  it("давхар ба м²-ийн дүрэм бүрэн формтой ижил", () => {
+    expect(quickCreateSchema.safeParse({ property: { ...base.property, floor: 19, building_floors: 18 } }).success).toBe(false);
+    expect(quickCreateSchema.safeParse({ property: { ...base.property, price: 1, price_basis: "per_m2" } }).success).toBe(false);
+  });
+  it("эзэн, хувийн тэмдэглэл, шинэ талбарууд", () => {
+    const r = quickCreateSchema.safeParse({
+      property: { ...base.property, project_name: "River Garden", parking_spaces: "2", rent_advance_months: 1, unconfirmed: ["price", "project"] },
+      owner: { phone: "9911 2233", source: "walk_in" },
+      private: { owner_note: "Оройн 6-аас хойш", showing_instructions: "Жижүүрт хэлнэ" },
+    });
+    expect(r.success).toBe(true);
+    expect(r.data?.property.parking_spaces).toBe(2);
+    expect(quickCreateSchema.safeParse({ ...base, owner: { phone: "123" } }).success).toBe(false);
+    expect(quickCreateSchema.safeParse({ ...base, owner: null }).success).toBe(true);
+    expect(quickCreateSchema.safeParse({ property: { ...base.property, parking_spaces: 51 } }).success).toBe(false);
+    expect(quickCreateSchema.safeParse({ property: { ...base.property, rent_deposit_months: 25 } }).success).toBe(false);
+    expect(quickCreateSchema.safeParse({ property: { ...base.property, unconfirmed: ["owner"] } }).success).toBe(false);
+  });
+});
+
+describe("propertyCreate/Update: эх сурвалж, unconfirmed", () => {
+  it("засахад source орохгүй (хасагдана), unconfirmed зөвхөн хүчинтэй түлхүүр", () => {
+    const r = propertyUpdateSchema.safeParse({ source: "paste", unconfirmed: ["price"] });
+    expect(r.success).toBe(true);
+    expect(r.data).not.toHaveProperty("source");
+    expect(r.data?.unconfirmed).toEqual(["price"]);
+    expect(propertyUpdateSchema.safeParse({ unconfirmed: ["status"] }).success).toBe(false);
+    expect(propertyUpdateSchema.safeParse({ unconfirmed: Array(41).fill("price") }).success).toBe(false);
+  });
+  it("шинээр: source, client_key", () => {
+    const r = propertyCreateSchema.safeParse({ category: "sale", source: "paste", client_key: KEY });
+    expect(r.data).toMatchObject({ source: "paste", client_key: KEY });
+    expect(propertyCreateSchema.safeParse({ category: "sale", source: "listing" }).success).toBe(false);
+  });
+});
+
+describe("гэрээ (P7)", () => {
+  it("шинэ талбарууд", () => {
+    const r = brokerageUpdateSchema.safeParse({
+      contract_id: ID,
+      no_special_terms: true,
+      signer_differs: true,
+      signer_note: "Эхнэр нь, итгэмжлэлтэй",
+      file_at_office: true,
+      prefilled: ["commission", "end_date"],
+    });
+    expect(r.success).toBe(true);
+    expect(brokerageUpdateSchema.safeParse({ contract_id: ID, signer_note: "x".repeat(501) }).success).toBe(false);
+    expect(brokerageUpdateSchema.safeParse({ contract_id: ID, prefilled: ["terms"] }).success).toBe(false);
+    expect(brokerageApproveSchema.safeParse({ contract_id: ID, file_checked: true }).data?.file_checked).toBe(true);
+  });
+  it("файлын төрөл ба хязгаарлагдсан зам", () => {
+    const uuidName = `${ID2}.pdf`;
+    expect(brokerageFileRowSchema.safeParse({ contract_id: ID, storage_path: `${ID2}/brokerage/${ID}/f.pdf` }).data?.kind).toBe("contract");
+    expect(
+      brokerageFileRowSchema.safeParse({ contract_id: ID, kind: "ownership", storage_path: `${ID2}/brokerage/${ID}/restricted/${uuidName}` }).success
+    ).toBe(true);
+    expect(brokerageFileRowSchema.safeParse({ contract_id: ID, kind: "ownership", storage_path: `${ID2}/brokerage/${ID}/f.pdf` }).success).toBe(false);
+    expect(
+      brokerageFileRowSchema.safeParse({ contract_id: ID, kind: "id", storage_path: `${ID2}/brokerage/${ID}/restricted/passport.pdf` }).success
+    ).toBe(false);
+    expect(
+      brokerageFileRowSchema.safeParse({ contract_id: ID, kind: "contract", storage_path: `${ID2}/brokerage/${ID}/restricted/${uuidName}` }).success
+    ).toBe(false);
+    expect(brokerageFileSchema.safeParse({ contract_id: ID, kind: "other" }).success).toBe(true);
+    expect(brokerageFileSchema.safeParse({ contract_id: ID, kind: "passport" }).success).toBe(false);
+  });
+});
+
+describe("харилцагч: эх сурвалж, зөвшөөрөл", () => {
+  it("create ба update", () => {
+    expect(contactCreateSchema.safeParse({ full_name: "Бат", source: "referral", source_note: "Дорж", consent: "verbal" }).success).toBe(true);
+    expect(contactUpdateSchema.safeParse({ contact_id: ID, source: "Bad Code" }).success).toBe(false);
+    expect(contactUpdateSchema.safeParse({ contact_id: ID, consent: "maybe" }).success).toBe(false);
+    expect(contactUpdateSchema.safeParse({ contact_id: ID, source: "", consent: "declined" }).data).toMatchObject({
+      source: null,
+      consent: "declined",
+    });
+  });
+});
+
+describe("uiEventSchema", () => {
+  it("зөвшөөрөгдсөн үйл явдал, тоон meta", () => {
+    expect(
+      uiEventSchema.safeParse({
+        event: "quick_save",
+        flow: "quick",
+        duration_ms: 42000,
+        first_input_ms: 3000,
+        taps: 27,
+        fields_filled: 9,
+        meta: { photos: 8, offline: false },
+      }).success
+    ).toBe(true);
+    expect(uiEventSchema.safeParse({ event: "owner_phone", flow: "quick" }).success).toBe(false);
+    expect(uiEventSchema.safeParse({ event: "quick_save", meta: { phone: "99112233" } }).success).toBe(false);
+    expect(uiEventSchema.safeParse({ event: "quick_save", meta: { phone: 99112233 } }).success).toBe(false);
+    expect(uiEventSchema.safeParse({ event: "quick_save", flow: "other" }).success).toBe(false);
+    const many = Object.fromEntries(Array.from({ length: 13 }, (_, i) => [`k${i}`, i]));
+    expect(uiEventSchema.safeParse({ event: "quick_save", meta: many }).success).toBe(false);
+    expect(uiEventSchema.safeParse({ event: "quick_save", duration_ms: -1 }).success).toBe(false);
+  });
+});
+
+describe("давхардал, импорт, баталгаажуулалт, нийтлэх", () => {
+  it("duplicateFlagSchema: тусдаа бол шалтгаан заавал", () => {
+    expect(duplicateFlagSchema.safeParse({ property_id: ID, token: ID2, kind: "access" }).success).toBe(true);
+    expect(duplicateFlagSchema.safeParse({ property_id: ID, token: ID2, kind: "distinct" }).success).toBe(false);
+    expect(duplicateFlagSchema.safeParse({ property_id: ID, token: ID2, kind: "distinct", note: "Өөр давхар" }).success).toBe(true);
+    expect(duplicateFlagSchema.safeParse({ property_id: ID, token: "abc", kind: "access" }).success).toBe(false);
+    expect(resolveDuplicateSchema.safeParse({ flag_id: ID, status: "duplicate" }).success).toBe(true);
+    expect(resolveDuplicateSchema.safeParse({ flag_id: ID, status: "open" }).success).toBe(false);
+  });
+  it("import, confirm, publish", () => {
+    expect(importListingSchema.safeParse({ listing_id: ID, client_key: KEY }).success).toBe(true);
+    expect(confirmFieldsSchema.safeParse({ property_id: ID, keys: [] }).success).toBe(false);
+    expect(confirmFieldsSchema.safeParse({ property_id: ID, keys: ["price", "lat"] }).success).toBe(true);
+    expect(confirmFieldsSchema.safeParse({ property_id: ID, keys: ["status"] }).success).toBe(false);
+    expect(publishPropertySchema.safeParse({ property_id: ID, link_listing: ID2, replace_photos: true }).data).toMatchObject({
+      link_listing: ID2,
+      replace_photos: true,
+    });
+    expect(publishPropertySchema.safeParse({ property_id: ID, link_listing: "" }).data?.link_listing).toBeNull();
   });
 });

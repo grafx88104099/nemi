@@ -1,13 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { FileText, Paperclip, Trash2 } from "lucide-react";
+import { Camera, FileText, Paperclip, Trash2 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { NumberInput } from "@/components/ui/number-input";
 import { Select } from "@/components/ui/select";
 import { COMMISSION_TYPE_LABEL, COMMISSION_TYPES, CURRENCIES, CURRENCY_LABEL } from "@/lib/crm2/labels";
 import { DOC_ACCEPT, fmtFileSize } from "@/lib/crm2/files";
+import { cn } from "@/lib/utils";
 import type { Crm2Currency, Crm2StaffMember } from "@/lib/crm2/types";
 
 import { AgentSelect } from "./AgentSelect";
@@ -86,6 +87,7 @@ export function BrokerageFields({
             me={me}
             disabled={disabled}
             emptyLabel="— Гэрээ хийсэн агент —"
+            label="Хариуцсан агент"
           />
         </FormField>
         <FormField label="Эхлэх огноо" htmlFor={id("start")} error={errors.start_date}>
@@ -182,10 +184,14 @@ export function BrokerageFields({
 
 export type DocItem = { id: string; name: string; size?: number | null; url?: string | null };
 
-/** Гэрээний файлын жагсаалт + нэмэх товч. */
+/**
+ * Гэрээний файлын жагсаалт + нэмэх товч. onCamera өгвөл «Камер» (нэг зураг, арын камер) ба
+ * «Файл/галерей» (PDF, зураг; камер албадахгүй) тусдаа товч болно.
+ */
 export function DocList({
   items,
   onAdd,
+  onCamera,
   onRemove,
   disabled,
   canAdd = true,
@@ -194,6 +200,8 @@ export function DocList({
 }: {
   items: DocItem[];
   onAdd: (files: File[]) => void;
+  /** Камераар авсан хуудас (боловсруулалтыг дуудагч хийнэ). */
+  onCamera?: (files: File[]) => void;
   onRemove?: (item: DocItem) => void;
   disabled?: boolean;
   canAdd?: boolean;
@@ -232,7 +240,18 @@ export function DocList({
           ))}
         </ul>
       ) : null}
-      {canAdd ? (
+      {canAdd && onCamera ? (
+        <div className="grid grid-cols-2 gap-2 sm:flex">
+          <CameraButton disabled={disabled || !!busyText} onFiles={onCamera}>
+            <Camera className="size-4" aria-hidden />
+            {busyText ?? "Камер"}
+          </CameraButton>
+          <FilePickButton accept={DOC_ACCEPT} disabled={disabled || !!busyText} onFiles={onAdd}>
+            <Paperclip className="size-4" aria-hidden />
+            Файл/галерей
+          </FilePickButton>
+        </div>
+      ) : canAdd ? (
         <FilePickButton accept={DOC_ACCEPT} disabled={disabled || !!busyText} onFiles={onAdd} className="w-full sm:w-auto">
           <Paperclip className="size-4" aria-hidden />
           {busyText ?? "Гэрээний скан, PDF нэмэх"}
@@ -240,5 +259,39 @@ export function DocList({
       ) : null}
       {hint ? <p className="text-xs text-muted">{hint}</p> : null}
     </div>
+  );
+}
+
+/** Арын камераар нэг зураг авах (гэрээний хуудас). */
+function CameraButton({
+  disabled,
+  onFiles,
+  children,
+}: {
+  disabled?: boolean;
+  onFiles: (files: File[]) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <label
+      className={cn(
+        "inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-line-strong bg-surface px-4 text-sm font-semibold text-ink transition hover:border-brand-400 hover:bg-brand-50/50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-500/40",
+        disabled && "pointer-events-none opacity-50"
+      )}
+    >
+      {children}
+      <input
+        type="file"
+        accept="image/*"
+        capture="environment"
+        disabled={disabled}
+        className="sr-only"
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? []);
+          e.target.value = "";
+          if (files.length) onFiles(files);
+        }}
+      />
+    </label>
   );
 }

@@ -60,13 +60,30 @@ function uploadErrorText(message: string | undefined): string {
   return "Зураг хуулахад алдаа гарлаа. Дахин оролдоно уу.";
 }
 
+/**
+ * Нийтэлсний дараа зарын зургийг юу хийх вэ (R21):
+ *  - 'keep'      — эх зартай ХОЛБОСОН ба «Зургийг солих» сонгоогүй: зарын одоогийн (аль хэдийн нийтэд
+ *                  гарсан) зураг хэвээр, юу ч хуулахгүй;
+ *  - 'stamp_all' — ШИНЭ зар эсвэл зураг солих: CRM-ийн БҮХ зураг (зараас хуулсан нь ч — тамгагүй байж
+ *                  болзошгүй) тамганы шугамаар орно. Давхар тамга гарч болохыг зөвшөөрнө.
+ */
+export type PublishPhotoMode = "keep" | "stamp_all";
+
+export function publishPhotoMode(r: { linked: boolean; replacePhotos?: boolean | null }): PublishPhotoMode {
+  return r.linked && !r.replacePhotos ? "keep" : "stamp_all";
+}
+
 export async function syncListingPhotos(opts: {
   propertyId: string;
   media: Crm2PublishMedia[];
   watermark: WatermarkConfig | null;
   onProgress?: (p: PublishPhotoProgress) => void;
-}): Promise<Crm2Result<{ uploaded: number }>> {
+  /** publishPhotoMode()-ийн үр дүн. 'keep' бол зарын зургийг хөндөхгүй. Анхдагч 'stamp_all'. */
+  mode?: PublishPhotoMode;
+}): Promise<Crm2Result<{ uploaded: number; skipped?: boolean }>> {
   const { propertyId, media, watermark, onProgress } = opts;
+  // Холбосон зарын зураг хэвээр — хуулах, тамга дарах шаардлагагүй.
+  if (opts.mode === "keep") return ok({ uploaded: 0, skipped: true });
   // Тамгагүй зураг нийтэд гаргахгүй — энэ бол хатуу шаардлага.
   if (!watermark) return fail(NO_WATERMARK_ERROR);
 

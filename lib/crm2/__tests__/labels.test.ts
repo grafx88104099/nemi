@@ -46,6 +46,20 @@ import {
   categoryLabel,
   codeKind,
   statusChangeNeedsReason,
+  BROKERAGE_FILE_KINDS,
+  BROKERAGE_FILE_KIND_LABEL,
+  CATEGORY_HINT_DEFAULT,
+  CHECKLIST_GROUP_LABEL,
+  CONTACT_CONSENTS,
+  CONTACT_CONSENT_LABEL,
+  OWNER_PENDING_LABEL,
+  PROPERTY_AGENT_ROLE_LABEL,
+  PROPERTY_SOURCES,
+  PROPERTY_SOURCE_LABEL,
+  SAVE_DRAFT_LABEL,
+  STAGE_TAG_LABEL,
+  VIEW_NOTE_LABEL,
+  defaultPricePeriod,
 } from "@/lib/crm2/labels";
 import { CRM2_SETTING_DEFAULTS, CRM2_SETTING_KEYS, CRM2_SETTING_LABEL, parseCrm2Settings } from "@/lib/crm2/settings";
 
@@ -53,10 +67,37 @@ import { CRM2_SETTING_DEFAULTS, CRM2_SETTING_KEYS, CRM2_SETTING_LABEL, parseCrm2
  * Монгол нэр, тогтмол нь миграцийн enum, анхдагч тохиргоо, шилжилтийн дүрэмтэй
  * тохирч байгааг миграцийн SQL-ээс уншиж шалгана (DB-д холбогдохгүй).
  */
-const SQL = fs.readFileSync(
-  path.resolve(__dirname, "../../../supabase/migrations/20261113000100_crm2_foundation.sql"),
-  "utf8"
-);
+const MIGRATIONS = path.resolve(__dirname, "../../../supabase/migrations");
+const SQL = fs.readFileSync(path.join(MIGRATIONS, "20261113000100_crm2_foundation.sql"), "utf8");
+const MIGRATION_FILES = fs
+  .readdirSync(MIGRATIONS)
+  .filter((x) => x.endsWith(".sql"))
+  .sort();
+
+/**
+ * Функцийн ХАМГИЙН СҮҮЛИЙН тодорхойлолтын бие ($$ … $$): миграцуудыг нэрээр эрэмбэлж, сүүлийн
+ * `create (or replace) function public.<name>`-ийг авна (нэг файлд хэд байвал сүүлийнх).
+ */
+function latestFn(name: string): string {
+  const re = new RegExp(`create (?:or replace )?function public\\.${name}\\b[\\s\\S]*?\\$\\$([\\s\\S]*?)\\$\\$`, "g");
+  let body: string | null = null;
+  for (const f of MIGRATION_FILES) {
+    for (const m of fs.readFileSync(path.join(MIGRATIONS, f), "utf8").matchAll(re)) body = m[1];
+  }
+  if (body === null) throw new Error(`функц ${name} олдсонгүй`);
+  return body;
+}
+
+/** Хамгийн сүүлийн миграцийн check (…in (…)) жагсаалт. */
+function latestCheckList(pattern: RegExp): string[] {
+  let found: string[] | null = null;
+  for (const f of MIGRATION_FILES) {
+    const m = pattern.exec(fs.readFileSync(path.join(MIGRATIONS, f), "utf8"));
+    if (m) found = [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]);
+  }
+  if (!found) throw new Error(`check олдсонгүй: ${pattern}`);
+  return found;
+}
 
 function sqlEnum(name: string): string[] {
   const m = new RegExp(`create type public\\.${name}\\s+as enum \\(([^)]*)\\)`, "i").exec(SQL);
@@ -124,7 +165,7 @@ describe("хөрөнгийн төлөв", () => {
   });
 
   it("шилжилт crm2_property_transition_ok()-той ижил", () => {
-    const body = /create function public\.crm2_property_transition_ok[\s\S]*?\$\$([\s\S]*?)\$\$/.exec(SQL)?.[1] ?? "";
+    const body = latestFn("crm2_property_transition_ok");
     const rules = new Map<string, string[]>();
     for (const m of body.matchAll(/when '(\w+)'\s+then p_to in \(([^)]*)\)/g)) {
       rules.set(m[1], [...m[2].matchAll(/'(\w+)'/g)].map((x) => x[1]));
@@ -146,19 +187,26 @@ describe("хөрөнгийн төлөв", () => {
   });
 });
 
+function settingKeysFromSql(): string[] {
+  const keys = /array\[([\s\S]*?)\]/.exec(latestFn("crm2_setting_keys"))?.[1] ?? "";
+  return [...keys.matchAll(/'([a-z0-9_.]+)'/g)].map((x) => x[1]);
+}
+
 describe("тохиргоо", () => {
   const defaults = new Map<string, unknown>();
-  const body = /create function public\.crm2_setting_default[\s\S]*?\$\$([\s\S]*?)\$\$/.exec(SQL)?.[1] ?? "";
+  const body = latestFn("crm2_setting_default");
   for (const m of body.matchAll(/when '([a-z0-9_.]+)'\s+then '([^\n]*)'\s*$/gm)) defaults.set(m[1], JSON.parse(m[2]));
 
-  it("түлхүүрүүд crm2_setting_keys()-тэй ижил", () => {
-    const keys = /create function public\.crm2_setting_keys[\s\S]*?array\[([\s\S]*?)\]/.exec(SQL)?.[1] ?? "";
-    const list = [...keys.matchAll(/'([a-z0-9_.]+)'/g)].map((x) => x[1]);
-    expect([...CRM2_SETTING_KEYS].sort()).toEqual(list.sort());
+  it("түлхүүрүүд хамгийн сүүлийн crm2_setting_keys()-тэй ижил", () => {
+    const list = settingKeysFromSql();
+    expect(list.length).toBeGreaterThan(30);
+    expect(new Set(list).size).toBe(list.length);
+    expect([...CRM2_SETTING_KEYS].sort()).toEqual([...list].sort());
   });
 
-  it("анхдагч утга crm2_setting_default()-тэй ижил", () => {
-    expect(defaults.size).toBe(CRM2_SETTING_KEYS.length);
+  it("анхдагч утга хамгийн сүүлийн crm2_setting_default()-тэй ижил", () => {
+    // Тоо SQL-ээс: түлхүүр бүр анхдагчтай, илүү анхдагчгүй.
+    expect([...defaults.keys()].sort()).toEqual([...settingKeysFromSql()].sort());
     for (const key of CRM2_SETTING_KEYS) expect(CRM2_SETTING_DEFAULTS[key], key).toEqual(defaults.get(key));
   });
 
@@ -191,8 +239,8 @@ describe("тохиргоо", () => {
 });
 
 describe("идэвхжүүлэх дутуу зүйлийн нэр crm2_missing_text()-тэй ижил", () => {
-  it("бүх код ба нэр", () => {
-    const body = /create function public\.crm2_missing_text[\s\S]*?\$\$([\s\S]*?)\$\$/.exec(SQL)?.[1] ?? "";
+  it("бүх код ба нэр (хамгийн сүүлийн миграц)", () => {
+    const body = latestFn("crm2_missing_text");
     const pairs = [...body.matchAll(/when '(\w+)' then '([^']+)'/g)].map((m) => [m[1], m[2]] as const);
     expect(pairs.length).toBeGreaterThan(10);
     for (const [k, v] of pairs) expect(MISSING_ITEM_LABEL[k], k).toBe(v);
@@ -208,5 +256,58 @@ describe("codeKind", () => {
     expect(codeKind("B001")).toBe("brokerage");
     expect(codeKind("X1")).toBeNull();
     expect(codeKind(null)).toBeNull();
+  });
+});
+
+describe("Staff бүртгэлийн шошго (P1)", () => {
+  it("үнийн анхдагч хугацаа: хөлслөх ч сараар (өдрийнхийг нийтлэхгүй)", () => {
+    expect(defaultPricePeriod("lease")).toBe("month");
+    expect(defaultPricePeriod("rent")).toBe("month");
+    expect(defaultPricePeriod("managed_rent")).toBe("month");
+    expect(defaultPricePeriod("sale")).toBe("total");
+  });
+
+  it("үүрэгт агентын шинэ нэр", () => {
+    expect(PROPERTY_AGENT_ROLE_LABEL).toEqual({
+      listing_agent_id: "Хөрөнгө авчирсан агент",
+      contract_agent_id: "Гэрээ байгуулсан агент",
+      photo_agent_id: "Зураг авсан агент",
+    });
+    expect(VIEW_NOTE_LABEL).toBe("Цонхноос харагдах байдал");
+    expect(SAVE_DRAFT_LABEL).toBe("Хадгалах (дараа гүйцээнэ)");
+    expect(OWNER_PENDING_LABEL).toBe("Эзнийг шалгах шаардлагатай");
+  });
+
+  it("ангиллын тайлбарын анхдагч SQL-тэй ижил, хөлслөхөд тайлбаргүй", () => {
+    expect(CATEGORY_HINT_DEFAULT).toEqual(CRM2_SETTING_DEFAULTS["property.category_hints"]);
+    expect(CATEGORY_HINT_DEFAULT.lease).toBeUndefined();
+  });
+
+  it("эх сурвалж, файлын төрөл, зөвшөөрөл DB-ийн check-тэй ижил", () => {
+    expect([...PROPERTY_SOURCES]).toEqual(latestCheckList(/crm2_properties_source_chk[^\n]*\s+check \(source in \(([^)]*)\)\)/));
+    expect([...BROKERAGE_FILE_KINDS]).toEqual(latestCheckList(/crm2_brokerage_files_kind_chk[^\n]*\s+check \(kind in \(([^)]*)\)\)/));
+    expect([...CONTACT_CONSENTS]).toEqual(latestCheckList(/crm2_contacts_consent_chk[^\n]*\s+check \(consent in \(([^)]*)\)\)/));
+    for (const k of PROPERTY_SOURCES) expect(nonEmpty(PROPERTY_SOURCE_LABEL[k]), k).toBe(true);
+    for (const k of CONTACT_CONSENTS) expect(nonEmpty(CONTACT_CONSENT_LABEL[k]), k).toBe(true);
+    expect(BROKERAGE_FILE_KIND_LABEL).toEqual({
+      contract: "Гэрээ",
+      ownership: "Өмчлөлийн баримт",
+      id: "Иргэний үнэмлэх",
+      other: "Бусад баримт",
+    });
+  });
+
+  it("шат ба бүлгийн шошго", () => {
+    expect(STAGE_TAG_LABEL).toEqual({ start: "эхлэхэд хэрэгтэй", contract: "гэрээнд хэрэгтэй", publish: "нийтлэхэд хэрэгтэй" });
+    expect(CHECKLIST_GROUP_LABEL).toEqual({ intake: "Бүртгэл", contract: "Гэрээ", publish: "Нийтлэхэд бэлэн", extra: "Нэмэлт" });
+  });
+
+  it("parseCrm2Settings: шинэ түлхүүр DB-д байхгүй бол анхдагч (feature flag унтраастай)", () => {
+    const s = parseCrm2Settings({ "staff.quick_add": "everyone", "digest.scope": "all" });
+    expect(s["staff.quick_add"]).toBe("off");
+    expect(s["staff.quick_add_pilot"]).toEqual([]);
+    expect(s["digest.scope"]).toBe("all");
+    expect(s["contact.sources"].other).toBeTruthy();
+    expect(Object.keys(s["contact.sources"])).toHaveLength(10);
   });
 });

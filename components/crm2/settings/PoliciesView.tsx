@@ -13,19 +13,22 @@ import {
 } from "@/lib/crm2/settings-policies";
 import { listSettingOverrides } from "@/lib/crm2/settings-queries";
 import { listSettingsHistory } from "@/lib/crm2/queries/history";
-import { getStaffNameMap } from "@/lib/crm2/queries/lookups";
+import { getStaffDirectory, getStaffNameMap } from "@/lib/crm2/queries/lookups";
+import { aiListingParseEnabled } from "@/lib/ai/parse-listing";
 import { Badge } from "@/components/ui/badge";
 import { BackLink } from "@/components/ui/back-link";
 import { Card, CardBody } from "@/components/ui/card";
 import { HistoryList, NoAccessState } from "@/components/crm2/ui";
 
-import { SettingRow } from "./SettingRow";
+import { settingNotes, type StaffOption } from "./editor-model";
+import { SettingRow, type SettingRowContext } from "./SettingRow";
 
 /**
  * Staff-ийн дүрэм ба анхдагч утга (/office/crm/settings/policies): crm2_settings_effective-ийн
  * бүх түлхүүрийг сэдвээр, тайлбартай; засах эрхтэнд төрөлд тохирсон засварлагч.
  * Эрх: харах — менежер, тохиргоо удирдагч; засах — crm2_set_setting-ийн эрх
  * (roles.* / approvals.* зөвхөн CEO). Бусад — зөвхөн унших.
+ * AI түлхүүрийн байгаа эсэхийг сервер дээр boolean болгож дамжуулна — түлхүүрийг өөрийг нь хэзээ ч биш.
  */
 
 const SETTINGS_INDEX = "/office/crm/settings";
@@ -42,13 +45,23 @@ export async function PoliciesView() {
     );
   }
 
-  const [settings, overrides, history, names] = await Promise.all([
+  const [settings, overrides, history, names, directory] = await Promise.all([
     getCrm2Settings(),
     listSettingOverrides(),
     ctx.canManageSettings ? listSettingsHistory({ limit: 50 }) : Promise.resolve([]),
     getStaffNameMap(),
+    getStaffDirectory(),
   ]);
   const values = settings as Record<string, unknown>;
+  const aiKeyConfigured = aiListingParseEnabled();
+  const staff: StaffOption[] = directory.map((s) => ({ profile_id: s.profile_id, name: s.name, team_name: s.team_name }));
+  // Зөвхөн хэрэгтэй мөрт дамжуулна (RSC payload-ыг мөр бүрт давтахгүй).
+  const contextFor = (k: string): SettingRowContext | undefined =>
+    k === "staff.quick_add_pilot"
+      ? { staff }
+      : k === "brokerage.default_commission" || k === "property.category_hints"
+        ? { categoryLabels: settings["property.category_labels"] }
+        : undefined;
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-4 sm:py-6 md:px-6">
@@ -121,7 +134,7 @@ export async function PoliciesView() {
           <a
             key={g.id}
             href={`#group-${g.id}`}
-            className="inline-flex h-9 shrink-0 items-center rounded-full border border-line bg-surface px-3 text-sm font-medium text-muted hover:bg-surface-2 hover:text-ink"
+            className="inline-flex h-11 shrink-0 items-center rounded-full border border-line bg-surface px-3 text-sm font-medium text-muted hover:bg-surface-2 hover:text-ink sm:h-9"
           >
             {g.title}
           </a>
@@ -147,6 +160,8 @@ export async function PoliciesView() {
                       override={o ? { updatedAt: o.updatedAt, updatedByName: o.updatedBy ? (names[o.updatedBy] ?? null) : null } : null}
                       canEdit={canEditSetting(k, ctx)}
                       lockReason={settingLockReason(k, ctx)}
+                      context={contextFor(k)}
+                      notes={settingNotes(k, values, { aiKeyConfigured })}
                     />
                   );
                 })}

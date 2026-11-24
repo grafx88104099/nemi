@@ -4,6 +4,7 @@ import type { CrmStaffContext } from "@/lib/queries-crm-core";
 import { getMyTeamChatId } from "@/lib/queries-team-chat";
 import { cn } from "@/lib/utils";
 
+import { CrmDeviceSync } from "./CrmDeviceSync";
 import { CrmNav } from "./CrmNav";
 import { CrmQuickBar } from "./CrmQuickBar";
 import { crmNavItems, fallbackCrm2Context } from "./menu";
@@ -11,6 +12,7 @@ import { crmNavItems, fallbackCrm2Context } from "./menu";
 /**
  * CRM-ийн бүрхүүл (хоёр панель): дээд талд эрхээр шүүсэн хэвтээ цэс, доор хуудас.
  * Эрхийг crm2_my_context()-оос; уншиж чадаагүй бол crm_staff-ийн дүрээр хамгийн бага цэс.
+ * Ажилладаг гишүүнд төхөөрөмжийн давхарга (ноорог, зургийн дараалал, сүлжээгүй илгээлт) — CrmDeviceSync.
  */
 export async function CrmShell({
   panel,
@@ -40,6 +42,7 @@ export async function CrmShell({
           <CrmNav primary={primary} secondary={secondary} />
         </div>
       </div>
+      {ctx.canWork && ctx.profileId ? <CrmDeviceSync panel={panel} profileId={ctx.profileId} /> : null}
       {/* Утсанд доод хурдан цэсний ард агуулга хаагдахгүй байх зай. */}
       <div className={cn("min-w-0 flex-1", ctx.canWork && "pb-20 md:pb-0")}>{children}</div>
       {ctx.canWork ? <CrmQuickBar panel={panel} teamChatId={teamChatId} /> : null}

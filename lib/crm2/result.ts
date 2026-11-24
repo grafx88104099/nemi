@@ -1,5 +1,6 @@
 import type { z } from "zod";
 
+import { MISSING_ITEM_LABEL } from "@/lib/crm2/labels";
 import type { Crm2Result } from "@/lib/crm2/types";
 
 /**
@@ -41,6 +42,76 @@ export function dbErrorText(error: DbErrorLike): string {
   if (code === "23502") return "Заавал бөглөх талбар дутуу байна.";
   if (code === "PGRST116") return NOT_FOUND_ERROR;
   return GENERIC_ERROR;
+}
+
+/**
+ * DB алдааны мессежийн хэсэг эсвэл constraint нэр → маягтын талбарын түлхүүр (фокуслах, доор нь
+ * алдааг харуулах). Эхний таарсан мөр хэрэглэгдэнэ — тусгай мөрийг ерөнхийн өмнө байрлуулна.
+ */
+const DB_ERROR_FIELDS: readonly (readonly [RegExp, string, string?])[] = [
+  // Хөрөнгө (crm2_properties_guard, check constraint)
+  [/дүүрэг жагсаалтад алга/i, "district"],
+  [/бүртгэлгүй онцлог/i, "features"],
+  [/нэг агент хэд хэдэн үүрэг/i, "contract_agent_id"],
+  [/томилогдсон үүрэгт агентыг/i, "listing_agent_id"],
+  [/crm2_properties_floor/, "floor", "Давхар барилгын давхраас их байж болохгүй."],
+  [/crm2_properties_per_m2/, "area_m2", "м²-ийн үнэтэй бол хэмжээг оруулна уу."],
+  [/crm2_properties_pin/, "lat", "Газрын зургийн цэгийг дахин тавина уу."],
+  [/crm2_properties_parking_spaces_chk/, "parking_spaces"],
+  [/crm2_properties_rent_terms_chk/, "rent_advance_months"],
+  // Харилцагч (эзэн)
+  [/эх сурвалж жагсаалтад алга|crm2_contacts_source_chk/i, "owner.source"],
+  [/crm2_contacts_source_note_chk/, "owner.source_note"],
+  // Зуучлалын гэрээ
+  [/дугаартай гэрээ аль хэдийн бүртгэлтэй|гэрээний дугаар хоосон/i, "number"],
+  [/crm2_brokerage_dates/, "end_date", "Дуусах огноо эхлэх огнооноос өмнө байж болохгүй."],
+  [/crm2_brokerage_commission/, "commission_value", "Шимтгэлийн утга буруу байна."],
+  [/crm2_brokerage_signer_note_chk|гарын үсэг зурах эрх/i, "signer_note"],
+  [/гэрээний файлыг шалгаснаа/i, "file_checked"],
+  // Нийтлэх (утасны дугаар гарчиг/тайлбарт эсвэл нийтлэх бичвэрт)
+  [/утасны дугаар байна/i, "description"],
+];
+
+/** DB алдааны талбар (мэдэгдэхгүй бол null) ба хэрэглэгчид харуулах текст. */
+export function dbErrorField(error: DbErrorLike): { field: string | null; text: string } {
+  const hay = `${error?.message ?? ""} ${error?.details ?? ""}`;
+  // «… дутуу: эхлэх огноо, шимтгэл» — эхний дутуу зүйлийн талбар.
+  const missing = missingListField(error?.message);
+  const hit = missing ? null : DB_ERROR_FIELDS.find(([re]) => re.test(hay));
+  // «CRM: …» мессеж өөрөө тодорхой; constraint-ийн англи мессежийн оронд талбарын текст.
+  const text = crmMessage(error?.message) ?? hit?.[2] ?? dbErrorText(error);
+  return { field: missing ?? hit?.[1] ?? null, text };
+}
+
+/** crm2_missing_text-ийн код → маягтын талбар (кодоосоо өөр бол). */
+const MISSING_ITEM_FIELD: Record<string, string> = {
+  pin: "lat",
+  project: "project_id",
+  owner: "owner",
+  owner_source: "owner.source",
+  owner_name: "owner.full_name",
+  owner_pending: "owner",
+  images: "images",
+  unconfirmed: "unconfirmed",
+  brokerage_contract: "contract",
+  end_date_past: "end_date",
+  commission: "commission_value",
+  file: "file",
+  special_terms: "terms",
+  signer_authority: "signer_note",
+  defaults_unconfirmed: "prefilled",
+  ownership_doc: "ownership_doc",
+  role_unconfirmed: "contract_agent_id",
+};
+
+const LABEL_TO_ITEM = new Map(Object.entries(MISSING_ITEM_LABEL).map(([k, v]) => [v, k] as const));
+
+function missingListField(message: string | null | undefined): string | null {
+  const m = /дутуу:\s*(.+)$/.exec(message ?? "");
+  if (!m) return null;
+  const first = m[1].split(", ")[0]?.trim() ?? "";
+  const item = LABEL_TO_ITEM.get(first);
+  return item ? (MISSING_ITEM_FIELD[item] ?? item) : null;
 }
 
 export function ok<T>(data: T): Crm2Result<T> {

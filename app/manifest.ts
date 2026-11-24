@@ -1,6 +1,26 @@
 import type { MetadataRoute } from "next";
 
 /**
+ * Web Share Target (Android Chrome, суулгасан PWA): зарын бичвэр/зургийг Nemi CRM руу
+ * хуваалцахад public/sw.js POST-ыг барьж IndexedDB-д битүүмжлээд шуурхай бүртгэл рүү
+ * чиглүүлнэ. SW удирдаагүй бол share/route.ts «?share=nosw» руу буцаана.
+ * Next-ийн төрөлд files нь DOM File гэж буруу бичигдсэн тул хувиргаж өгнө.
+ */
+type ShareTarget = {
+  action: string;
+  method: "POST";
+  enctype: "multipart/form-data";
+  params: { title: string; text: string; url: string; files: { name: string; accept: string[] }[] };
+};
+
+const SHARE_TARGET: ShareTarget = {
+  action: "/agent/crm/staff/share",
+  method: "POST",
+  enctype: "multipart/form-data",
+  params: { title: "title", text: "text", url: "url", files: [{ name: "media", accept: ["image/*"] }] },
+};
+
+/**
  * PWA manifest: агентын CRM-ийг утсанд апп хэлбэрээр суулгана. id/start_url
  * хэвээр (суулгасан апп нэг апп хэвээр); нээхэд Staff жагсаалт руу чиглэнэ.
  */
@@ -28,5 +48,6 @@ export default function manifest(): MetadataRoute.Manifest {
       { name: "Харилцагчид", url: "/agent/crm/contacts", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
       { name: "Staff", url: "/agent/crm/staff", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
     ],
+    share_target: SHARE_TARGET as unknown as NonNullable<MetadataRoute.Manifest["share_target"]>,
   };
 }

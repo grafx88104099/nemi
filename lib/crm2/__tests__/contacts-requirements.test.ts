@@ -101,7 +101,7 @@ describe("шаардлагын маягт", () => {
   it("ангилал солиход үнийн хугацаа", () => {
     expect(periodForCategory("sale", "month")).toBe("total");
     expect(periodForCategory("rent", "total")).toBe("month");
-    expect(periodForCategory("lease", "total")).toBe("day");
+    expect(periodForCategory("lease", "total")).toBe("month");
     expect(periodForCategory("rent", "day")).toBe("day");
     expect(periodForCategory("", "month")).toBe("month");
   });

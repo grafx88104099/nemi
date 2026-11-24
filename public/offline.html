@@ -2,24 +2,201 @@
 <html lang="mn">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="robots" content="noindex" />
     <title>Сүлжээ алга — Nemi CRM</title>
     <style>
-      body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #fff; color: #0f172a; display: grid; place-items: center; min-height: 100vh; }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #fff; color: #0f172a; display: grid; place-items: center; min-height: 100vh; min-height: 100dvh; }
       main { max-width: 22rem; padding: 1.5rem; text-align: center; }
-      img { width: 64px; height: 64px; border-radius: 16px; }
+      img.logo { width: 64px; height: 64px; border-radius: 16px; }
       h1 { font-size: 1.25rem; margin: 1rem 0 0.5rem; }
       p { color: #64748b; font-size: 0.95rem; line-height: 1.5; }
       button { margin-top: 1rem; height: 2.75rem; padding: 0 1.25rem; border: 0; border-radius: 0.75rem; background: #f97316; color: #fff; font-size: 1rem; font-weight: 600; }
+      [hidden] { display: none !important; }
+
+      /* Сүлжээгүй үеийн товч бүртгэл (утсанд, 375px-ээс) */
+      body.capture-mode { display: block; }
+      #capture { max-width: 30rem; margin: 0 auto; padding: 1rem 1rem calc(6rem + env(safe-area-inset-bottom)); text-align: left; }
+      #capture h1 { margin-top: 0.5rem; font-size: 1.15rem; }
+      #capture p { margin: 0.25rem 0 1rem; }
+      .pick { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+      .pick label { display: flex; align-items: center; justify-content: center; min-height: 3rem; padding: 0 0.75rem; border-radius: 0.75rem; font-size: 1rem; font-weight: 600; cursor: pointer; text-align: center; }
+      .pick label.primary { background: #f97316; color: #fff; }
+      .pick label.secondary { background: #fff; color: #0f172a; border: 1px solid #cbd5e1; }
+      .pick label:focus-within { outline: 3px solid #fdba74; outline-offset: 2px; }
+      .pick input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+      .files { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: 0.75rem; min-height: 2.75rem; font-size: 0.95rem; color: #334155; }
+      .files button { margin: 0; height: 2.75rem; padding: 0 1rem; background: #f1f5f9; color: #0f172a; font-weight: 500; }
+      .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(4rem, 1fr)); gap: 0.375rem; margin-top: 0.5rem; }
+      .thumbs img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 0.5rem; background: #f1f5f9; }
+      .field { display: block; margin-top: 1rem; font-size: 0.95rem; font-weight: 600; }
+      textarea { display: block; width: 100%; margin-top: 0.375rem; min-height: 8rem; padding: 0.75rem; border: 1px solid #cbd5e1; border-radius: 0.75rem; font: inherit; font-size: 16px; color: #0f172a; resize: vertical; }
+      textarea:focus { outline: 3px solid #fdba74; outline-offset: 1px; border-color: #f97316; }
+      .hint { margin-top: 0.375rem; font-size: 0.85rem; color: #64748b; }
+      .status { margin-top: 1rem; min-height: 1.5rem; font-size: 0.95rem; line-height: 1.45; }
+      .status.ok { padding: 0.75rem; border-radius: 0.75rem; background: #ecfdf5; color: #065f46; font-weight: 600; }
+      .status.err { padding: 0.75rem; border-radius: 0.75rem; background: #fef2f2; color: #991b1b; }
+      .bar { position: fixed; left: 0; right: 0; bottom: 0; padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom)); background: rgba(255, 255, 255, 0.96); border-top: 1px solid #e2e8f0; }
+      .bar .inner { max-width: 30rem; margin: 0 auto; display: flex; gap: 0.5rem; }
+      .bar button { margin: 0; height: 3rem; }
+      #save { flex: 1; }
+      #save:disabled { opacity: 0.6; }
+      #retry2 { background: #f1f5f9; color: #0f172a; }
     </style>
   </head>
   <body>
-    <main>
-      <img src="/icons/icon-192.png" alt="" />
+    <main id="plain">
+      <img class="logo" src="/icons/icon-192.png" alt="" />
       <h1>Сүлжээ алга байна</h1>
       <p>Интернэт холболтоо шалгаад дахин оролдоно уу. Бүртгэлээ сүлжээ сэргэсний дараа хийнэ үү.</p>
       <button type="button" onclick="location.reload()">Дахин оролдох</button>
     </main>
+
+    <form id="capture" hidden novalidate>
+      <h1>Сүлжээ алга — утсан дээр түр хадгалъя</h1>
+      <p>Зураг, тэмдэглэлээ энд хадгалаад сүлжээ орвол CRM-ээ нээнэ үү. Хадгалсныг шинэ бүртгэл болгон санал болгоно.</p>
+
+      <div class="pick">
+        <label class="primary">Галерей<input id="gallery" type="file" accept="image/*" multiple /></label>
+        <label class="secondary">Зураг авах<input id="camera" type="file" accept="image/*" capture="environment" /></label>
+      </div>
+      <div class="files">
+        <span id="count" aria-live="polite">Зураг сонгоогүй</span>
+        <button type="button" id="clear" hidden>Арилгах</button>
+      </div>
+      <div class="thumbs" id="thumbs"></div>
+
+      <label class="field" for="note">Тэмдэглэл</label>
+      <textarea id="note" maxlength="10000" enterkeyhint="done" placeholder="Байршил, талбай, үнэ, өрөө…"></textarea>
+      <div class="hint">Утсан дээр шифрлэгдэж 24 цаг хадгалагдана.</div>
+
+      <div class="status" id="status" role="status" aria-live="polite"></div>
+
+      <div class="bar">
+        <div class="inner">
+          <button type="submit" id="save">Утсан дээр хадгалах</button>
+          <button type="button" id="retry2" onclick="location.reload()" aria-label="Дахин оролдох">↻</button>
+        </div>
+      </div>
+    </form>
+
+    <script src="/crm2-vault.js"></script>
+    <script>
+      (function () {
+        "use strict";
+        var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        var MAX_FILES = 20;
+        var MAX_BYTES = 30 * 1024 * 1024;
+        var MAX_TEXT = 10000;
+
+        var vault = window.Crm2Vault;
+        var profileId = null;
+        try {
+          profileId = localStorage.getItem("crm2:last-profile");
+        } catch (e) {
+          profileId = null;
+        }
+        var onStaffNew = location.pathname.indexOf("/agent/crm/staff/new") === 0;
+        if (!onStaffNew || !vault || !profileId || !UUID_RE.test(profileId) || !window.indexedDB || !window.crypto || !crypto.subtle) return;
+
+        var plain = document.getElementById("plain");
+        var form = document.getElementById("capture");
+        var gallery = document.getElementById("gallery");
+        var camera = document.getElementById("camera");
+        var count = document.getElementById("count");
+        var clearBtn = document.getElementById("clear");
+        var thumbs = document.getElementById("thumbs");
+        var note = document.getElementById("note");
+        var status = document.getElementById("status");
+        var save = document.getElementById("save");
+
+        plain.hidden = true;
+        form.hidden = false;
+        document.body.classList.add("capture-mode");
+
+        var picked = [];
+        var urls = [];
+
+        function setStatus(text, kind) {
+          status.textContent = text || "";
+          status.className = "status" + (kind ? " " + kind : "");
+        }
+
+        function render() {
+          for (var i = 0; i < urls.length; i++) URL.revokeObjectURL(urls[i]);
+          urls = [];
+          thumbs.textContent = "";
+          for (var j = 0; j < picked.length; j++) {
+            var u = URL.createObjectURL(picked[j]);
+            urls.push(u);
+            var img = document.createElement("img");
+            img.src = u;
+            img.alt = "";
+            thumbs.appendChild(img);
+          }
+          count.textContent = picked.length ? picked.length + " зураг сонгосон" : "Зураг сонгоогүй";
+          clearBtn.hidden = !picked.length;
+        }
+
+        function add(input) {
+          var skipped = 0;
+          var list = input.files || [];
+          for (var i = 0; i < list.length; i++) {
+            var f = list[i];
+            var ok = f && String(f.type || "").indexOf("image/") === 0 && f.size > 0 && f.size <= MAX_BYTES;
+            if (!ok || picked.length >= MAX_FILES) {
+              skipped++;
+              continue;
+            }
+            picked.push(f);
+          }
+          input.value = "";
+          render();
+          if (skipped) setStatus(skipped + " файлыг алгаслаа (зөвхөн зураг, 30 MB хүртэл, нийт " + MAX_FILES + ")", "err");
+          else setStatus("");
+        }
+
+        gallery.addEventListener("change", function () {
+          add(gallery);
+        });
+        camera.addEventListener("change", function () {
+          add(camera);
+        });
+        clearBtn.addEventListener("click", function () {
+          picked = [];
+          render();
+          setStatus("");
+        });
+
+        form.addEventListener("submit", function (ev) {
+          ev.preventDefault();
+          var text = note.value.trim().slice(0, MAX_TEXT);
+          if (!text && !picked.length) {
+            setStatus("Зураг эсвэл тэмдэглэл нэмнэ үү", "err");
+            return;
+          }
+          save.disabled = true;
+          setStatus("Хадгалж байна…");
+          var files = picked.map(function (f) {
+            return { name: String(f.name || "zurag").slice(0, 120), type: f.type, blob: f };
+          });
+          vault
+            .storeInboxItem({ kind: "offline", profileId: profileId, text: text, files: files })
+            .then(function () {
+              picked = [];
+              note.value = "";
+              render();
+              setStatus("Хадгалагдлаа — сүлжээ орвол CRM-ээ нээнэ үү", "ok");
+            })
+            .catch(function () {
+              setStatus("Хадгалж чадсангүй — дахин оролдоно уу", "err");
+            })
+            .then(function () {
+              save.disabled = false;
+            });
+        });
+      })();
+    </script>
   </body>
 </html>

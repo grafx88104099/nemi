@@ -119,9 +119,17 @@ export function mediaPath(officeId: string, propertyId: string, fileId: string, 
   return `${officeId}/${propertyId}/${fileId}.${ext}`;
 }
 
-/** crm2-docs: {office}/brokerage/{contract}/{uuid}.{ext} */
-export function docPath(officeId: string, contractId: string, fileId: string, ext: string): string {
-  return `${officeId}/brokerage/${contractId}/${fileId}.${ext}`;
+/**
+ * crm2-docs: {office}/brokerage/{contract}/{uuid}.{ext}; өмчлөлийн баримт / иргэний үнэмлэх (restricted) —
+ * {office}/brokerage/{contract}/restricted/{uuid}.{ext} (crm2_brokerage_files_kind_guard, storage policy).
+ */
+export function docPath(officeId: string, contractId: string, fileId: string, ext: string, restricted = false): string {
+  return `${officeId}/brokerage/${contractId}/${restricted ? "restricted/" : ""}${fileId}.${ext}`;
+}
+
+/** Хязгаарлагдмал (restricted) хавтаст хадгалах гэрээний файлын төрөл. */
+export function isRestrictedDocKind(kind: string | null | undefined): boolean {
+  return kind === "ownership" || kind === "id";
 }
 
 /** Хэмжээг уншихуйц: «2.4 МБ», «820 КБ». */

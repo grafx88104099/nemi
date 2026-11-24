@@ -3,9 +3,13 @@ import { parseNumberText } from "@/lib/number-input";
 import { z } from "zod";
 
 import { ubInputToIso, isIsoDate } from "@/lib/crm2/datetime";
-import { isValidPhone } from "@/lib/crm2/phone";
+import { isFullPhone, isValidPhone } from "@/lib/crm2/phone";
+import { UNCONFIRMABLE_KEYS } from "@/lib/crm2/checklist";
+import { UI_EVENTS, UI_FLOWS } from "@/lib/crm2/feature-flags";
 import {
+  BROKERAGE_FILE_KINDS,
   COMMISSION_TYPES,
+  CONTACT_CONSENTS,
   CURRENCIES,
   DEAL_STAGES,
   PRICE_BASES,
@@ -15,6 +19,7 @@ import {
   RECORD_STATUSES,
   TASK_KINDS,
   TASK_STATUSES,
+  VIEW_NOTE_LABEL,
 } from "@/lib/crm2/labels";
 import { CRM2_SETTING_KEYS } from "@/lib/crm2/settings";
 
@@ -112,7 +117,7 @@ const propertyShape = {
   operating_cost_period: periodEnum.optional(),
   operating_cost_note: optText(1000, "Зардлын тайлбар"),
   condition: optText(4000, "Нөхцөл"),
-  view_note: optText(4000, "Харууц"),
+  view_note: optText(4000, VIEW_NOTE_LABEL),
   notes: optText(8000, "Нэмэлт тайлбар"),
   advantages: optText(4000, "Давуу тал"),
   features: z.array(keySchema).max(40, "Онцлог 40-өөс ихгүй.").optional(),
@@ -131,7 +136,22 @@ const propertyShape = {
   listing_agent_id: optId,
   contract_agent_id: optId,
   photo_agent_id: optId,
+  parking_spaces: optNumber({ int: true, min: 0, max: 50, label: "Зогсоолын тоо" }),
+  rent_advance_months: optNumber({ int: true, min: 0, max: 24, label: "Урьдчилгаа (сар)" }),
+  rent_deposit_months: optNumber({ int: true, min: 0, max: 24, label: "Барьцаа (сар)" }),
+  /**
+   * Автоматаар бөглөгдсөн, баталгаажаагүй талбарууд. Засахад зөвхөн БАГАСГАЖ болно — нэмэхийг DB
+   * (crm2_properties_origin_guard) татгалзана; нэмэх нь зөвхөн quick create / import RPC.
+   */
+  unconfirmed: z
+    .array(z.enum(UNCONFIRMABLE_KEYS, { error: "Баталгаажуулах талбар буруу." }))
+    .max(40, "Баталгаажаагүй талбар хэт олон.")
+    .optional(),
 };
+
+/** Хөрөнгийг хаанаас бүртгэсэн (клиентээс; 'listing'-ийг зөвхөн импорт RPC тавина). */
+export const PROPERTY_CLIENT_SOURCES = ["manual", "paste", "share"] as const;
+const clientSourceEnum = z.enum(PROPERTY_CLIENT_SOURCES, { error: "Эх сурвалж буруу." });
 
 type PropertyCheck = {
   lat?: number | null;
@@ -164,11 +184,16 @@ export const propertyPrivateSchema = z.object({
 });
 export type PropertyPrivateInput = z.input<typeof propertyPrivateSchema>;
 
-/** Шинэ хөрөнгө (ноорог). project_name өгвөл crm2_ensure_project-оор холбоно. */
+/**
+ * Шинэ хөрөнгө (ноорог). project_name өгвөл crm2_ensure_project-оор холбоно.
+ * client_key — төхөөрөмжийн ноорогийн түлхүүр (давтан илгээлт = нэг хөрөнгө), source — хэмжилтэд.
+ */
 export const propertyCreateSchema = z
   .object({
     ...propertyShape,
     project_name: optText(120, "Төслийн нэр"),
+    client_key: idSchema.optional(),
+    source: clientSourceEnum.optional(),
     private: propertyPrivateSchema.optional(),
   })
   .superRefine((v, ctx) => checkProperty(v, ctx, true));
@@ -179,6 +204,130 @@ export const propertyUpdateSchema = z
   .object({ ...propertyShape, category: categoryEnum.optional(), project_name: optText(120, "Төслийн нэр") })
   .superRefine((v, ctx) => checkProperty(v, ctx));
 export type PropertyUpdateInput = z.input<typeof propertyUpdateSchema>;
+
+// ── Эзэн (утас эхэлсэн нэг бүрэлдэхүүн, P6) ───────────────────────────────
+
+/** RPC (crm2_resolve_owner)-тэй ижил: жигдрүүлсэн 8 ба түүнээс олон цифр. */
+const ownerPhone = z
+  .string({ error: "Дугаар 8 оронтой байх ёстой" })
+  .trim()
+  .max(40, "Утасны дугаар хэт урт.")
+  .refine(isFullPhone, "Дугаар 8 оронтой байх ёстой");
+
+/** Сонгосон харилцагч (зөвхөн ингэж холбогдоно). */
+export const ownerContactSchema = z.object({ contact_id: idSchema });
+
+/** Шинэ/хайх эзэн: утас заавал; нэргүй бол «Нэр баталгаажаагүй». allow_duplicate = «Өөр хүн». */
+export const ownerNewSchema = z
+  .object({
+    phone: ownerPhone,
+    full_name: optText(160, "Нэр"),
+    source: z.preprocess(emptyToNull, keySchema.nullable().optional()),
+    source_note: optText(200, "Эх сурвалжийн тайлбар"),
+    allow_duplicate: z.boolean().optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.source === "other" && !v.source_note) {
+      ctx.addIssue({ code: "custom", path: ["source_note"], message: "«Бусад» эх сурвалжийн тайлбарыг бичнэ үү." });
+    }
+  });
+
+export const ownerInputSchema = z.union([ownerContactSchema, ownerNewSchema]);
+export type OwnerInput = z.input<typeof ownerInputSchema>;
+
+/** setPropertyOwner: эзэн оноох эсвэл хүлээгдэж буй эзнийг цэвэрлэх ({ clear: true }). */
+export const ownerSetSchema = z.union([ownerInputSchema, z.object({ clear: z.literal(true) })]);
+export type OwnerSetInput = z.input<typeof ownerSetSchema>;
+
+// ── Шуурхай бүртгэл (P8) ───────────────────────────────────────────────────
+
+/**
+ * crm2_create_property_quick-ийн оролт: хөрөнгө (propertyCreateSchema-ийн талбарууд + client_key заавал),
+ * эзэн (сонголттой), хувийн тэмдэглэл. Давхар, м²-ийн үнийн дүрэм бүрэн формтой ижил (checkProperty).
+ */
+export const quickCreateSchema = z.object({
+  property: z
+    .object({
+      ...propertyShape,
+      project_name: optText(120, "Төслийн нэр"),
+      client_key: idSchema,
+      source: clientSourceEnum.default("manual"),
+    })
+    .superRefine((v, ctx) => checkProperty(v, ctx, true)),
+  owner: ownerInputSchema.nullable().optional(),
+  private: z
+    .object({
+      owner_note: optText(4000, "Эзний тэмдэглэл"),
+      showing_instructions: optText(4000, "Үзүүлэх заавар"),
+    })
+    .optional(),
+});
+export type QuickCreateInput = z.input<typeof quickCreateSchema>;
+export type QuickCreatePayload = z.output<typeof quickCreateSchema>;
+
+/** Автоматаар бөглөсөн утгыг «Зөв» гэж баталгаажуулах. */
+export const confirmFieldsSchema = z.object({
+  property_id: idSchema,
+  keys: z
+    .array(z.enum(UNCONFIRMABLE_KEYS, { error: "Баталгаажуулах талбар буруу." }))
+    .min(1, "Баталгаажуулах талбараа сонгоно уу.")
+    .max(40),
+});
+
+// ── Давхардал (P11) ────────────────────────────────────────────────────────
+
+export const duplicateFlagSchema = z
+  .object({
+    property_id: idSchema,
+    token: idSchema,
+    kind: z.enum(["distinct", "access"], { error: "Төрөл буруу." }),
+    note: optText(1000, "Тайлбар"),
+  })
+  .superRefine((v, ctx) => {
+    if (v.kind === "distinct" && !v.note) {
+      ctx.addIssue({ code: "custom", path: ["note"], message: "Тусдаа хөрөнгө гэх шалтгааныг бичнэ үү." });
+    }
+  });
+export type DuplicateFlagInput = z.input<typeof duplicateFlagSchema>;
+
+export const resolveDuplicateSchema = z.object({
+  flag_id: idSchema,
+  status: z.enum(["distinct", "duplicate", "dismissed"], { error: "Шийдвэр буруу." }),
+  note: optText(1000, "Тайлбар"),
+});
+
+// ── Миний зараас үүсгэх (P12) ──────────────────────────────────────────────
+
+export const importListingSchema = z.object({
+  listing_id: idSchema,
+  client_key: idSchema.optional(),
+});
+
+// ── Хэмжилт (P2) ───────────────────────────────────────────────────────────
+
+const msValue = (label: string) => optNumber({ int: true, min: 0, max: 86_400_000, label });
+
+/**
+ * crm2_ui_events: зөвхөн хугацаа, тоо, туг. meta-д нэр, утас, чөлөөт текст ОРОХГҮЙ
+ * (түлхүүр = код, утга = тоо |x| < 10 000 000 эсвэл туг; DB guard-тай ижил).
+ */
+export const uiEventSchema = z.object({
+  event: z.enum(UI_EVENTS, { error: "Үйл явдал буруу." }),
+  flow: z.enum(UI_FLOWS).nullable().optional(),
+  property_id: optId,
+  duration_ms: msValue("Хугацаа"),
+  first_input_ms: msValue("Хугацаа"),
+  taps: optNumber({ int: true, min: 0, max: 10_000, label: "Товшилт" }),
+  fields_filled: optNumber({ int: true, min: 0, max: 300, label: "Талбар" }),
+  meta: z
+    .record(
+      z.string().regex(/^[a-z][a-z0-9_]{0,39}$/, "Түлхүүрийн хэлбэр буруу."),
+      z.union([z.number().refine((n) => Number.isFinite(n) && Math.abs(n) < 10_000_000, "Тоо хэт их."), z.boolean()])
+    )
+    .refine((o) => Object.keys(o).length <= 12, "Нэмэлт утга хэт олон.")
+    .optional(),
+});
+export type UiEventInput = z.input<typeof uiEventSchema>;
 
 export const propertyStatusSchema = z
   .object({
@@ -211,6 +360,10 @@ export const publishPropertySchema = z.object({
   // Хоосон бол DB анхдагч гарчиг/текстийг (crm2_default_listing_*) ашиглана.
   title: optText(160, "Зарын гарчиг"),
   description: optText(4000, "Зарын тайлбар"),
+  /** «Миний зараас үүсгэсэн» хөрөнгийг эх зартай нь холбох (зөвхөн source_listing_id). */
+  link_listing: optId,
+  /** Холбоход зарын зургийг CRM-ийн зургаар солих (анхдагч: хэвээр). */
+  replace_photos: z.boolean().optional(),
 });
 export type PublishPropertyInput = z.input<typeof publishPropertySchema>;
 
@@ -250,7 +403,9 @@ export type ListingPhotosInput = z.input<typeof listingPhotosSchema>;
 
 const UUID_PART = "[0-9a-fA-F-]{36}";
 const MEDIA_PATH_RE = new RegExp(`^${UUID_PART}/${UUID_PART}/[A-Za-z0-9._-]{1,120}$`);
-const DOC_PATH_RE = new RegExp(`^${UUID_PART}/brokerage/${UUID_PART}/[A-Za-z0-9._-]{1,120}$`);
+// Өмчлөл/иргэний үнэмлэх: {office}/brokerage/{contract}/restricted/<uuid>.<ext> (crm2_brokerage_files_kind_guard).
+const DOC_PATH_RE = new RegExp(`^${UUID_PART}/brokerage/${UUID_PART}/(restricted/)?[A-Za-z0-9._-]{1,120}$`);
+const RESTRICTED_DOC_RE = new RegExp(`/restricted/[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\\.[A-Za-z0-9]{1,8}$`);
 
 export const mediaRowSchema = z.object({
   property_id: idSchema,
@@ -283,10 +438,26 @@ export const mediaReorderSchema = z.object({
   media_ids: z.array(idSchema).min(1).max(300),
 });
 
-export const brokerageFileRowSchema = z.object({
+export const brokerageFileKindEnum = z.enum(BROKERAGE_FILE_KINDS, { error: "Файлын төрөл буруу." });
+
+export const brokerageFileRowSchema = z
+  .object({
+    contract_id: idSchema,
+    storage_path: z.string().regex(DOC_PATH_RE, "Гэрээний файлын зам буруу."),
+    file_name: optText(200, "Файлын нэр"),
+    kind: brokerageFileKindEnum.default("contract"),
+  })
+  .superRefine((v, ctx) => {
+    const restricted = v.kind === "ownership" || v.kind === "id";
+    if (restricted !== v.storage_path.includes("/restricted/") || (restricted && !RESTRICTED_DOC_RE.test(v.storage_path))) {
+      ctx.addIssue({ code: "custom", path: ["storage_path"], message: "Гэрээний файлын зам буруу." });
+    }
+  });
+
+/** Файл байршуулах (төрөлтэй). */
+export const brokerageFileSchema = z.object({
   contract_id: idSchema,
-  storage_path: z.string().regex(DOC_PATH_RE, "Гэрээний файлын зам буруу."),
-  file_name: optText(200, "Файлын нэр"),
+  kind: brokerageFileKindEnum.default("contract"),
 });
 export type BrokerageFileRowInput = z.input<typeof brokerageFileRowSchema>;
 
@@ -303,6 +474,18 @@ const brokerageShape = {
   commission_currency: currencyEnum.optional(),
   commission_note: optText(2000, "Шимтгэлийн тайлбар"),
   responsible_agent_id: optId,
+  /** «Онцгой нөхцөлгүй» — нөхцөл хоосон ч илгээж болно. */
+  no_special_terms: z.boolean().optional(),
+  /** Эзнээс өөр хүн гарын үсэг зурна (signer_note-д холбоо/эрх). */
+  signer_differs: z.boolean().optional(),
+  signer_note: optText(500, "Гарын үсэг зурах эрхийн тайлбар"),
+  /** «Гэрээ оффист үлдсэн» — зөвхөн сануулга, файлын шаардлагыг хангахгүй. */
+  file_at_office: z.boolean().optional(),
+  /** Оффисын анхдагчаар бөглөсөн, баталгаажаагүй талбар (засахад зөвхөн багасна). */
+  prefilled: z
+    .array(z.enum(["number", "start_date", "end_date", "commission"], { error: "Талбар буруу." }))
+    .max(4)
+    .optional(),
 };
 
 type BrokerageCheck = {
@@ -336,6 +519,8 @@ export const brokerageApproveSchema = z.object({
   note: optText(2000, "Тэмдэглэл"),
   /** Батлагчийн харсан updated_at (өөрчлөгдсөн бол DB татгалзана). */
   expected_updated_at: z.preprocess(emptyToNull, z.string().nullable().optional()),
+  /** «Гэрээний файлтай тулгаж шалгасан» (brokerage.require_file үед заавал). */
+  file_checked: z.boolean().optional(),
 });
 
 /** Шалтгаан заавал (татгалзах, цуцлах). */
@@ -354,12 +539,20 @@ const phoneValue = z
 
 export const phoneItemSchema = z.object({ phone: phoneValue, label: optText(40, "Шошго") });
 
+const contactSourceFields = {
+  /** contact.sources-ийн код (DB guard жагсаалтаар шалгана). */
+  source: z.preprocess(emptyToNull, keySchema.nullable().optional()),
+  source_note: optText(200, "Эх сурвалжийн тайлбар"),
+  consent: z.enum(CONTACT_CONSENTS, { error: "Зөвшөөрлийн төлөв буруу." }).optional(),
+};
+
 export const contactCreateSchema = z.object({
   full_name: reqText(160, "Нэр"),
   phones: z.array(phoneItemSchema).max(10, "Дугаар 10-аас ихгүй.").default([]),
   note: optText(4000, "Тэмдэглэл"),
   agent_id: optId,
   allow_duplicate: z.boolean().optional(),
+  ...contactSourceFields,
 });
 export type ContactCreateInput = z.input<typeof contactCreateSchema>;
 
@@ -368,6 +561,7 @@ export const contactUpdateSchema = z.object({
   full_name: reqText(160, "Нэр").optional(),
   note: optText(4000, "Тэмдэглэл"),
   status: z.enum(RECORD_STATUSES).optional(),
+  ...contactSourceFields,
 });
 export type ContactUpdateInput = z.input<typeof contactUpdateSchema>;
 

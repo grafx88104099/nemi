@@ -12,13 +12,25 @@ import { watermarkFromOffice, type WatermarkConfig } from "@/lib/watermark";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export type Crm2PublishMedia = { id: string; storagePath: string; sortOrder: number; isCover: boolean };
+export type Crm2PublishMedia = {
+  id: string;
+  storagePath: string;
+  sortOrder: number;
+  isCover: boolean;
+  /**
+   * «Миний зараас үүсгэх»-ээр хуулсан зургийн эх зарын хаяг (гарал үүсэл; хэзээ ч URL-аар татахгүй).
+   * Тамгагүй байж болзошгүй тул шинэ зар / зураг солих үед бусадтай адил тамга дарна.
+   */
+  sourcePublicUrl: string | null;
+};
 
 export type Crm2PublishState = {
   /** Нийтлэх/буцаах эрхтэй (үүрэгт агент, багийн ахлагч, менежер). */
   canPublish: boolean;
   /** Нийтлэхэд саад болох шалтгаанууд (монголоор, DB-ээс). Хоосон бол бэлэн. */
   blockers: string[];
+  /** Нийтлэхийг хаахгүй сануулга (картын бичвэрт утас г.м.). */
+  warnings: string[];
   listingId: string | null;
   published: boolean;
   publishedAt: string | null;
@@ -46,6 +58,7 @@ export type Crm2PublishState = {
 type PublishStateRaw = {
   can_publish?: boolean | null;
   blockers?: unknown;
+  warnings?: unknown;
   listing_id?: string | null;
   published?: boolean | null;
   published_at?: string | null;
@@ -64,7 +77,7 @@ type PublishStateRaw = {
 async function loadPublishMedia(supabase: Crm2Supabase, propertyId: string): Promise<Crm2PublishMedia[]> {
   const { data, error } = await supabase
     .from("crm2_property_media")
-    .select("id, storage_path, sort_order, is_cover")
+    .select("id, storage_path, sort_order, is_cover, source_public_url")
     .eq("property_id", propertyId)
     .eq("kind", "image")
     .not("storage_path", "is", null)
@@ -80,7 +93,13 @@ async function loadPublishMedia(supabase: Crm2Supabase, propertyId: string): Pro
   const out: Crm2PublishMedia[] = [];
   for (const m of data ?? []) {
     if (!m.storage_path) continue;
-    out.push({ id: m.id, storagePath: m.storage_path, sortOrder: m.sort_order, isCover: m.is_cover });
+    out.push({
+      id: m.id,
+      storagePath: m.storage_path,
+      sortOrder: m.sort_order,
+      isCover: m.is_cover,
+      sourcePublicUrl: m.source_public_url ?? null,
+    });
   }
   return out;
 }
@@ -121,10 +140,12 @@ export async function getPublishState(propertyId: string): Promise<Crm2PublishSt
   ]);
 
   const blockers = Array.isArray(raw.blockers) ? raw.blockers.filter((b): b is string => typeof b === "string") : [];
+  const warnings = Array.isArray(raw.warnings) ? raw.warnings.filter((w): w is string => typeof w === "string") : [];
 
   return {
     canPublish: !!raw.can_publish,
     blockers,
+    warnings,
     listingId: raw.listing_id ?? null,
     published: !!raw.published,
     publishedAt: raw.published_at ?? null,

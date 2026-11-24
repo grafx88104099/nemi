@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Building2, Phone, Plus, Sparkles, X } from "lucide-react";
+import { Building2, ChevronRight, ListChecks, Phone, Plus, Sparkles, X } from "lucide-react";
 
 import { ButtonLink } from "@/components/ui/button";
 import { Crm2Empty, FilterPager, FilterProvider, LoadErrorState, NoAccessState, type FilterParams } from "@/components/crm2/ui";
@@ -9,7 +9,9 @@ import { categoryLabel, PROPERTY_CATEGORIES, PROPERTY_STATUS_LABEL } from "@/lib
 import { crm2Paths, type Crm2Panel } from "@/lib/crm2/paths";
 import { getOfferContact } from "@/lib/crm2/queries/card-tabs";
 import { getStaffNameMap, listProjects } from "@/lib/crm2/queries/lookups";
+import { listMyIncomplete } from "@/lib/crm2/queries/incomplete";
 import { listProperties } from "@/lib/crm2/queries/properties";
+import { ImportListingsButton } from "@/components/crm2/staff/import/ImportListingsButton";
 
 import {
   advancedFilterCount,
@@ -67,11 +69,13 @@ export async function StaffListScreen({ panel, searchParams }: { panel: Crm2Pane
   const listFilters = offer.contactId
     ? { ...toPropertyListFilters(params), status: null, statusIn: openStatuses }
     : toPropertyListFilters(params);
-  const [result, projects, names, offerContact] = await Promise.all([
+  const [result, projects, names, offerContact, mine] = await Promise.all([
     listProperties(listFilters),
     params.project ? listProjects() : Promise.resolve([]),
     getStaffNameMap(),
     offer.contactId ? getOfferContact(offer.contactId) : Promise.resolve(null),
+    // «Миний дутуу: N» тууз — ажилладаг гишүүнд, санал болгох/дуудлагын горимоос бусад үед.
+    ctx.canWork && !offer.contactId ? listMyIncomplete({ scope: "me", limit: 100 }) : Promise.resolve(null),
   ]);
 
   const categoryLabels = settings["property.category_labels"];
@@ -93,7 +97,23 @@ export async function StaffListScreen({ panel, searchParams }: { panel: Crm2Pane
 
   return (
     <PageFrame>
-      <Header action={ctx.canWork ? { href: p.staffNew() } : null} />
+      <Header action={ctx.canWork ? { href: p.staffNew() } : null} panel={panel} />
+
+      {mine && !callMode && !mine.error && mine.counts.total > 0 ? (
+        <Link
+          href={p.staffIncomplete()}
+          className="mt-4 flex min-h-12 items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 text-sm text-amber-900 hover:bg-amber-100"
+        >
+          <ListChecks className="size-4 shrink-0 text-amber-700" aria-hidden />
+          <span className="min-w-0 flex-1">
+            <span className="font-semibold">Миний дутуу: <span className="tabular-nums">{mine.counts.total}</span></span>
+            {mine.counts.ownerPending > 0 ? (
+              <span className="text-amber-800"> · {mine.counts.ownerPending} эзэн шалгах</span>
+            ) : null}
+          </span>
+          <ChevronRight className="size-4 shrink-0" aria-hidden />
+        </Link>
+      ) : null}
 
       {offerQuery ? (
         <div className="mt-4 flex items-start justify-between gap-2 rounded-2xl border border-brand-200 bg-brand-50 p-3 text-sm text-brand-900">
@@ -237,7 +257,7 @@ function PageFrame({ children }: { children: React.ReactNode }) {
   return <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:py-6 md:px-6">{children}</div>;
 }
 
-function Header({ action }: { action?: { href: string } | null }) {
+function Header({ action, panel }: { action?: { href: string } | null; panel?: Crm2Panel }) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
@@ -245,10 +265,14 @@ function Header({ action }: { action?: { href: string } | null }) {
         <p className="text-sm text-muted">Компанитай зуучлалын гэрээтэй хөрөнгийн сан</p>
       </div>
       {action ? (
-        <ButtonLink href={action.href} size="md" className="shrink-0">
-          <Plus className="size-4" aria-hidden />
-          Шинэ хөрөнгө нэмэх
-        </ButtonLink>
+        <div className="flex shrink-0 items-center gap-2">
+          {panel ? <ImportListingsButton panel={panel} /> : null}
+          {/* «+ Хөрөнгө» — үргэлж ШИНЭ ноорог (?draft-гүй). */}
+          <ButtonLink href={action.href} size="md" className="shrink-0" aria-label="Хөрөнгө нэмэх">
+            <Plus className="size-4" aria-hidden />
+            Хөрөнгө
+          </ButtonLink>
+        </div>
       ) : null}
     </div>
   );

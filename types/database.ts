@@ -4565,6 +4565,16 @@ export type Database = {
           terminated_by: string | null;
           terminated_at: string | null;
           termination_reason: string | null;
+          // 20261124000100: P7 гэрээний доод цонх.
+          no_special_terms: boolean;
+          signer_differs: boolean;
+          signer_note: string | null;
+          /** Зөвхөн сануулга — 'file' шаардлагыг хангахгүй. */
+          file_at_office: boolean;
+          /** Анхдагчаар бөглөгдсөн, баталгаажаагүй талбар ('number'|'start_date'|'end_date'|'commission'). RPC-ээс гадуур зөвхөн багасна. */
+          prefilled: string[];
+          /** Зөвхөн батлах RPC тавина; ноорог/илгээсэн төлөвт null. */
+          approver_file_checked: boolean | null;
           created_by: string;
           created_at: string;
           updated_by: string | null;
@@ -4600,6 +4610,13 @@ export type Database = {
           terminated_by?: string | null;
           terminated_at?: string | null;
           termination_reason?: string | null;
+          no_special_terms?: boolean;
+          signer_differs?: boolean;
+          signer_note?: string | null;
+          file_at_office?: boolean;
+          prefilled?: string[];
+          /** Клиент тавихгүй (guard: INSERT → null, UPDATE → хуучин утга). */
+          approver_file_checked?: boolean | null;
           created_by?: string;
           created_at?: string;
           updated_by?: string | null;
@@ -4618,6 +4635,8 @@ export type Database = {
           file_name: string | null;
           mime_type: string | null;
           size_bytes: number | null;
+          /** 20261124000100. ownership/id ⇔ {office}/brokerage/{contract}/restricted/<uuid>.<ext> (20261124000300). */
+          kind: "contract" | "ownership" | "id" | "other";
           uploaded_by: string;
           created_at: string;
         };
@@ -4631,6 +4650,7 @@ export type Database = {
           file_name?: string | null;
           mime_type?: string | null;
           size_bytes?: number | null;
+          kind?: "contract" | "ownership" | "id" | "other";
           uploaded_by?: string;
           created_at?: string;
         };
@@ -4676,6 +4696,11 @@ export type Database = {
           status: Database["public"]["Enums"]["crm2_record_status"];
           archived_at: string | null;
           search_text: string;
+          // 20261124000100: эх сурвалж (contact.sources код), нэр баталгаажаагүй (тэмдэглэгээ зөвхөн INSERT-д), зөвшөөрөл.
+          source: string | null;
+          source_note: string | null;
+          name_unverified: boolean;
+          consent: "unknown" | "verbal" | "written" | "declined";
           created_by: string;
           created_at: string;
           updated_by: string | null;
@@ -4690,6 +4715,10 @@ export type Database = {
           responsible_agent_id?: string;
           status?: Database["public"]["Enums"]["crm2_record_status"];
           archived_at?: string | null;
+          source?: string | null;
+          source_note?: string | null;
+          name_unverified?: boolean;
+          consent?: "unknown" | "verbal" | "written" | "declined";
           search_text?: string;
           created_by?: string;
           created_at?: string;
@@ -4778,6 +4807,92 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["crm2_deals"]["Insert"]>;
         Relationships: [];
       };
+      // 20261124000100 — өдрийн нэгтгэсэн сануулга (P10). Зөвхөн систем (service role); authenticated эрхгүй.
+      crm2_digest_log: {
+        Row: {
+          profile_id: string;
+          office_id: string;
+          digest_date: string;
+          /** Тоо л ({owner, contract, …}) — хувийн утга агуулахгүй. */
+          counts: Json;
+          property_ids: string[];
+          notified_at: string;
+          pushed_at: string | null;
+        };
+        Insert: {
+          profile_id: string;
+          office_id: string;
+          digest_date: string;
+          counts: Json;
+          property_ids?: string[];
+          notified_at?: string;
+          pushed_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm2_digest_log"]["Insert"]>;
+        Relationships: [];
+      };
+      // 20261124000100 — давхардлын далд токен (R16). RLS асаалттай, бодлогогүй: зөвхөн crm2_property_duplicates /
+      // crm2_flag_duplicate (definer) бичиж уншина. crm2_properties руу 2 FK.
+      crm2_duplicate_candidates: {
+        Row: {
+          token: string;
+          office_id: string;
+          property_id: string;
+          match_property_id: string;
+          reasons: string[];
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          token?: string;
+          office_id: string;
+          property_id: string;
+          match_property_id: string;
+          reasons?: string[];
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm2_duplicate_candidates"]["Insert"]>;
+        Relationships: [];
+      };
+      // 20261124000100 — давхардлын тэмдэглэл (P11). Бичих нь зөвхөн RPC (crm2_flag_duplicate / crm2_resolve_duplicate).
+      // Тэмдэглэсэн агент зөвхөн харах эрхтэй илэрцийн мөрийг уншина (бусдыг crm2_property_duplicate_flags нууцалж өгнө).
+      // crm2_properties руу 2 FK — embed-д FK нэр заана.
+      crm2_duplicate_flags: {
+        Row: {
+          id: string;
+          office_id: string;
+          property_id: string;
+          match_property_id: string;
+          /** 'project_floor_area' | 'owner_phone' | 'listing' */
+          reasons: string[];
+          kind: "distinct" | "access";
+          agent_note: string | null;
+          status: "open" | "distinct" | "duplicate" | "dismissed";
+          flagged_by: string;
+          flagged_at: string;
+          decided_by: string | null;
+          decided_at: string | null;
+          decision_note: string | null;
+        };
+        Insert: {
+          id?: string;
+          office_id: string;
+          property_id: string;
+          match_property_id: string;
+          reasons?: string[];
+          kind?: "distinct" | "access";
+          agent_note?: string | null;
+          status?: "open" | "distinct" | "duplicate" | "dismissed";
+          flagged_by: string;
+          flagged_at?: string;
+          decided_by?: string | null;
+          decided_at?: string | null;
+          decision_note?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm2_duplicate_flags"]["Insert"]>;
+        Relationships: [];
+      };
       // actor → profiles: crm2_history_actor_fk.
       crm2_history: {
         Row: {
@@ -4812,6 +4927,25 @@ export type Database = {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["crm2_history"]["Insert"]>;
+        Relationships: [];
+      };
+      // 20261124000100 — сануулгын давтамж (P10). Зөвхөн систем; authenticated эрхгүй.
+      crm2_nudge_log: {
+        Row: {
+          property_id: string;
+          reason: "owner" | "contract" | "contract_file" | "approve";
+          profile_id: string;
+          last_sent: string;
+          times: number;
+        };
+        Insert: {
+          property_id: string;
+          reason: "owner" | "contract" | "contract_file" | "approve";
+          profile_id: string;
+          last_sent: string;
+          times?: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm2_nudge_log"]["Insert"]>;
         Relationships: [];
       };
       crm2_projects: {
@@ -4887,6 +5021,16 @@ export type Database = {
           published_at: string | null;
           published_by: string | null;
           media_synced_at: string | null;
+          // 20261124000100_crm2_staff_columns.sql — source/source_listing_id/client_key-г RPC л тавина
+          // (crm2_properties_origin_guard); unconfirmed RPC-ээс гадуур зөвхөн багасна.
+          source: "manual" | "paste" | "share" | "listing";
+          /** Хуулсан эх зар (listings руу 2 дахь FK — embed-д !crm2_properties_source_listing_id_fkey). */
+          source_listing_id: string | null;
+          client_key: string | null;
+          unconfirmed: string[];
+          parking_spaces: number | null;
+          rent_advance_months: number | null;
+          rent_deposit_months: number | null;
           search_text: string;
           created_by: string;
           created_at: string;
@@ -4941,6 +5085,13 @@ export type Database = {
           published_at?: string | null;
           published_by?: string | null;
           media_synced_at?: string | null;
+          source?: "manual" | "paste" | "share" | "listing";
+          source_listing_id?: string | null;
+          client_key?: string | null;
+          unconfirmed?: string[];
+          parking_spaces?: number | null;
+          rent_advance_months?: number | null;
+          rent_deposit_months?: number | null;
           search_text?: string;
           created_by?: string;
           created_at?: string;
@@ -4948,7 +5099,23 @@ export type Database = {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["crm2_properties"]["Insert"]>;
-        Relationships: [];
+        // listings руу 2 FK (listing_id, source_listing_id) — embed хийхдээ FK нэрийг заавал заана.
+        Relationships: [
+          {
+            foreignKeyName: "crm2_properties_listing_id_fkey";
+            columns: ["listing_id"];
+            isOneToOne: true;
+            referencedRelation: "listings";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "crm2_properties_source_listing_id_fkey";
+            columns: ["source_listing_id"];
+            isOneToOne: true;
+            referencedRelation: "listings";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       crm2_property_media: {
         Row: {
@@ -4963,10 +5130,12 @@ export type Database = {
           caption: string | null;
           sort_order: number;
           is_cover: boolean;
+          /** 20261124000100 — зараас хуулсан зургийн гарал үүсэл (зөвхөн RPC тавина; энэ URL-аар ХЭЗЭЭ Ч татахгүй). */
+          source_public_url: string | null;
           uploaded_by: string;
           created_at: string;
         };
-        // office_id: BEFORE trigger бөглөнө.
+        // office_id: BEFORE trigger бөглөнө. source_public_url-г клиент тавьж чадахгүй (guard тэглэнэ).
         Insert: {
           id?: string;
           office_id?: string;
@@ -4992,6 +5161,8 @@ export type Database = {
           owner_contact_id: string | null;
           owner_note: string | null;
           showing_instructions: string | null;
+          /** 20261124000100 — холбогдоогүй эзний оролт {phone, name, source, source_note, status, at}. Зөвхөн «Эзэн» RPC бичнэ; клиент null болгож л чадна. */
+          owner_pending: Json | null;
           updated_by: string | null;
           updated_at: string;
         };
@@ -5001,6 +5172,7 @@ export type Database = {
           owner_contact_id?: string | null;
           owner_note?: string | null;
           showing_instructions?: string | null;
+          owner_pending?: Json | null;
           updated_by?: string | null;
           updated_at?: string;
         };
@@ -5209,6 +5381,38 @@ export type Database = {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["crm2_tasks"]["Insert"]>;
+        Relationships: [];
+      };
+      // 20261124000100 — UI хэмжилт (P2). Хувийн утга ХАДГАЛАХГҮЙ: meta = ≤20 код түлхүүр, утга нь тоо (<10 000 000),
+      // туг, null эсвэл код. created_at-ийг сервер тавина; минутад 60, өдөрт 2000 хязгаар.
+      // INSERT: өөрийн profile_id, office_id = crm_office_id(); .select()-гүй insert хийнэ (SELECT зөвхөн менежерт).
+      crm2_ui_events: {
+        Row: {
+          id: number;
+          office_id: string;
+          profile_id: string;
+          event: string;
+          flow: "quick" | "full" | "card" | "import" | "share" | "paste" | null;
+          property_id: string | null;
+          duration_ms: number | null;
+          taps: number | null;
+          fields_filled: number | null;
+          meta: Json;
+          created_at: string;
+        };
+        Insert: {
+          office_id: string;
+          profile_id: string;
+          event: string;
+          flow?: "quick" | "full" | "card" | "import" | "share" | "paste" | null;
+          property_id?: string | null;
+          duration_ms?: number | null;
+          taps?: number | null;
+          fields_filled?: number | null;
+          meta?: Json;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["crm2_ui_events"]["Insert"]>;
         Relationships: [];
       };
     };
@@ -6053,8 +6257,14 @@ export type Database = {
       };
       // === crm2 (20261113000100_crm2_foundation): authenticated-д нээлттэй RPC/helper ===
       crm2_activity_editable: { Args: { p_deal: string; p_agent: string; p_created_by: string }; Returns: boolean };
+      /** jsonb Crm2BrokerageApproveResult. p_file_checked (20261124000500): require_file үед false бол татгалзана. */
       crm2_brokerage_approve: {
-        Args: { p_contract: string; p_note?: string | null; p_expected_updated_at?: string | null };
+        Args: {
+          p_contract: string;
+          p_note?: string | null;
+          p_expected_updated_at?: string | null;
+          p_file_checked?: boolean | null;
+        };
         Returns: Json;
       };
       crm2_brokerage_approver: { Args: { p_responsible: string }; Returns: boolean };
@@ -6118,8 +6328,18 @@ export type Database = {
       };
       crm2_contact_editable: { Args: { p_responsible: string }; Returns: boolean };
       crm2_contact_visible: { Args: { p_id: string; p_responsible: string }; Returns: boolean };
+      /** 20261124000300: + p_source (contact.sources код), p_source_note (≤200), p_name_unverified. Нэргүй бол «Нэр баталгаажаагүй». */
       crm2_create_contact: {
-        Args: { p_full_name: string; p_phones: Json; p_note?: string | null; p_agent?: string | null; p_allow_duplicate?: boolean | null };
+        Args: {
+          p_full_name: string | null;
+          p_phones: Json;
+          p_note?: string | null;
+          p_agent?: string | null;
+          p_allow_duplicate?: boolean | null;
+          p_source?: string | null;
+          p_source_note?: string | null;
+          p_name_unverified?: boolean | null;
+        };
         Returns: Json;
       };
       crm2_deal_editable: { Args: { p_agent: string }; Returns: boolean };
@@ -6231,13 +6451,91 @@ export type Database = {
       };
       /** 20261114000100_crm2_publish.sql — нийтийн зар. */
       crm2_publish_blockers: { Args: { p_property: string }; Returns: string[] };
-      /** jsonb { listing_id: uuid, needs_photos: boolean } */
+      /**
+       * jsonb { listing_id: uuid, linked: boolean, needs_photos: boolean }.
+       * 20261124000600: p_link_listing — эх зартай холбох (link_only үед заавал = source_listing_id);
+       * p_replace_photos — холбосон зарын зургийг солих (анхдагч false = зураг хэвээр).
+       */
       crm2_publish_property: {
-        Args: { p_property: string; p_title?: string | null; p_description?: string | null };
+        Args: {
+          p_property: string;
+          p_title?: string | null;
+          p_description?: string | null;
+          p_link_listing?: string | null;
+          p_replace_photos?: boolean | null;
+        };
         Returns: Json;
       };
-      /** Харах эрхгүй бол null. */
+      /** Харах эрхгүй бол null. 20261124000600: + warnings: string[] (нийтлэхийг хаахгүй). */
       crm2_publish_state: { Args: { p_property: string }; Returns: Json };
+      // === 20261124000300…0700 (Staff шуурхай бүртгэл) — authenticated-д нээлттэй ===
+      /** Өмчлөл/иргэний үнэмлэхийн (restricted) баримт харах, нэмэх эрх. */
+      crm2_can_view_restricted_brokerage: { Args: { p_contract: string }; Returns: boolean };
+      /**
+       * jsonb Crm2QuickCreateResult. p_property: crm2_properties баганын нэртэй jsonb + project_name, client_key (uuid);
+       * p_owner: Crm2OwnerInput; p_private: { owner_note, showing_instructions }. client_key-ээр idempotent.
+       */
+      crm2_create_property_quick: {
+        Args: { p_property: Json; p_owner?: Json | null; p_private?: Json | null };
+        Returns: Json;
+      };
+      /** jsonb Crm2OwnerResolveResult (+ cleared). p_owner: Crm2OwnerInput эсвэл { clear: true }. */
+      crm2_set_property_owner: { Args: { p_property: string; p_owner: Json }; Returns: Json };
+      /** Засах эрхтэй хөрөнгийн хадгалсан өгөгдлөөр (≤5). Харах эрхгүй илэрцийн property_id/code/status/agent_name null. */
+      crm2_property_duplicates: {
+        Args: { p_property: string };
+        Returns: {
+          token: string;
+          property_id: string | null;
+          code: string | null;
+          status: Database["public"]["Enums"]["crm2_property_status"] | null;
+          can_open: boolean;
+          reasons: string[];
+          agent_name: string | null;
+        }[];
+      };
+      /** Токеныг сервер тайлна. Буцаах = crm2_duplicate_flags.id. p_kind 'distinct' | 'access'. */
+      crm2_flag_duplicate: {
+        Args: { p_property: string; p_token: string; p_kind?: string | null; p_note?: string | null };
+        Returns: string;
+      };
+      /** Хөрөнгийн давхардлын тэмдэглэл (засах эрхтэнд). Харах эрхгүй илэрцийн match_property_id/match_code null. */
+      crm2_property_duplicate_flags: {
+        Args: { p_property: string };
+        Returns: {
+          id: string;
+          kind: string;
+          status: string;
+          reasons: string[];
+          agent_note: string | null;
+          flagged_at: string;
+          decided_at: string | null;
+          decision_note: string | null;
+          match_property_id: string | null;
+          match_code: string | null;
+          can_open: boolean;
+        }[];
+      };
+      /** p_status: 'distinct' | 'duplicate' | 'dismissed' (менежер / ахлагч). */
+      crm2_resolve_duplicate: { Args: { p_flag: string; p_status: string; p_note?: string | null }; Returns: undefined };
+      /** unconfirmed-аас p_keys-ийг хасна; үлдсэн жагсаалтыг буцаана. */
+      crm2_confirm_property_fields: { Args: { p_property: string; p_keys: string[] }; Returns: string[] };
+      /** jsonb Crm2ImportListingResult. */
+      crm2_create_property_from_listing: { Args: { p_listing: string; p_client_key?: string | null }; Returns: Json };
+      /**
+       * p_items: [{ storage_path, source_path | public_url, sort_order?, is_cover? }] (≤30). Буцаах = бодитоор нэмсэн тоо
+       * (давтагдсаныг алгасна — алгассан зүйлийн хуулсан файлыг TS устгана).
+       */
+      crm2_attach_imported_media: { Args: { p_property: string; p_items: Json }; Returns: number };
+      /** jsonb Crm2PublishPreview; засах эрхгүй бол null. */
+      crm2_publish_preview: { Args: { p_property: string }; Returns: Json };
+      /** Нийтлэх бичвэрийн утасны хэв (lib/crm2/listing-text/phones.ts PHONE_PATTERN_SOURCE-тэй ижил). */
+      crm2_phone_pattern: { Args: Record<string, never>; Returns: string };
+      crm2_has_phone: { Args: { p_text: string | null }; Returns: boolean };
+      crm2_mask_phones: { Args: { p_text: string | null }; Returns: string | null };
+      /** = lib/crm2/checklist.ts PUBLISH_CONFIRM_KEYS. */
+      crm2_publish_confirm_keys: { Args: Record<string, never>; Returns: string[] };
+      crm2_publish_confirm_label: { Args: { p_key: string }; Returns: string };
       /** 20261113000200_crm2_pending_call.sql (тавигдаагүй бол PGRST202 — UI зөөлөн ажиллана). */
       crm2_request_transfer_with_call: {
         Args: { p_property: string; p_contact: string; p_occurred_at?: string | null; p_note?: string | null; p_result?: string | null; p_next_action?: Database["public"]["Enums"]["crm2_task_kind"] | null; p_next_action_due?: string | null; p_next_action_note?: string | null; p_requirement?: string | null; p_reason?: string | null };

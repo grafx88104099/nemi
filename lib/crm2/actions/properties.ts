@@ -16,7 +16,8 @@ import {
   type PropertyStatusInput,
   type PropertyUpdateInput,
 } from "@/lib/crm2/schemas";
-import type { Crm2ActivationCheck, Crm2ApplyOutcome, Crm2Result } from "@/lib/crm2/types";
+import { duplicatesAfterSave } from "@/lib/crm2/queries/duplicates";
+import type { Crm2ActivationCheck, Crm2ApplyOutcome, Crm2PropertyDuplicate, Crm2Result } from "@/lib/crm2/types";
 import type { Database } from "@/types/database";
 
 type PropertyPatch = Database["public"]["Tables"]["crm2_properties"]["Update"];
@@ -31,15 +32,28 @@ async function ensureProjectId(supabase: Crm2Supabase, name: string) {
   return { id: (data as string | null) ?? null, error };
 }
 
-/** Шинэ хөрөнгө (ноорог). Код (P###) ба листлэгч агентыг (анхдагч — өөрөө) DB олгоно. */
+/** crm2_properties_client_key_uq — ижил ноорогийн давтан илгээлт (сүлжээ тасарсны дараа). */
+function isClientKeyReplay(error: { code?: string | null; message?: string | null; details?: string | null } | null): boolean {
+  if (error?.code !== "23505") return false;
+  return `${error.message ?? ""} ${error.details ?? ""}`.includes("crm2_properties_client_key_uq");
+}
+
+/**
+ * Шинэ хөрөнгө (ноорог) — бүрэн формын шууд insert зам (шуурхай бүртгэл нь /api/crm2/quick-create).
+ * Код (P###) ба листлэгч агентыг (анхдагч — өөрөө) DB олгоно. client_key өгвөл давтан илгээлт нэг
+ * хөрөнгө: 23505 (client_key_uq) → өмнө үүссэн id/кодыг буцаана (хувийн талбарыг дахин бичихгүй).
+ * Хадгалсны дараа давхардлыг шалгаж буцаана (R15) — давхардал хадгалалтыг хаахгүй.
+ */
 export async function createProperty(
   input: PropertyCreateInput
-): Promise<Crm2Result<{ id: string; code: string; warning: string | null }>> {
+): Promise<
+  Crm2Result<{ id: string; code: string; warning: string | null; replayed: boolean; duplicates: Crm2PropertyDuplicate[] }>
+> {
   const parsed = propertyCreateSchema.safeParse(input);
   if (!parsed.success) return fail(zodErrorText(parsed.error));
   const session = await crm2Session();
   if (!session) return fail(AUTH_ERROR);
-  const { supabase } = session;
+  const { supabase, userId } = session;
   const { project_name, private: priv, ...fields } = parsed.data;
 
   let projectId = fields.project_id ?? null;
@@ -54,21 +68,37 @@ export async function createProperty(
     .insert({ ...definedOnly(fields), category: fields.category, project_id: projectId })
     .select("id, code")
     .single();
-  if (error || !data) return dbFail("createProperty", error);
 
-  // Хувийн талбарын мөрийг trigger үүсгэсэн — өгсөн бол бөглөнө.
+  let row: { id: string; code: string } | null = data ?? null;
+  let replayed = false;
+  if (error && fields.client_key && isClientKeyReplay(error)) {
+    const prev = await supabase
+      .from("crm2_properties")
+      .select("id, code")
+      .eq("client_key", fields.client_key)
+      .eq("created_by", userId)
+      .maybeSingle();
+    if (prev.error || !prev.data) return dbFail("createProperty replay", prev.error ?? error);
+    row = prev.data;
+    replayed = true;
+  } else if (error || !row) {
+    return dbFail("createProperty", error);
+  }
+
+  // Хувийн талбарын мөрийг trigger үүсгэсэн — өгсөн бол бөглөнө (давтан илгээлтэд дахин бичихгүй).
   let warning: string | null = null;
-  const privPatch = priv ? definedOnly(priv) : {};
+  const privPatch = priv && !replayed ? definedOnly(priv) : {};
   if (Object.keys(privPatch).length > 0) {
-    const res = await supabase.from("crm2_property_private").update(privPatch).eq("property_id", data.id).select("property_id");
+    const res = await supabase.from("crm2_property_private").update(privPatch).eq("property_id", row.id).select("property_id");
     if (res.error || !res.data?.length) {
       if (res.error) console.error("crm2 createProperty private:", res.error.message);
       const reason = res.error ? dbErrorText(res.error) : NOT_FOUND_ERROR;
       warning = `Хөрөнгө бүртгэгдсэн ч эзэн, үзүүлэх зааврыг хадгалж чадсангүй: ${reason}`;
     }
   }
+  const duplicates = await duplicatesAfterSave(supabase, row.id);
   revalidateCrm2();
-  return ok({ id: data.id, code: data.code, warning });
+  return ok({ id: row.id, code: row.code, warning, replayed, duplicates });
 }
 
 /** Хөрөнгийн талбар засах (зөвхөн өгсөн талбар). */
@@ -80,8 +110,20 @@ export async function updateProperty(propertyId: string, input: PropertyUpdateIn
   const session = await crm2Session();
   if (!session) return fail(AUTH_ERROR);
   const { supabase } = session;
-  const { project_name, ...fields } = parsed.data;
+  const { project_name, unconfirmed, ...fields } = parsed.data;
   const patch: PropertyPatch = definedOnly(fields);
+
+  // unconfirmed-ийг зөвхөн БАГАСГАНА (DB origin guard нэмэхийг татгалзана): одоогийн жагсаалтаас
+  // өгсөн жагсаалтад байхгүйг хасна, шинэ түлхүүрийг үл тооно.
+  if (unconfirmed !== undefined) {
+    const cur = await supabase.from("crm2_properties").select("unconfirmed").eq("id", id.data).maybeSingle();
+    if (cur.error) return dbFail("updateProperty unconfirmed", cur.error);
+    if (!cur.data) return fail(NOT_FOUND_ERROR);
+    const keep = new Set<string>(unconfirmed);
+    const current = cur.data.unconfirmed ?? [];
+    const next = current.filter((k) => keep.has(k));
+    if (next.length !== current.length) patch.unconfirmed = next;
+  }
 
   if (project_name && fields.project_id === undefined) {
     const res = await ensureProjectId(supabase, project_name);

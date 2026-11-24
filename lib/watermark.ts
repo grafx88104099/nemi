@@ -135,7 +135,7 @@ async function loadImage(src: string): Promise<HTMLImageElement> {
   return img;
 }
 
-type DecodedImage = { source: CanvasImageSource; width: number; height: number; close?: () => void };
+export type DecodedImage = { source: CanvasImageSource; width: number; height: number; close?: () => void };
 
 /**
  * Blob → зурах боломжтой эх (ImageBitmap эсвэл <img>).
@@ -146,7 +146,7 @@ type DecodedImage = { source: CanvasImageSource; width: number; height: number; 
  * нь дэлгэцийн зурагдалтаас хамаардаггүй тул ард нь ч ажиллана.
  * `imageOrientation: "from-image"` нь <img>-тэй адил EXIF эргэлтийг хүндэтгэнэ.
  */
-async function decodeImageBlob(blob: Blob): Promise<DecodedImage> {
+export async function decodeImageBlob(blob: Blob): Promise<DecodedImage> {
   if (typeof createImageBitmap === "function") {
     try {
       const bmp = await createImageBitmap(blob, { imageOrientation: "from-image" });
@@ -164,7 +164,7 @@ async function decodeImageBlob(blob: Blob): Promise<DecodedImage> {
   }
 }
 
-function newCanvas(w: number, h: number): HTMLCanvasElement {
+export function newCanvas(w: number, h: number): HTMLCanvasElement {
   const c = document.createElement("canvas");
   c.width = w;
   c.height = h;
@@ -228,12 +228,13 @@ function drawTextStamp(ctx: CanvasRenderingContext2D, w: number, h: number, labe
   ctx.restore();
 }
 
-function canvasToJpeg(canvas: HTMLCanvasElement): Promise<Blob> {
+/** Canvas → JPEG blob. quality өгөхгүй бол тамганы анхны чанар (0.88). */
+export function canvasToJpeg(canvas: HTMLCanvasElement, quality: number = JPEG_QUALITY): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       (b) => (b ? resolve(b) : reject(new Error("encode_failed"))),
       "image/jpeg",
-      JPEG_QUALITY
+      quality
     );
   });
 }

@@ -18,10 +18,20 @@ export type Crm2SettingValues = {
   "property.types": Record<string, string>;
   "property.districts": string[];
   "property.features": Record<string, string>;
+  /** Ангиллын чипийн доорх тайлбар (4 ангиллын дурын дэд олонлог). */
+  "property.category_hints": Partial<Record<Crm2PropertyCategory, string>>;
+  "property.duplicate_check": boolean;
+  "property.min_images": number;
   "brokerage.require_owner": boolean;
   "brokerage.require_file": boolean;
   "brokerage.remind_days_before": number[];
   "brokerage.on_expiry": "contract_ended" | "keep";
+  "brokerage.default_term_months": number;
+  /** Ангилал → '<төрөл>:<утга>' (percent:3, rent_x:1, fixed:500000). Хоосон = урьдчилан бөглөхгүй. */
+  "brokerage.default_commission": Partial<Record<Crm2PropertyCategory, string>>;
+  "brokerage.activation_mode": "auto" | "manual";
+  "brokerage.require_special_terms": boolean;
+  "brokerage.require_ownership_doc": boolean;
   "approvals.team_lead": boolean;
   "approvals.office_admin": boolean;
   "approvals.allow_self": "nobody" | "managers" | "all";
@@ -30,6 +40,8 @@ export type Crm2SettingValues = {
   "roles.finance": CrmRole[];
   "contact.foreign_deal": "deny" | "allow";
   "contact.require_phone": boolean;
+  /** Эзний эх сурвалжийн код → нэр ('other' заавал). */
+  "contact.sources": Record<string, string>;
   "deal.open_property_statuses": Crm2PropertyStatus[];
   "deal.auto_advance": boolean;
   "deal.property_agents_can_view": boolean;
@@ -42,6 +54,13 @@ export type Crm2SettingValues = {
   "media.max_video_mb": number;
   "docs.max_file_mb": number;
   "docs.max_files_per_contract": number;
+  "staff.quick_add": "off" | "pilot" | "all";
+  /** Туршилтын агентуудын profile id (≤ 20). */
+  "staff.quick_add_pilot": string[];
+  "digest.scope": "off" | "pilot" | "all";
+  "digest.owner_days": number;
+  "digest.pending_days": number;
+  "ai.listing_parse": boolean;
 };
 
 export type Crm2SettingKey = keyof Crm2SettingValues;
@@ -80,11 +99,27 @@ export const CRM2_SETTING_DEFAULTS: Crm2SettingValues = {
     balcony: "Тагт",
     elevator: "Лифт",
     pets: "Тэжээвэр амьтан зөвшөөрнө",
+    security: "Харуул, камертай",
+    storage: "Агуулахтай",
+    kids_playground: "Хүүхдийн тоглоомын талбай",
   },
+  // Түрээслэх ба хөлслөхийн ялгааг оффис тодорхойлтол «Хөлслөх»-д тайлбар өгөхгүй.
+  "property.category_hints": {
+    rent: "Сарын түрээсээр",
+    managed_rent: "Түрээс + оффисын менежментийн үйлчилгээ",
+    sale: "Худалдах, нийт үнээр",
+  },
+  "property.duplicate_check": true,
+  "property.min_images": 1,
   "brokerage.require_owner": true,
   "brokerage.require_file": true,
   "brokerage.remind_days_before": [30, 7, 1],
   "brokerage.on_expiry": "contract_ended",
+  "brokerage.default_term_months": 12,
+  "brokerage.default_commission": {},
+  "brokerage.activation_mode": "auto",
+  "brokerage.require_special_terms": true,
+  "brokerage.require_ownership_doc": false,
   "approvals.team_lead": true,
   "approvals.office_admin": false,
   "approvals.allow_self": "managers",
@@ -93,6 +128,18 @@ export const CRM2_SETTING_DEFAULTS: Crm2SettingValues = {
   "roles.finance": ["finance"],
   "contact.foreign_deal": "deny",
   "contact.require_phone": true,
+  "contact.sources": {
+    digital: "Онлайн суваг (сошиал, сайт)",
+    referral: "Танилаар (реферал)",
+    prospecting: "Идэвхтэй хайлт",
+    walk_in: "Оффисоор ирсэн",
+    open_house: "Нээлттэй үзэлт, арга хэмжээ",
+    listing_inquiry: "Зарын лавлагаа",
+    personal_network: "Хувийн сүлжээ",
+    international: "Олон улсын / түнш",
+    pm_cross: "Менежментийн үйлчилгээнээс",
+    other: "Бусад (тайлбартай)",
+  },
   "deal.open_property_statuses": ["active"],
   "deal.auto_advance": true,
   "deal.property_agents_can_view": true,
@@ -116,6 +163,12 @@ export const CRM2_SETTING_DEFAULTS: Crm2SettingValues = {
   "media.max_video_mb": 50,
   "docs.max_file_mb": 20,
   "docs.max_files_per_contract": 20,
+  "staff.quick_add": "off",
+  "staff.quick_add_pilot": [],
+  "digest.scope": "pilot",
+  "digest.owner_days": 1,
+  "digest.pending_days": 2,
+  "ai.listing_parse": false,
 };
 
 export const CRM2_SETTING_KEYS = Object.keys(CRM2_SETTING_DEFAULTS) as Crm2SettingKey[];
@@ -139,10 +192,18 @@ export const CRM2_SETTING_LABEL: Record<Crm2SettingKey, string> = {
   "property.types": "Хөрөнгийн төрөл",
   "property.districts": "Дүүргийн жагсаалт",
   "property.features": "Онцлогийн жагсаалт",
+  "property.category_hints": "Ангиллын тайлбар (сонголтын доор)",
+  "property.duplicate_check": "Давхардсан хөрөнгө шалгах",
+  "property.min_images": "Зургийн доод тоо (идэвхжүүлэх, нийтлэх)",
   "brokerage.require_owner": "Зуучлалын гэрээнд эзэн заавал",
   "brokerage.require_file": "Зуучлалын гэрээнд файл заавал",
   "brokerage.remind_days_before": "Гэрээ дуусахаас өмнө сануулах хоног",
   "brokerage.on_expiry": "Гэрээ дуусахад хөрөнгийн төлөв",
+  "brokerage.default_term_months": "Гэрээний анхдагч хугацаа (сар)",
+  "brokerage.default_commission": "Шимтгэлийн анхдагч (ангиллаар)",
+  "brokerage.activation_mode": "Гэрээ батлагдсаны дараах идэвхжүүлэлт",
+  "brokerage.require_special_terms": "Онцгой нөхцөл эсвэл «онцгой нөхцөлгүй» заавал",
+  "brokerage.require_ownership_doc": "Өмчлөлийн баримт заавал",
   "approvals.team_lead": "Багийн ахлагч гэрээ, хүсэлт батлах",
   "approvals.office_admin": "Оффисын админ гэрээ, хүсэлт батлах",
   "approvals.allow_self": "Өөрийн гэрээ, хүсэлтийг батлах",
@@ -151,6 +212,7 @@ export const CRM2_SETTING_LABEL: Record<Crm2SettingKey, string> = {
   "roles.finance": "Санхүүгийн эрхтэй дүрүүд",
   "contact.foreign_deal": "Өөр агентын харилцагчтай хэлцэл нээх",
   "contact.require_phone": "Харилцагчийн утас заавал",
+  "contact.sources": "Эзний эх сурвалжийн ангилал",
   "deal.open_property_statuses": "Хэлцэл нээж болох хөрөнгийн төлөв",
   "deal.auto_advance": "Хэлцлийн шатыг автоматаар урагшлуулах",
   "deal.property_agents_can_view": "Хөрөнгийн 3 агент хэлцлийг харах",
@@ -163,6 +225,12 @@ export const CRM2_SETTING_LABEL: Record<Crm2SettingKey, string> = {
   "media.max_video_mb": "Бичлэгийн дээд хэмжээ (МБ)",
   "docs.max_file_mb": "Гэрээний файлын дээд хэмжээ (МБ)",
   "docs.max_files_per_contract": "Нэг гэрээний файлын дээд тоо",
+  "staff.quick_add": "Шуурхай бүртгэл",
+  "staff.quick_add_pilot": "Шуурхай бүртгэлийн туршилтын агентууд",
+  "digest.scope": "Өдрийн дутуу бүртгэлийн сануулга",
+  "digest.owner_days": "Эзэн тодорхойгүй хөрөнгийг сануулах хоног",
+  "digest.pending_days": "Батлагдаагүй гэрээг сануулах хоног",
+  "ai.listing_parse": "Зарын текстийг AI-аар задлах",
 };
 
 /** Сонголттой тохиргооны утгын нэр. */
@@ -171,6 +239,12 @@ export const CRM2_SETTING_OPTION_LABEL: Partial<Record<Crm2SettingKey, Record<st
   "brokerage.on_expiry": { contract_ended: "«Гэрээ дууссан» болгох", keep: "Төлөвийг хэвээр үлдээх" },
   "approvals.allow_self": { nobody: "Хэн ч үгүй", managers: "Зөвхөн менежер", all: "Бүгд" },
   "contact.foreign_deal": { deny: "Хориглох (шилжүүлэх хүсэлт)", allow: "Зөвшөөрөх" },
+  "brokerage.activation_mode": {
+    auto: "Батлагдмагц автоматаар идэвхжүүлэх",
+    manual: "Агент өөрөө «Идэвхжүүлэх» дарна",
+  },
+  "staff.quick_add": { off: "Унтраастай", pilot: "Туршилтын агентуудад", all: "Бүх агентад" },
+  "digest.scope": { off: "Илгээхгүй", pilot: "Туршилтын агентуудад", all: "Бүх агентад" },
 };
 
 /** Тоон тохиргооны хязгаар (crm2_set_setting-тэй ижил). */
@@ -182,6 +256,10 @@ export const CRM2_SETTING_NUMBER_RANGE: Partial<Record<Crm2SettingKey, [number, 
   "media.max_video_mb": [1, 50],
   "docs.max_file_mb": [1, 20],
   "docs.max_files_per_contract": [1, 100],
+  "property.min_images": [0, 20],
+  "brokerage.default_term_months": [1, 60],
+  "digest.owner_days": [0, 14],
+  "digest.pending_days": [1, 14],
 };
 
 // ── Уншигч ─────────────────────────────────────────────────────────────────
@@ -199,6 +277,9 @@ function sameShape(value: unknown, fallback: unknown): boolean {
 function cleanValue(key: Crm2SettingKey, value: unknown): unknown {
   const fallback = CRM2_SETTING_DEFAULTS[key];
   if (value === undefined || value === null || !sameShape(value, fallback)) return fallback;
+  // Сонголттой тохиргоо: мэдэгдэхгүй утга → анхдагч (дэлгэц, feature flag буруу утгаар ажиллахгүй).
+  const options = CRM2_SETTING_OPTION_LABEL[key];
+  if (options && typeof value === "string" && !Object.prototype.hasOwnProperty.call(options, value)) return fallback;
   if (Array.isArray(fallback)) {
     const want = typeof (fallback as unknown[])[0];
     const arr = (value as unknown[]).filter((x) =>

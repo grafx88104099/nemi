@@ -5,6 +5,21 @@ import type { Crm2BrokerageRow, Crm2PropertyRow } from "@/lib/crm2/types";
 
 import {
   brokerageHasInput,
+  confirmFields,
+  DEFAULT_PROPERTY_TYPE,
+  fieldsFilled,
+  fromCreateDraft,
+  hasRentTerms,
+  isUnconfirmed,
+  normalizeUnconfirmed,
+  operatingCostIsSimple,
+  parseRecent,
+  previewPerM2,
+  pushRecent,
+  recentDistrictsKey,
+  toCreateDraft,
+  unconfirmedKeyOf,
+  validationInput,
   brokeragePayload,
   brokerageSubmitMissing,
   brokerageToForm,
@@ -88,6 +103,13 @@ function row(over: Partial<Crm2PropertyRow> = {}): Crm2PropertyRow & { project: 
     published_at: null,
     published_by: null,
     media_synced_at: null,
+    source: "manual",
+    source_listing_id: null,
+    client_key: null,
+    unconfirmed: [],
+    parking_spaces: null,
+    rent_advance_months: null,
+    rent_deposit_months: null,
     search_text: "",
     created_by: ME,
     created_at: "2026-11-01T00:00:00Z",
@@ -338,5 +360,204 @@ describe("жижиг туслахууд", () => {
     const o = { a: "1", b: "2" };
     expect(omitKey(o, "a")).toEqual({ b: "2" });
     expect(omitKey(o, "z")).toBe(o);
+  });
+});
+
+describe("P1: анхдагч утга, шинэ талбар", () => {
+  it("шинэ маягт: орон сууц, ₮/сар зардал, баталгаажаагүй хоосон", () => {
+    const f = emptyPropertyForm(ME);
+    expect(f.property_type).toBe(DEFAULT_PROPERTY_TYPE);
+    expect(f.property_type).toBe("apartment");
+    expect(operatingCostIsSimple(f)).toBe(true);
+    expect(f.unconfirmed).toEqual([]);
+    expect(f.parking_spaces).toBe("");
+  });
+
+  it("хөлслөх ангилал анхдагчаар сарын үнэ", () => {
+    expect(withCategory(emptyPropertyForm(ME), "lease").price_period).toBe("month");
+    expect(withCategory(emptyPropertyForm(ME), "sale").price_period).toBe("total");
+  });
+
+  it("зогсоол, түрээсийн нөхцөл, баталгаажаагүй жагсаалт payload-д", () => {
+    const f: PropertyFormState = {
+      ...withCategory(emptyPropertyForm(ME), "rent"),
+      parking_spaces: "0",
+      rent_advance_months: "1",
+      rent_deposit_months: "2",
+      unconfirmed: ["price", "bogus", "district", "price"],
+    };
+    const p = propertyPayload(f);
+    expect(p.parking_spaces).toBe(0);
+    expect(p.rent_advance_months).toBe(1);
+    expect(p.rent_deposit_months).toBe(2);
+    // UNCONFIRMABLE_KEYS-ийн дарааллаар, давхардал ба мэдэгдэхгүй түлхүүргүй.
+    expect(p.unconfirmed).toEqual(["district", "price"]);
+    expect(propertyCreateSchema.safeParse(p).success).toBe(true);
+  });
+
+  it("DB мөрөөс шинэ баганууд; өөрчлөөгүй бол diff хоосон", () => {
+    const f = propertyToForm(row({ parking_spaces: 2, rent_advance_months: 1, rent_deposit_months: 0, unconfirmed: ["price", "area_m2"] }));
+    expect(f.parking_spaces).toBe("2");
+    expect(f.rent_deposit_months).toBe("0");
+    expect(f.unconfirmed).toEqual(["area_m2", "price"]);
+    expect(diffPayload(propertyPayload(f), propertyPayload(f))).toEqual({});
+  });
+
+  it("засахад баталгаажуулалт зөвхөн жагсаалтыг багасгана", () => {
+    const before = propertyToForm(row({ unconfirmed: ["price", "area_m2"] }));
+    const after = { ...before, unconfirmed: confirmFields(before.unconfirmed, ["price"]) };
+    const diff = diffPayload(propertyPayload(before), propertyPayload(after));
+    expect(diff).toEqual({ unconfirmed: ["area_m2"] });
+    expect(propertyUpdateSchema.safeParse(diff).success).toBe(true);
+  });
+
+  it("түрээсийн нөхцөл зөвхөн түрээсийн ангилалд", () => {
+    expect(hasRentTerms("rent")).toBe(true);
+    expect(hasRentTerms("lease")).toBe(true);
+    expect(hasRentTerms("managed_rent")).toBe(true);
+    expect(hasRentTerms("sale")).toBe(false);
+    expect(hasRentTerms("")).toBe(false);
+  });
+
+  it("хуучин $ эсвэл өдрийн зардал энгийн мөр биш", () => {
+    expect(operatingCostIsSimple({ operating_cost_currency: "USD", operating_cost_period: "month" })).toBe(false);
+    expect(operatingCostIsSimple({ operating_cost_currency: "MNT", operating_cost_period: "day" })).toBe(false);
+  });
+});
+
+describe("баталгаажаагүй (автомат) утга", () => {
+  it("маягтын түлхүүр → unconfirmed түлхүүр", () => {
+    expect(unconfirmedKeyOf("project_name")).toBe("project");
+    expect(unconfirmedKeyOf("project_id")).toBe("project");
+    expect(unconfirmedKeyOf("lng")).toBe("lat");
+    expect(unconfirmedKeyOf("price")).toBe("price");
+    expect(unconfirmedKeyOf("pin_address")).toBeNull();
+    expect(unconfirmedKeyOf("condition")).toBeNull();
+  });
+  it("өөрчилсөн талбарыг хасна, бусдыг үлдээнэ", () => {
+    const list = ["project", "price", "lat"];
+    expect(confirmFields(list, ["project_name"])).toEqual(["price", "lat"]);
+    expect(confirmFields(list, ["lng", "price"])).toEqual(["project"]);
+    expect(confirmFields(list, ["condition"])).toEqual(list);
+    expect(isUnconfirmed(list, "project_id")).toBe(true);
+    expect(isUnconfirmed(list, "area_m2")).toBe(false);
+  });
+  it("normalizeUnconfirmed: null → []", () => {
+    expect(normalizeUnconfirmed(null)).toEqual([]);
+  });
+});
+
+describe("blur шалгалт ба нийт ↔ м²", () => {
+  it("маягтаас field-validation-ийн оролт", () => {
+    const v = validationInput({
+      ...withCategory(emptyPropertyForm(ME), "sale"),
+      price: "350,000,000",
+      area_m2: "81,47",
+      floor: "9",
+      building_floors: "5",
+    });
+    expect(v).toMatchObject({ category: "sale", price: 350000000, area_m2: 81.47, floor: 9, building_floors: 5, currency: "MNT" });
+    expect(validationInput(emptyPropertyForm(ME)).category).toBeNull();
+    expect(validationInput({ ...emptyPropertyForm(ME), price: "гурав" }).price).toBeNull();
+  });
+  it("нийт үнээс м²-ийн үнэ ба эсрэгээр", () => {
+    expect(previewPerM2({ price: "350000000", area_m2: "70", price_basis: "total" })).toBe(5000000);
+    expect(previewPerM2({ price: "5000000", area_m2: "", price_basis: "per_m2" })).toBe(5000000);
+    expect(previewPerM2({ price: "350000000", area_m2: "", price_basis: "total" })).toBeNull();
+    expect(previewTotal({ price: "5000000", area_m2: "70", price_basis: "per_m2" })).toBe(350000000);
+  });
+});
+
+describe("сүүлийн дүүрэг", () => {
+  it("эхэнд нэмж, давхардалгүй, 3 хүртэл", () => {
+    expect(pushRecent([], "Хан-Уул")).toEqual(["Хан-Уул"]);
+    expect(pushRecent(["А", "Б", "В"], "Б")).toEqual(["Б", "А", "В"]);
+    expect(pushRecent(["А", "Б", "В"], "Г")).toEqual(["Г", "А", "Б"]);
+    expect(pushRecent(["А"], "  ")).toEqual(["А"]);
+  });
+  it("localStorage-ийн утгыг шүүнэ (буруу JSON, жагсаалтад байхгүй дүүрэг)", () => {
+    expect(parseRecent(null, ["А"])).toEqual([]);
+    expect(parseRecent("{bad", ["А"])).toEqual([]);
+    expect(parseRecent(JSON.stringify(["А", 5, "Х", "Б", "А"]), ["А", "Б"])).toEqual(["А", "Б"]);
+  });
+  it("хэрэглэгч бүрт тусдаа, crm2: угтвартай (гарахад устна)", () => {
+    expect(recentDistrictsKey(ME)).toBe(`crm2:recent-districts:${ME}`);
+  });
+});
+
+describe("хэмжилт: бөглөсөн талбар", () => {
+  it("зөвхөн тоо", () => {
+    expect(fieldsFilled(emptyPropertyForm(ME))).toBe(0);
+    const f = { ...withCategory(emptyPropertyForm(ME), "rent"), price: "3000000", lat: 47.9, lng: 106.9, features: ["balcony"] };
+    expect(fieldsFilled(f)).toBe(4);
+  });
+});
+
+describe("утсан дээрх ноорог (P5)", () => {
+  const owner = { id: OTHER, name: "Бат", code: "C001", phone: "99112233" };
+  const parts = () => ({
+    form: { ...withCategory(emptyPropertyForm(ME), "sale"), price: "350000000", address_detail: "3-р байр, 45 тоот", district: "Хан-Уул" },
+    priv: { owner, owner_note: "Оройн 6-аас хойш", showing_instructions: "Түлхүүр жижүүрт" },
+    brokerage: { ...emptyBrokerageForm(), number: "B010", commission_type: "percent" as const, commission_value: "3" },
+    brokerageOwner: null,
+    brokerageOwnerTouched: false,
+    links: [{ id: "l1", url: "https://youtu.be/x" }],
+  });
+
+  it("хаяг, эзэн зөвхөн хувийн хэсэгт; нийтийн хэсэгт ил бичигдэхгүй", () => {
+    const d = toCreateDraft(parts());
+    expect(d.form.address_detail).toBe("");
+    expect(JSON.stringify(d.form)).not.toContain("тоот");
+    expect(JSON.stringify(d.form)).not.toContain("99112233");
+    expect(d.private.address_detail).toBe("3-р байр, 45 тоот");
+    expect(d.private.owner).toEqual(owner);
+    expect(d.form.brokerage.number).toBe("B010");
+  });
+
+  it("ноорог ↔ маягт буцаж ижил (бүрэн ↔ шуурхай нэг бичлэг)", () => {
+    const p = parts();
+    const d = toCreateDraft(p);
+    const back = fromCreateDraft(JSON.parse(JSON.stringify(d.form)), JSON.parse(JSON.stringify(d.private)), ME);
+    expect(back.form).toEqual(p.form);
+    expect(back.priv).toEqual(p.priv);
+    expect(back.brokerage).toEqual(p.brokerage);
+    expect(back.links).toEqual(p.links);
+    expect(back.quickPhone).toBeNull();
+  });
+
+  it("буруу/хуучин бичлэгийг аюулгүй уншина", () => {
+    const back = fromCreateDraft(
+      { category: "bogus", currency: "EUR", price_period: "week", lat: "47", lng: 106, features: ["parking", 3], unconfirmed: ["price", "x"], extra: 1 },
+      { owner: { id: 5 }, address_detail: 7 },
+      ME
+    );
+    expect(back.form.category).toBe("");
+    expect(back.form.currency).toBe("MNT");
+    expect(back.form.price_period).toBe("total");
+    expect(back.form.lat).toBeNull();
+    expect(back.form.lng).toBeNull();
+    expect(back.form.features).toEqual(["parking"]);
+    expect(back.form.unconfirmed).toEqual(["price"]);
+    expect(back.form.address_detail).toBe("");
+    expect(back.priv.owner).toBeNull();
+    expect("extra" in back.form).toBe(false);
+    expect(fromCreateDraft(null, null, ME).form).toEqual(emptyPropertyForm(ME));
+  });
+
+  it("шуурхай бүртгэлийн дугаар эзэн сонгогдтол хадгалагдана", () => {
+    const back = fromCreateDraft({}, { owner_phone: " 9911 2233 " }, ME);
+    expect(back.quickPhone).toBe("9911 2233");
+    const p = parts();
+    expect(toCreateDraft({ ...p, priv: { ...p.priv, owner: null } }, back.quickPhone).private.owner_phone).toBe("9911 2233");
+    // Эзэн сонгосон бол дугаарыг дахин хадгалахгүй.
+    expect(toCreateDraft(p, back.quickPhone).private.owner_phone).toBeUndefined();
+  });
+
+  it("гэрээний эзнийг гараар сольсон эсэх", () => {
+    const p = parts();
+    const d = toCreateDraft({ ...p, brokerageOwner: owner, brokerageOwnerTouched: true });
+    const back = fromCreateDraft(d.form, d.private, ME);
+    expect(back.brokerageOwnerTouched).toBe(true);
+    expect(back.brokerageOwner).toEqual(owner);
   });
 });

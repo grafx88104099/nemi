@@ -1,36 +1,45 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
-import { Building2, FileSignature, Images, KeyRound, MapPinned, Ruler, ScrollText, Send, UsersRound } from "lucide-react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Building2, FileSignature, Images, KeyRound, MapPinned, Ruler, ScrollText, Send, UsersRound, Zap } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { Button, buttonClasses } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NumberInput } from "@/components/ui/number-input";
 import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
+import { DuplicateNotice } from "@/components/crm2/staff/duplicates/DuplicateNotice";
 import { createBrokerageDraft, submitBrokerage } from "@/lib/crm2/actions/brokerage";
 import { addPropertyVideoLink } from "@/lib/crm2/actions/media";
 import { createProperty, updateProperty, updatePropertyPrivate } from "@/lib/crm2/actions/properties";
+import { fieldStage } from "@/lib/crm2/checklist";
 import { ubToday } from "@/lib/crm2/datetime";
+import { getBlob, makeTitleHint, PRIVATE_LOST_TEXT, putBlob, type DraftMedia, type LoadedDraft } from "@/lib/crm2/device/draft-store";
+import { prepareDocPage } from "@/lib/crm2/device/image-prep";
+import { enqueue, listQueue, startQueue, whenIdle } from "@/lib/crm2/device/upload-queue";
+import { useKeyboardInset, useScrollFocusedIntoView } from "@/lib/crm2/device/viewport";
+import { issuesByField, validateFields } from "@/lib/crm2/field-validation";
 import { validateDocFile } from "@/lib/crm2/files";
 import {
   categoryLabel,
   CURRENCIES,
   CURRENCY_LABEL,
-  CURRENCY_SYMBOL,
-  PRICE_BASES,
-  PRICE_BASIS_LABEL,
   PRICE_PERIOD_LABEL,
   PROPERTY_AGENT_ROLE_LABEL,
   PROPERTY_AGENT_ROLES,
   PROPERTY_CATEGORIES,
+  SAVE_DRAFT_LABEL,
+  STAGE_TAG_LABEL,
+  VIEW_NOTE_LABEL,
   type PropertyAgentRole,
 } from "@/lib/crm2/labels";
-import { formatPrice } from "@/lib/crm2/money";
 import { crm2Paths, type Crm2Panel } from "@/lib/crm2/paths";
+import { formatPhone } from "@/lib/crm2/phone";
 import type { PropertyDetail, PropertyPrivate } from "@/lib/crm2/queries/properties";
+import { dbErrorField } from "@/lib/crm2/result";
 import {
   brokerageCreateSchema,
   type PropertyCreateInput,
@@ -39,27 +48,45 @@ import {
 } from "@/lib/crm2/schemas";
 import { fileLimits, settingOptions, type Crm2Settings } from "@/lib/crm2/settings";
 import { uploadBrokerageFile, uploadMany, uploadPropertyMedia } from "@/lib/crm2/storage";
-import type { Crm2Currency, Crm2PriceBasis, Crm2PricePeriod, Crm2StaffMember } from "@/lib/crm2/types";
+import type { Crm2Currency, Crm2PricePeriod, Crm2PropertyDuplicate, Crm2StaffMember } from "@/lib/crm2/types";
+import { fmtShortDateTime, fmtTime } from "@/lib/format";
 
 import { AgentSelect } from "./AgentSelect";
 import { brokerageResponsibleAllowed, type BrokerageResponsibleCtx } from "@/components/crm2/deals/types";
 
 import { BrokerageFields, DocList } from "./BrokerageFields";
-import { ChoiceChips, FieldNote, FormAlert, FormField, FormSection, Textarea, ToggleChips } from "./fields";
+import {
+  ChoiceChips,
+  FieldNote,
+  FormAlert,
+  FormField,
+  FormSection,
+  StageTag,
+  SuggestionChips,
+  Textarea,
+  ToggleChips,
+} from "./fields";
+import { FloorField } from "./FloorField";
 import {
   brokerageHasInput,
   brokeragePayload,
   brokerageSubmitMissing,
+  confirmFields,
   diffPayload,
+  draftTitleParts,
   emptyBrokerageForm,
   emptyPrivateForm,
   emptyPropertyForm,
   fieldErrors,
+  fieldsFilled,
+  fromCreateDraft,
+  hasRentTerms,
+  isUnconfirmed,
   missingSentence,
   newLocalId,
   omitKey,
-  parseNumberInput,
-  previewTotal,
+  operatingCostIsSimple,
+  parseRecent,
   pricePeriodMismatch,
   pricePeriodOptions,
   privatePayload,
@@ -68,22 +95,33 @@ import {
   propertyInputErrors,
   propertyPayload,
   propertyToForm,
+  pushRecent,
+  recentDistrictsKey,
   sameAgentConflict,
+  toCreateDraft,
+  validationInput,
   withCategory,
   type BrokerageFormState,
+  type CreateDraftForm,
+  type CreateDraftPrivate,
   type FieldNoteKey,
   type OwnerRef,
   type PrivateFormState,
   type PropertyFormState,
 } from "./form-model";
 import { OwnerPicker } from "./OwnerPicker";
-import { EMPTY_MEDIA_QUEUE, MediaQueue, queueCoverId, type MediaQueueValue } from "./MediaQueue";
+import { EMPTY_MEDIA_QUEUE, MediaQueue, queueCoverId, type MediaQueueValue, type QueuedFile } from "./MediaQueue";
 import { PinField } from "./PinField";
+import { PriceField } from "./PriceField";
 import { SuggestInput } from "./SuggestInput";
 import { loadLocationSuggestions, loadProjectSuggestions } from "./suggest-loaders";
+import { trackUi, useCreateDraft, useStaffDraftKey } from "./useCreateDraft";
 
 /** Схемийн шалгалтад (property_id үүсээгүй үед) түр id. */
 const PLACEHOLDER_ID = "00000000-0000-4000-8000-000000000000";
+
+/** Хадгалсны дараа зураг хуулахыг хүлээх дээд хугацаа — дараа нь дараалал өөрөө үргэлжлүүлнэ. */
+const UPLOAD_WAIT_MS = 90_000;
 
 type EditProperty = PropertyDetail["property"];
 
@@ -109,6 +147,16 @@ type Props =
       canEditPrivate: boolean;
     });
 
+type InnerProps = Props & { clientKey: string | null };
+
+type CreateResultData = {
+  id: string;
+  code: string;
+  warning: string | null;
+  replayed?: boolean;
+  duplicates?: Crm2PropertyDuplicate[];
+};
+
 function ownerFromPrivate(p: PropertyPrivate | null): OwnerRef | null {
   if (!p?.owner_contact_id) return null;
   if (!p.owner) return { id: p.owner_contact_id, name: "Харилцагч" };
@@ -122,15 +170,105 @@ function privateToForm(p: PropertyPrivate | null): PrivateFormState {
 
 const fid = (key: string) => `sf-${key.replace(/^private\./, "").replace(/\./g, "-")}`;
 
+/** DB-ийн алдааны талбар (dbErrorField) → маягтын алдааны түлхүүр. */
+function formErrorKey(field: string): string {
+  if (field === "owner" || field.startsWith("owner.")) return "private.owner_contact_id";
+  if (field === "project_id" || field === "project") return "project_name";
+  if (field === "lng") return "lat";
+  if (field === "building_floors") return "floor";
+  return field;
+}
+
+function focusField(key: string) {
+  window.requestAnimationFrame(() => {
+    const el = document.getElementById(fid(key));
+    if (!el) return;
+    el.focus({ preventScroll: true });
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+  });
+}
+
+/** Хэрэглэгч бүрийн сүүлийн дүүргүүд (localStorage — сервер дээр null). */
+const noopSubscribe = () => () => undefined;
+function useStoredString(key: string): string | null {
+  return React.useSyncExternalStore(
+    noopSubscribe,
+    () => {
+      try {
+        return window.localStorage.getItem(key);
+      } catch {
+        return null;
+      }
+    },
+    () => null
+  );
+}
+
+function blobsToQueue(list: DraftMedia[]): Promise<{ files: QueuedFile[]; blobs: Record<string, DraftMedia> }> {
+  return Promise.all(
+    list.map(async (m) => {
+      const blob = await getBlob(m.blobKey).catch(() => null);
+      if (!blob) return null;
+      const file = blob instanceof File ? blob : new File([blob], m.name, { type: blob.type });
+      const q: QueuedFile = { id: m.id, file, kind: m.kind, preview: URL.createObjectURL(file), w: m.w || undefined, h: m.h || undefined };
+      return { q, m };
+    })
+  ).then((rows) => {
+    const files: QueuedFile[] = [];
+    const blobs: Record<string, DraftMedia> = {};
+    for (const r of rows) {
+      if (!r) continue;
+      files.push(r.q);
+      blobs[r.q.id] = r.m;
+    }
+    return { files, blobs };
+  });
+}
+
 /**
  * S02 — Staff хөрөнгө нэмэх ба засах маягт. Шинэ хөрөнгө үргэлж НООРОГ болж
- * үүснэ; медиа, зуучлалын гэрээ хөрөнгө үүссэний дараа дарааллаар хадгалагдана.
- * Засах горимд зөвхөн өөрчлөгдсөн талбарыг илгээнэ; медиа, гэрээ тусдаа хэсэгт.
+ * үүснэ; бөглөсөн бүхэн утсан дээр автоматаар хадгалагдана (P5). Медиа хөрөнгө үүссэний дараа
+ * upload дараалалаар, гэрээ шууд хадгалагдана. Засах горимд зөвхөн өөрчлөгдсөн талбарыг илгээнэ.
  */
 export function StaffForm(props: Props) {
-  const { panel, officeId, me, settings, staff, canReassign, responsibleCtx } = props;
+  if (props.mode === "create") return <CreateGate {...props} />;
+  return <StaffFormInner {...props} clientKey={null} />;
+}
+
+function CreateGate(props: Props & { mode: "create" }) {
+  const paths = React.useMemo(() => crm2Paths(props.panel), [props.panel]);
+  const clientKey = useStaffDraftKey(paths);
+  if (!clientKey) {
+    return (
+      <p role="status" className="py-10 text-center text-sm text-muted">
+        Маягтыг бэлдэж байна…
+      </p>
+    );
+  }
+  // Ноорог бүр (clientKey) өөрийн маягт — «Шинээр эхлэх» бүрэн цэвэр маягт өгнө.
+  return <StaffFormInner key={clientKey} {...props} clientKey={clientKey} />;
+}
+
+/**
+ * «Шуурхай бүртгэл» холбоос — ижил ноорогоор (?draft) шуурхай дэлгэц рүү (feature flag асаалттай
+ * үед л StaffFormScreen харуулна).
+ */
+export function QuickAddLink({ panel }: { panel: Crm2Panel }) {
+  const sp = useSearchParams();
+  const draft = sp.get("draft");
+  const href = crm2Paths(panel).staffNew(draft ? { draft } : undefined);
+  return (
+    <Link href={href} className={buttonClasses("outline", "touch")}>
+      <Zap className="size-4" aria-hidden />
+      Шуурхай бүртгэл
+    </Link>
+  );
+}
+
+function StaffFormInner(props: InnerProps) {
+  const { panel, officeId, me, settings, staff, canReassign, responsibleCtx, clientKey } = props;
   const router = useRouter();
-  const paths = crm2Paths(panel);
+  const paths = React.useMemo(() => crm2Paths(panel), [panel]);
   const isEdit = props.mode === "edit";
   const editProperty = isEdit ? props.property : null;
   const editPrivate = isEdit ? props.private : null;
@@ -159,46 +297,168 @@ export function StaffForm(props: Props) {
   }
 
   const [errors, setErrors] = React.useState<Record<string, string>>({});
+  const [touched, setTouched] = React.useState<ReadonlySet<string>>(() => new Set());
   const [serverError, setServerError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [step, setStep] = React.useState<string | null>(null);
+  const [processing, setProcessing] = React.useState(false);
 
   // Зөвхөн шинэ хөрөнгөд: медиа ба гэрээ хөрөнгө үүссэний дараа хадгалагдана.
   const [media, setMedia] = React.useState<MediaQueueValue>(EMPTY_MEDIA_QUEUE);
+  /** Дараалсан файл (QueuedFile.id) → утсан дээрх blob (ноорогт). */
+  const [blobs, setBlobs] = React.useState<Record<string, DraftMedia>>({});
   const [brokerage, setBrokerage] = React.useState<BrokerageFormState>(emptyBrokerageForm);
   const [bOwner, setBOwner] = React.useState<OwnerRef | null>(null);
   const [bOwnerTouched, setBOwnerTouched] = React.useState(false);
   const [docs, setDocs] = React.useState<{ id: string; file: File }[]>([]);
   const [docErrors, setDocErrors] = React.useState<string[]>([]);
+  const [docBusy, setDocBusy] = React.useState(false);
   const [bErrors, setBErrors] = React.useState<Record<string, string>>({});
+  /** Шуурхай бүртгэлд бичсэн эзний дугаар (эзэн сонгогдтол хадгална). */
+  const [quickPhone, setQuickPhone] = React.useState<string | null>(null);
+  /** Хадгалсан ч давхардал илэрсэн — DuplicateNotice + «Үргэлжлүүлэх». */
+  const [saved, setSaved] = React.useState<{ id: string; code: string; duplicates: Crm2PropertyDuplicate[] } | null>(null);
+  /** Давтан дарахад хөрөнгө/медиаг дахин үүсгэхгүй. */
+  const progress = React.useRef<{ created: CreateResultData | null; mediaDone: boolean; contractDone: boolean }>({
+    created: null,
+    mediaDone: false,
+    contractDone: false,
+  });
 
+  // ── Хэмжилт ──────────────────────────────────────────────────────────────
+  const openedAt = React.useRef<number | null>(null);
+  const firstInputAt = React.useRef<number | null>(null);
+  const taps = React.useRef(0);
+  React.useEffect(() => {
+    openedAt.current = Date.now();
+    trackUi({ event: "full_open", flow: "full", property_id: editProperty?.id ?? null, meta: { edit: isEdit } });
+    // зөвхөн анх
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const markInput = () => {
+    if (firstInputAt.current === null) firstInputAt.current = Date.now();
+  };
+
+  // ── Ноорог (зөвхөн шинэ хөрөнгө) ─────────────────────────────────────────
+  const draftParts = toCreateDraft(
+    { form, priv, brokerage, brokerageOwner: bOwner, brokerageOwnerTouched: bOwnerTouched, links: media.links },
+    quickPhone
+  );
+  const draftMedia = media.files.map((f) => blobs[f.id]).filter((m): m is DraftMedia => !!m);
+  const draft = useCreateDraft<CreateDraftForm, CreateDraftPrivate>({
+    profileId: me,
+    clientKey,
+    paths,
+    state: {
+      form: draftParts.form,
+      private: draftParts.private,
+      media: draftMedia,
+      coverId: queueCoverId(media),
+      titleHint: makeTitleHint(draftTitleParts(form)),
+    },
+    onRestore: (d: LoadedDraft<CreateDraftForm, CreateDraftPrivate>) => {
+      const r = fromCreateDraft(d.form, d.private, me);
+      setForm(r.form);
+      setPriv(r.priv);
+      setBrokerage(r.brokerage);
+      setBOwner(r.brokerageOwner);
+      setBOwnerTouched(r.brokerageOwnerTouched);
+      setQuickPhone(r.quickPhone);
+      setMedia((m) => ({ ...m, links: r.links }));
+      if (d.media.length) {
+        void blobsToQueue(d.media).then(({ files, blobs: restored }) => {
+          setBlobs((b) => ({ ...b, ...restored }));
+          setMedia((m) => ({ ...m, files: [...files, ...m.files.filter((f) => !restored[f.id])], coverId: d.coverId }));
+        });
+      }
+    },
+  });
+
+  // Шинэ медиа файлыг утсан дээр (IndexedDB) хадгална — апп солиход алдагдахгүй.
+  const storing = React.useRef(new Set<string>());
+  React.useEffect(() => {
+    if (!clientKey) return;
+    for (const f of media.files) {
+      if (blobs[f.id] || storing.current.has(f.id)) continue;
+      storing.current.add(f.id);
+      putBlob(me, f.file, f.file.name)
+        .then((blobKey) =>
+          setBlobs((b) => ({
+            ...b,
+            [f.id]: { id: f.id, blobKey, name: f.file.name, kind: f.kind, bytes: f.file.size, w: f.w ?? 0, h: f.h ?? 0 },
+          }))
+        )
+        .catch(() => undefined)
+        .finally(() => storing.current.delete(f.id));
+    }
+  }, [media.files, blobs, me, clientKey]);
+
+  // ── Тохиргоо ─────────────────────────────────────────────────────────────
   const limits = fileLimits(settings);
-  const required = new Set(settings["property.activation_required"]);
+  const stageSettings = {
+    activationRequired: settings["property.activation_required"],
+    requireOwner: settings["brokerage.require_owner"],
+  };
+  const stage = (key: string) => fieldStage(key, stageSettings);
   const catLabels = settings["property.category_labels"];
+  const catHints = settings["property.category_hints"] ?? {};
   const typeOptions = settingOptions(settings["property.types"]);
   const featureOptions = settingOptions(settings["property.features"]);
   const districts = settings["property.districts"];
   const districtOptions = form.district && !districts.includes(form.district) ? [...districts, form.district] : districts;
+  const recentRaw = useStoredString(recentDistrictsKey(me));
+  const recentDistricts = parseRecent(recentRaw, districts).filter((d) => d !== form.district);
   const brokerageOwner = bOwnerTouched ? bOwner : priv.owner;
   const hasContractInput = brokerageHasInput(brokerage, docs.length);
-  const busy = saving;
+  const busy = saving || !!saved;
+
+  // Гар нээлттэй үед хадгалах мөр гарын дээр; идэвхтэй талбар голд гүйлгэгдэнэ.
+  const formRef = React.useRef<HTMLFormElement>(null);
+  const keyboardInset = useKeyboardInset();
+  useScrollFocusedIntoView(formRef, 88);
 
   const set = <K extends keyof PropertyFormState>(key: K, value: PropertyFormState[K]) => {
-    setForm((s) => ({ ...s, [key]: value }));
+    // Автоматаар бөглөгдсөн утгыг агент өөрчилбөл баталгаажсанд тооцно.
+    setForm((s) => ({ ...s, [key]: value, unconfirmed: confirmFields(s.unconfirmed, [key as string]) }));
     if (errors[key as string]) setErrors((e) => omitKey(e, key as string));
   };
+  const confirm = (...keys: string[]) => setForm((s) => ({ ...s, unconfirmed: confirmFields(s.unconfirmed, keys) }));
+  const auto = (key: string) => isUnconfirmed(form.unconfirmed, key);
   const setNote = (key: FieldNoteKey, value: string) =>
     setForm((s) => ({ ...s, field_notes: { ...s.field_notes, [key]: value } }));
   const note = (key: FieldNoteKey, label: string) => (
     <FieldNote value={form.field_notes[key] ?? ""} onChange={(v) => setNote(key, v)} label={label} />
   );
-  const err = (key: string) => errors[key] ?? null;
+
+  // Фокус алдахад (blur) шалгах — алдаа ба сануулга (хадгалахыг саатуулахгүй).
+  const blurIssues = validateFields(validationInput(form)).filter((i) => touched.has(i.field));
+  const blurErrors = issuesByField(blurIssues, "error");
+  const blurWarnings = issuesByField(blurIssues, "warning");
+  const err = (key: string) => errors[key] ?? blurErrors[key] ?? null;
+  const warn = (key: string) => (errors[key] ? null : (blurWarnings[key] ?? null));
+
+  function onBlurCapture(e: React.FocusEvent<HTMLFormElement>) {
+    const id = (e.target as HTMLElement).id;
+    if (!id?.startsWith("sf-")) return;
+    const key = id.slice(3).replace(/-/g, ".");
+    if (!touched.has(key)) setTouched((t) => new Set(t).add(key));
+  }
 
   function showErrors(errs: Record<string, string>, general?: string) {
     setErrors(errs);
     const first = Object.keys(errs)[0];
     setServerError(general ?? (first ? `Алдаатай талбарыг засна уу: ${errs[first]}` : null));
-    if (first) window.requestAnimationFrame(() => document.getElementById(fid(first))?.focus());
+    if (first) focusField(first);
+  }
+
+  /** Серверийн алдаа: талбарыг (dbErrorField) тодруулж фокуслана. */
+  function showServerError(text: string, prefix = "") {
+    setServerError(`${prefix}${text}`);
+    const field = dbErrorField({ message: text }).field;
+    if (!field) return;
+    const key = formErrorKey(field);
+    setErrors((e) => ({ ...e, [key]: text }));
+    focusField(key);
   }
 
   /** Бүх талбарыг шалгана (засах горимд ч бүтэн төлвөөр — DB-ийн нөхцөлтэй ижил). */
@@ -220,6 +480,94 @@ export function StaffForm(props: Props) {
     return input;
   }
 
+  function rememberDistrict() {
+    if (!form.district) return;
+    try {
+      const next = pushRecent(parseRecent(window.localStorage.getItem(recentDistrictsKey(me)), districts), form.district);
+      window.localStorage.setItem(recentDistrictsKey(me), JSON.stringify(next));
+    } catch {
+      /* localStorage алга */
+    }
+  }
+
+  async function ensureBlobKey(f: QueuedFile): Promise<string | null> {
+    if (blobs[f.id]) return blobs[f.id].blobKey;
+    try {
+      return await putBlob(me, f.file, f.file.name);
+    } catch {
+      return null;
+    }
+  }
+
+  /** Медиаг upload дараалалд шилжүүлнэ (эзэмшил шилжсэний дараа ноорог устгагдана). */
+  async function queueMedia(propertyId: string, warnings: string[]): Promise<number> {
+    const files = [...media.files.filter((f) => f.kind === "image"), ...media.files.filter((f) => f.kind === "video")];
+    if (!files.length) return 0;
+    const cover = queueCoverId(media);
+    const ids: string[] = [];
+    const direct: { f: QueuedFile; i: number }[] = [];
+    for (const [i, f] of files.entries()) {
+      const blobKey = clientKey ? await ensureBlobKey(f) : null;
+      if (!blobKey || !clientKey) {
+        direct.push({ f, i });
+        continue;
+      }
+      try {
+        const item = await enqueue({
+          profileId: me,
+          blobKey,
+          name: f.file.name,
+          target: {
+            kind: "media",
+            propertyId,
+            clientKey,
+            officeId,
+            limits,
+            sortOrder: i,
+            isCover: f.id === cover,
+          },
+        });
+        ids.push(item.id);
+      } catch {
+        direct.push({ f, i });
+      }
+    }
+    // Утсан дээр хадгалах боломжгүй (IndexedDB алга) — шууд хуулна.
+    if (direct.length) {
+      setStep(`Медиа хуулж байна (0/${direct.length})…`);
+      const res = await uploadMany(
+        direct.map((d) => d.f.file),
+        (file, j) =>
+          uploadPropertyMedia({ file, officeId, propertyId, limits, sortOrder: direct[j].i, isCover: direct[j].f.id === cover }),
+        (done, total) => setStep(`Медиа хуулж байна (${done}/${total})…`)
+      );
+      warnings.push(...res.errors);
+    }
+    return ids.length ? waitForUploads(ids, warnings) : 0;
+  }
+
+  /** Дараалал ажиллаж дуусах (эсвэл UPLOAD_WAIT_MS) хүртэл явцыг харуулна. Үлдсэнийг дараалал өөрөө үргэлжлүүлнэ. */
+  async function waitForUploads(ids: string[], warnings: string[]): Promise<number> {
+    const mine = new Set(ids);
+    const count = async () => (await listQueue(me)).filter((i) => mine.has(i.id) && i.status === "done").length;
+    setStep(`Медиа хуулж байна (0/${ids.length})…`);
+    void startQueue(me);
+    const timer = window.setInterval(() => {
+      void count().then((n) => setStep(`Медиа хуулж байна (${n}/${ids.length})…`));
+    }, 500);
+    try {
+      await Promise.race([whenIdle(), new Promise((r) => window.setTimeout(r, UPLOAD_WAIT_MS))]);
+    } finally {
+      window.clearInterval(timer);
+    }
+    const done = await count();
+    const left = ids.length - done;
+    if (left > 0) {
+      warnings.push(`${left} файл утсан дээр хадгалагдсан — сүлжээ сайжрахад автоматаар хуулагдана.`);
+    }
+    return done;
+  }
+
   // ── Шинэ хөрөнгө ─────────────────────────────────────────────────────────
   async function onCreate(submit: boolean) {
     setServerError(null);
@@ -229,7 +577,7 @@ export function StaffForm(props: Props) {
 
     const wantContract = submit || hasContractInput;
     const bInput = brokeragePayload(brokerage, brokerageOwner?.id ?? null);
-    if (wantContract) {
+    if (wantContract && !progress.current.contractDone) {
       const parsed = brokerageCreateSchema.safeParse({ property_id: PLACEHOLDER_ID, ...bInput });
       if (!parsed.success) {
         const be = fieldErrors(parsed.error);
@@ -246,7 +594,9 @@ export function StaffForm(props: Props) {
           today: ubToday(),
         });
         if (missing.length) {
-          setServerError(`Батлуулахаар илгээхэд дутуу: ${missingSentence(missing)}. Эсвэл «Ноорог хадгалах»-аар хадгалаад дараа нь илгээнэ үү.`);
+          setServerError(
+            `Батлуулахаар илгээхэд дутуу: ${missingSentence(missing)}. Эсвэл «${SAVE_DRAFT_LABEL}»-аар хадгалаад дараа нь илгээнэ үү.`
+          );
           return;
         }
       }
@@ -255,35 +605,38 @@ export function StaffForm(props: Props) {
     setSaving(true);
     const warnings: string[] = [];
     let submitted = false;
+    let photos = 0;
     try {
-      setStep("Хөрөнгийг бүртгэж байна…");
-      const created = await createProperty(input);
-      if (!created.ok) {
-        setServerError(created.error);
-        return;
+      await draft.flush();
+      let data = progress.current.created;
+      if (!data) {
+        setStep("Хөрөнгийг бүртгэж байна…");
+        const source = draft.source === "paste" || draft.source === "share" ? draft.source : "manual";
+        const created = await createProperty({ ...input, ...(clientKey ? { client_key: clientKey } : {}), source });
+        if (!created.ok) {
+          showServerError(created.error);
+          return;
+        }
+        data = created.data as CreateResultData;
+        progress.current.created = data;
+        if (data.warning) warnings.push(data.warning);
       }
-      const { id, code, warning } = created.data;
-      if (warning) warnings.push(warning);
+      const { id, code } = data;
 
       // Медиа: зураг (дарааллаар), дараа нь бичлэг; нүүр зураг — сонгосон эсвэл эхнийх.
-      const files = [...media.files.filter((f) => f.kind === "image"), ...media.files.filter((f) => f.kind === "video")];
-      if (files.length) {
-        const cover = queueCoverId(media);
-        setStep(`Медиа хуулж байна (0/${files.length})…`);
-        const res = await uploadMany(
-          files.map((f) => f.file),
-          (file, i) =>
-            uploadPropertyMedia({ file, officeId, propertyId: id, limits, sortOrder: i, isCover: files[i].id === cover }),
-          (done, total) => setStep(`Медиа хуулж байна (${done}/${total})…`)
-        );
-        warnings.push(...res.errors);
-      }
-      for (const l of media.links) {
-        const res = await addPropertyVideoLink({ property_id: id, external_url: l.url });
-        if (!res.ok) warnings.push(`Бичлэгийн холбоос: ${res.error}`);
+      if (!progress.current.mediaDone) {
+        progress.current.mediaDone = true;
+        photos = media.files.length;
+        const pending = queueMedia(id, warnings);
+        for (const l of media.links) {
+          const res = await addPropertyVideoLink({ property_id: id, external_url: l.url });
+          if (!res.ok) warnings.push(`Бичлэгийн холбоос: ${res.error}`);
+        }
+        await pending;
       }
 
-      if (wantContract) {
+      if (wantContract && !progress.current.contractDone) {
+        progress.current.contractDone = true;
         setStep("Зуучлалын гэрээг бүртгэж байна…");
         const b = await createBrokerageDraft({ property_id: id, ...bInput });
         if (!b.ok) {
@@ -313,11 +666,40 @@ export function StaffForm(props: Props) {
         }
       }
 
+      // Хадгалагдсан — утсан дээрх ноорогийг устгана (дараалалд шилжсэн зураг үлдэнэ).
+      await draft.discard();
+      rememberDistrict();
+      const duplicates = data.duplicates ?? [];
+      const now = Date.now();
+      trackUi({
+        event: "full_save",
+        flow: "full",
+        property_id: id,
+        duration_ms: openedAt.current ? now - openedAt.current : null,
+        first_input_ms: firstInputAt.current ? now - firstInputAt.current : null,
+        taps: Math.min(taps.current, 10_000),
+        fields_filled: fieldsFilled(form),
+        meta: {
+          photos,
+          restored: draft.restoredAt !== null,
+          contract: wantContract,
+          submitted,
+          duplicates: duplicates.length,
+          replayed: !!data.replayed,
+        },
+      });
+
       toast.success(`${code} ноорог бүртгэгдлээ`, {
         description: submitted ? "Зуучлалын гэрээ батлуулахаар илгээгдлээ." : undefined,
       });
       if (warnings.length) {
         toast.error("Зарим зүйл хадгалагдсангүй", { description: warnings.join(" "), durationMs: 0 });
+      }
+      if (duplicates.length) {
+        // Давхардал: хөрөнгө хадгалагдсан — мэдэгдлийг харуулж, агент өөрөө үргэлжлүүлнэ.
+        setSaved({ id, code, duplicates });
+        window.requestAnimationFrame(() => document.getElementById("staff-saved")?.scrollIntoView({ block: "start" }));
+        return;
       }
       router.replace(`${paths.propertyEdit(id)}?created=1`);
     } catch (e) {
@@ -349,7 +731,7 @@ export function StaffForm(props: Props) {
         setStep("Хадгалж байна…");
         const res = await updateProperty(editProperty.id, patch);
         if (!res.ok) {
-          setServerError(res.error);
+          showServerError(res.error);
           return;
         }
         setBaseline((b) => ({ ...b, form }));
@@ -358,12 +740,21 @@ export function StaffForm(props: Props) {
         setStep("Эзний мэдээллийг хадгалж байна…");
         const res = await updatePropertyPrivate(editProperty.id, privDiff as PropertyPrivateInput);
         if (!res.ok) {
-          setServerError(`Хөрөнгийн мэдээлэл хадгалагдсан ч эзний хэсэг хадгалагдсангүй: ${res.error}`);
+          showServerError(res.error, "Хөрөнгийн мэдээлэл хадгалагдсан ч эзний хэсэг хадгалагдсангүй: ");
           router.refresh();
           return;
         }
         setBaseline((b) => ({ ...b, priv }));
       }
+      rememberDistrict();
+      trackUi({
+        event: "full_save",
+        flow: "full",
+        property_id: editProperty.id,
+        duration_ms: openedAt.current ? Date.now() - openedAt.current : null,
+        fields_filled: Object.keys(patch).length + Object.keys(privDiff).length,
+        meta: { edit: true },
+      });
       toast.success("Хадгалагдлаа");
       router.refresh();
     } catch (e) {
@@ -375,62 +766,162 @@ export function StaffForm(props: Props) {
     }
   }
 
+  async function addDocs(files: File[], fromCamera: boolean) {
+    setDocBusy(true);
+    try {
+      const problems: string[] = [];
+      const next = [...docs];
+      for (const raw of files) {
+        let file = raw;
+        if (fromCamera) {
+          // Камерын хуудас: 2480px, JPEG 0.85 (бага хэмжээ, уншигдахуйц).
+          try {
+            const p = await prepareDocPage(raw);
+            file = new File([p.file], `Гэрээний хуудас ${next.length + 1}.jpg`, { type: "image/jpeg" });
+          } catch {
+            file = raw;
+          }
+        }
+        const e = validateDocFile(file, limits, next.length);
+        if (e) problems.push(e);
+        else next.push({ id: newLocalId(), file });
+      }
+      setDocErrors(problems);
+      setDocs(next);
+    } finally {
+      setDocBusy(false);
+    }
+  }
+
   // ── Харагдац ─────────────────────────────────────────────────────────────
   const periodOptions = pricePeriodOptions(form.category, form.price_period);
   const mismatch = pricePeriodMismatch(form.category, form.price_period);
-  const priceNum = parseNumberInput(form.price);
-  const pricePreview =
-    typeof priceNum === "number"
-      ? formatPrice({ amount: priceNum, currency: form.currency, period: form.price_period, basis: form.price_basis })
-      : "";
-  const totalPreview = form.price_basis === "per_m2" ? previewTotal(form) : null;
   const lockedRole = (role: PropertyAgentRole) =>
     !!editProperty && editProperty.status !== "draft" && !canReassign && !!editProperty[role];
   const agentName = (role: PropertyAgentRole) => {
     const ref = role === "listing_agent_id" ? editProperty?.listing_agent : role === "contract_agent_id" ? editProperty?.contract_agent : editProperty?.photo_agent;
     return ref?.full_name ?? null;
   };
+  const today = ubToday();
+  const draftStatus =
+    clientKey && draft.phase === "ready"
+      ? draft.savedAt && draft.savedAt !== draft.restoredAt
+        ? `Утсан дээр хадгалагдсан ${fmtTime(draft.savedAt)}`
+        : draft.restoredAt
+          ? `Ноорог сэргээгдлээ ${fmtTime(draft.restoredAt)}`
+          : null
+      : null;
+
+  // Хуучин ноорог — үргэлжлүүлэх эсэхийг асууна.
+  if (clientKey && draft.phase === "offer") {
+    return (
+      <div role="dialog" aria-labelledby="sf-offer-title" className="rounded-2xl border border-line bg-surface p-4 shadow-sm sm:p-5">
+        <h2 id="sf-offer-title" className="text-base font-bold text-ink">
+          Дуусаагүй ноорог байна
+        </h2>
+        <p className="mt-1 text-sm text-muted">
+          {draft.offerSavedAt ? `Сүүлд ${fmtShortDateTime(draft.offerSavedAt)}-д хадгалсан.` : null} Үргэлжлүүлэх үү, эсвэл шинээр эхлэх
+          үү? Шинээр эхэлсэн ч энэ ноорог жагсаалтад үлдэнэ.
+        </p>
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:flex">
+          <Button type="button" size="lg" onClick={draft.continueOffer}>
+            Үргэлжлүүлэх
+          </Button>
+          <Button type="button" size="lg" variant="outline" onClick={draft.startNew}>
+            Шинээр эхлэх
+          </Button>
+        </div>
+      </div>
+    );
+  }
+  if (clientKey && draft.phase === "loading") {
+    return (
+      <p role="status" className="py-10 text-center text-sm text-muted">
+        Ноорог шалгаж байна…
+      </p>
+    );
+  }
+
+  const categoryBlock = (
+    <FormField label="Ангилал" error={err("category")} stage="start" unconfirmed={auto("category")} onConfirm={() => confirm("category")}>
+      <div id={fid("category")} tabIndex={-1} className="outline-none">
+        <ChoiceChips
+          label="Ангилал"
+          value={form.category}
+          invalid={!!err("category")}
+          disabled={busy}
+          options={PROPERTY_CATEGORIES.map((c) => ({ value: c, label: categoryLabel(c, catLabels), hint: catHints[c] ?? null }))}
+          onChange={(c) => {
+            markInput();
+            setForm((s) => ({ ...withCategory(s, c), unconfirmed: confirmFields(s.unconfirmed, ["category"]) }));
+            setErrors((e) => omitKey(e, "category"));
+          }}
+        />
+      </div>
+    </FormField>
+  );
 
   return (
-    <form onSubmit={(e) => e.preventDefault()} noValidate className="space-y-4" aria-busy={busy}>
-      <p className="text-xs text-muted">
-        <span className="font-semibold text-brand-600">*</span> — хөрөнгийг идэвхжүүлэхэд заавал бөглөх талбар (оффисын тохиргоо).
-      </p>
+    <form
+      ref={formRef}
+      onSubmit={(e) => e.preventDefault()}
+      onBlurCapture={onBlurCapture}
+      onInputCapture={markInput}
+      onPointerDownCapture={() => {
+        taps.current++;
+      }}
+      noValidate
+      aria-busy={busy}
+      // Гар утсанд оролт 16px (iOS томруулахгүй).
+      className="space-y-4 max-sm:[&_input]:text-base max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base"
+    >
+      <div className="space-y-1 text-xs text-muted">
+        <p>
+          Хадгалахад зөвхөн <span className="font-semibold text-ink">ангилал</span> заавал. Шошго нь талбар хэзээ хэрэгтэйг заана:{" "}
+          <StageTag stage="start" /> <StageTag stage="contract" /> <StageTag stage="publish" />
+          <span className="sr-only">
+            {STAGE_TAG_LABEL.start}, {STAGE_TAG_LABEL.contract}, {STAGE_TAG_LABEL.publish}
+          </span>
+        </p>
+        {draftStatus ? (
+          <p role="status" aria-live="polite" className="font-medium text-emerald-700">
+            {draftStatus}
+          </p>
+        ) : null}
+        {draft.error ? <p className="text-amber-800">Утсан дээр хадгалж чадсангүй — хадгалах товчоор шууд илгээнэ үү.</p> : null}
+      </div>
+
+      {form.unconfirmed.length ? (
+        <FormAlert tone="warn">
+          Шараар тэмдэглэсэн утгыг автоматаар бөглөсөн — шалгаад «Зөв» дарна уу. Нийтлэхээс өмнө баталгаажуулна.
+        </FormAlert>
+      ) : null}
 
       {/* 1. Ангилал */}
       <FormSection id="staff-kind" title="Ангилал ба төрөл" icon={Building2}>
-        <FormField label="Ангилал" error={err("category")}>
-          <div id={fid("category")} tabIndex={-1} className="outline-none">
+        {categoryBlock}
+        <FormField
+          label="Хөрөнгийн төрөл"
+          htmlFor={fid("property_type")}
+          stage={stage("property_type")}
+          error={err("property_type")}
+          unconfirmed={auto("property_type")}
+          onConfirm={() => confirm("property_type")}
+        >
+          <div id={fid("property_type")} tabIndex={-1} className="outline-none">
             <ChoiceChips
-              label="Ангилал"
-              value={form.category}
-              invalid={!!err("category")}
+              label="Хөрөнгийн төрөл"
+              value={form.property_type}
               disabled={busy}
-              options={PROPERTY_CATEGORIES.map((c) => ({ value: c, label: categoryLabel(c, catLabels) }))}
-              onChange={(c) => {
-                setForm((s) => withCategory(s, c));
-                setErrors((e) => omitKey(e, "category"));
-              }}
+              options={[
+                ...typeOptions,
+                ...(form.property_type && !settings["property.types"][form.property_type]
+                  ? [{ value: form.property_type, label: form.property_type }]
+                  : []),
+              ]}
+              onChange={(v) => set("property_type", v)}
             />
           </div>
-        </FormField>
-        <FormField label="Хөрөнгийн төрөл" htmlFor={fid("property_type")} required={required.has("property_type")} error={err("property_type")}>
-          <Select
-            id={fid("property_type")}
-            value={form.property_type}
-            disabled={busy}
-            onChange={(e) => set("property_type", e.target.value)}
-          >
-            <option value="">— Сонгоогүй —</option>
-            {typeOptions.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-            {form.property_type && !settings["property.types"][form.property_type] ? (
-              <option value={form.property_type}>{form.property_type}</option>
-            ) : null}
-          </Select>
         </FormField>
       </FormSection>
 
@@ -438,10 +929,12 @@ export function StaffForm(props: Props) {
       <FormSection id="staff-place" title="Төсөл ба байршил" icon={MapPinned}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField
-            label="Төслийн нэр"
+            label="Төсөл, хотхон"
             htmlFor={fid("project_name")}
-            required={required.has("project")}
+            stage={stage("project")}
             error={err("project_name")}
+            unconfirmed={auto("project_name")}
+            onConfirm={() => confirm("project_name")}
             hint={
               form.project_name.trim() && !form.project_id
                 ? "Жагсаалтад байхгүй бол хадгалахад шинэ төсөл болж бүртгэгдэнэ."
@@ -456,26 +949,50 @@ export function StaffForm(props: Props) {
               placeholder="Төсөл, хотхоны нэр"
               load={loadProjectSuggestions}
               emptyText={null}
-              onValueChange={(v) => setForm((s) => ({ ...s, project_name: v, project_id: null }))}
-              onPick={(it) => setForm((s) => ({ ...s, project_name: it.label, project_id: it.key }))}
+              onValueChange={(v) =>
+                setForm((s) => ({ ...s, project_name: v, project_id: null, unconfirmed: confirmFields(s.unconfirmed, ["project"]) }))
+              }
+              onPick={(it) =>
+                setForm((s) => ({ ...s, project_name: it.label, project_id: it.key, unconfirmed: confirmFields(s.unconfirmed, ["project"]) }))
+              }
             />
             {note("project", "төсөл")}
           </FormField>
-          <FormField label="Дүүрэг" htmlFor={fid("district")} required={required.has("district")} error={err("district")}>
-            <Select id={fid("district")} value={form.district} disabled={busy} onChange={(e) => set("district", e.target.value)}>
-              <option value="">— Сонгоогүй —</option>
-              {districtOptions.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </Select>
+          <FormField
+            label="Дүүрэг"
+            htmlFor={fid("district")}
+            stage={stage("district")}
+            error={err("district")}
+            unconfirmed={auto("district")}
+            onConfirm={() => confirm("district")}
+          >
+            <div className="space-y-2">
+              <Select id={fid("district")} value={form.district} disabled={busy} onChange={(e) => set("district", e.target.value)}>
+                <option value="">— Сонгоогүй —</option>
+                {districtOptions.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </Select>
+              <SuggestionChips
+                label="Сүүлд сонгосон дүүрэг"
+                disabled={busy}
+                items={recentDistricts.map((d) => ({ key: d, label: d, value: d }))}
+                onPick={(d) => {
+                  markInput();
+                  set("district", d);
+                }}
+              />
+            </div>
           </FormField>
           <FormField
             label="Байршил"
             htmlFor={fid("location_text")}
-            required={required.has("location_text")}
+            stage={stage("location_text")}
             error={err("location_text")}
+            unconfirmed={auto("location_text")}
+            onConfirm={() => confirm("location_text")}
             hint="Хороолол, гудамж, ойролцоох газар."
             className="sm:col-span-2"
           >
@@ -494,10 +1011,11 @@ export function StaffForm(props: Props) {
             {note("location_text", "байршил")}
           </FormField>
           <FormField
-            label="Байршлын дэлгэрэнгүй"
+            label="Байр, орц, тоот (дотоод)"
             htmlFor={fid("address_detail")}
-            required={required.has("address_detail")}
+            stage={stage("address_detail")}
             error={err("address_detail")}
+            hint="Нийтэд хэзээ ч гарахгүй."
             className="sm:col-span-2"
           >
             <Textarea
@@ -518,8 +1036,9 @@ export function StaffForm(props: Props) {
             lng={form.lng}
             address={form.pin_address}
             disabled={busy}
-            required={required.has("pin")}
-            onPin={(lat, lng) => setForm((s) => ({ ...s, lat, lng }))}
+            stage={stage("pin")}
+            collapsible={!isEdit}
+            onPin={(lat, lng) => setForm((s) => ({ ...s, lat, lng, unconfirmed: confirmFields(s.unconfirmed, ["lat"]) }))}
             onAddress={(v) => set("pin_address", v)}
           />
           {err("lat") ? <p className="mt-1 text-xs text-danger">{err("lat")}</p> : null}
@@ -529,27 +1048,39 @@ export function StaffForm(props: Props) {
 
       {/* 3. Хэмжээс ба үнэ */}
       <FormSection id="staff-size" title="Хэмжээс ба үнэ" icon={Ruler}>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <FormField
-            label="Хэмжээ (м²)"
+            label="Талбай (м²)"
             htmlFor={fid("area_m2")}
-            required={required.has("area_m2")}
+            stage={stage("area_m2")}
             error={err("area_m2")}
-            hint="Бутархайг цэг эсвэл таслалаар: 81.47 = 81,47"
+            unconfirmed={auto("area_m2")}
+            onConfirm={() => confirm("area_m2")}
+            hint="81.47 эсвэл 81,47"
           >
             <NumberInput
               id={fid("area_m2")}
+              inputMode="decimal"
+              enterKeyHint="next"
               value={form.area_m2}
               disabled={busy}
               aria-invalid={!!err("area_m2") || undefined}
               onValueChange={(v) => set("area_m2", v)}
             />
-            {note("area_m2", "хэмжээ")}
+            {note("area_m2", "талбай")}
           </FormField>
-          <FormField label="Өрөөний тоо" htmlFor={fid("rooms")} required={required.has("rooms")} error={err("rooms")}>
+          <FormField
+            label="Өрөө"
+            htmlFor={fid("rooms")}
+            stage={stage("rooms")}
+            error={err("rooms")}
+            unconfirmed={auto("rooms")}
+            onConfirm={() => confirm("rooms")}
+          >
             <NumberInput
               id={fid("rooms")}
               inputMode="numeric"
+              enterKeyHint="next"
               value={form.rooms}
               disabled={busy}
               aria-invalid={!!err("rooms") || undefined}
@@ -557,108 +1088,144 @@ export function StaffForm(props: Props) {
             />
             {note("rooms", "өрөө")}
           </FormField>
-          <FormField label="Давхар" htmlFor={fid("floor")} required={required.has("floor")} error={err("floor")} hint="Подвал бол хасах тоо.">
-            <NumberInput
+          <div className="col-span-2 space-y-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {stage("floor") ? <StageTag stage={stage("floor")!} /> : null}
+              {auto("floor") || auto("building_floors") ? (
+                <button
+                  type="button"
+                  onClick={() => confirm("floor", "building_floors")}
+                  className="inline-flex min-h-11 items-center rounded-lg px-2 text-xs font-semibold text-amber-900 hover:bg-amber-100 sm:min-h-8"
+                >
+                  шалгана уу · Зөв
+                </button>
+              ) : null}
+            </div>
+            <FloorField
               id={fid("floor")}
-              inputMode="numeric"
-              value={form.floor}
+              label="Давхар / барилгын давхар"
+              value={{ floor: form.floor, building_floors: form.building_floors }}
               disabled={busy}
-              aria-invalid={!!err("floor") || undefined}
-              onValueChange={(v) => set("floor", v)}
+              error={err("floor") ?? err("building_floors")}
+              unconfirmed={auto("floor") || auto("building_floors")}
+              onChange={(v) => {
+                setForm((s) => ({
+                  ...s,
+                  floor: v.floor,
+                  building_floors: v.building_floors,
+                  unconfirmed: confirmFields(s.unconfirmed, ["floor", "building_floors"]),
+                }));
+                setErrors((e) => omitKey(omitKey(e, "floor"), "building_floors"));
+              }}
             />
             {note("floor", "давхар")}
-          </FormField>
-          <FormField label="Барилгын давхар" htmlFor={fid("building_floors")} error={err("building_floors")}>
-            <NumberInput
-              id={fid("building_floors")}
-              inputMode="numeric"
-              value={form.building_floors}
-              disabled={busy}
-              aria-invalid={!!err("building_floors") || undefined}
-              onValueChange={(v) => set("building_floors", v)}
-            />
-          </FormField>
+          </div>
         </div>
 
         <div className="space-y-3 rounded-xl border border-line p-3 sm:p-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FormField label="Үнэ" htmlFor={fid("price")} required={required.has("price")} error={err("price")} hint={pricePreview || undefined}>
-              <div className="flex gap-2">
-                <NumberInput
-                  id={fid("price")}
-                  value={form.price}
-                  disabled={busy}
-                  aria-invalid={!!err("price") || undefined}
-                  onValueChange={(v) => set("price", v)}
-                />
-                <Select
-                  aria-label="Үнийн валют"
-                  value={form.currency}
-                  disabled={busy}
-                  className="w-28 shrink-0"
-                  onChange={(e) => set("currency", e.target.value as Crm2Currency)}
-                >
-                  {CURRENCIES.map((c) => (
-                    <option key={c} value={c}>
-                      {CURRENCY_SYMBOL[c]}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            </FormField>
-            <FormField
-              label="Үнийн хугацаа"
-              htmlFor={fid("price_period")}
-              error={err("price_period")}
-              hint={
-                mismatch ? (
-                  <span className="text-amber-700">Энэ ангилалд таарахгүй — идэвхжүүлэхэд саад болно.</span>
-                ) : (
-                  "Зарах = нийт үнэ; түрээс = сар эсвэл өдрийн үнэ."
-                )
-              }
-            >
-              <Select
-                id={fid("price_period")}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {stage("price") ? <StageTag stage={stage("price")!} /> : null}
+          </div>
+          <PriceField
+            id={fid("price")}
+            label="Үнэ"
+            value={form.price}
+            onChange={(v) => set("price", v)}
+            currency={form.currency}
+            onCurrencyChange={(c) => set("currency", c)}
+            basis={form.price_basis}
+            onBasisChange={(b) => set("price_basis", b)}
+            category={form.category}
+            period={form.price_period}
+            areaM2={form.area_m2}
+            unconfirmed={auto("price") || auto("currency") || auto("price_basis")}
+            onConfirm={() => confirm("price", "currency", "price_basis", "price_period")}
+            error={err("price")}
+            disabled={busy}
+          />
+          <FormField
+            label="Үнийн хугацаа"
+            error={err("price_period")}
+            warning={warn("price_period")}
+            unconfirmed={auto("price_period")}
+            onConfirm={() => confirm("price_period")}
+            hint={
+              mismatch ? (
+                <span className="text-amber-700">Энэ ангилалд таарахгүй — идэвхжүүлэхэд саад болно.</span>
+              ) : (
+                "Зарах = нийт үнэ; түрээс = сарын үнэ."
+              )
+            }
+          >
+            <div id={fid("price_period")} tabIndex={-1} className="outline-none">
+              <ChoiceChips
+                label="Үнийн хугацаа"
                 value={form.price_period}
                 disabled={busy}
-                onChange={(e) => set("price_period", e.target.value as Crm2PricePeriod)}
-              >
-                {periodOptions.map((p) => (
-                  <option key={p} value={p}>
-                    {PRICE_PERIOD_LABEL[p]}
-                  </option>
-                ))}
-              </Select>
-            </FormField>
-          </div>
-          <FormField label="Үнийн суурь" error={err("price_basis")}>
-            <ChoiceChips
-              label="Үнийн суурь"
-              value={form.price_basis}
-              disabled={busy}
-              options={PRICE_BASES.map((b) => ({ value: b, label: PRICE_BASIS_LABEL[b] }))}
-              onChange={(b: Crm2PriceBasis) => set("price_basis", b)}
-            />
+                options={periodOptions.map((p) => ({ value: p, label: PRICE_PERIOD_LABEL[p] }))}
+                onChange={(p: Crm2PricePeriod) => {
+                  set("price_period", p);
+                  setTouched((t) => new Set(t).add("price_period"));
+                }}
+              />
+            </div>
           </FormField>
-          {form.price_basis === "per_m2" ? (
-            <p className="text-sm text-muted">
-              Нийт дүн:{" "}
-              <span className="font-semibold tabular-nums text-ink">
-                {totalPreview !== null
-                  ? formatPrice({ amount: totalPreview, currency: form.currency, period: form.price_period })
-                  : "хэмжээг оруулахад тооцоологдоно"}
-              </span>
-            </p>
-          ) : null}
           {note("price", "үнэ")}
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <FormField label="Ашиглалтад орсон он" htmlFor={fid("year_in_use")} required={required.has("year_in_use")} error={err("year_in_use")}>
+        {hasRentTerms(form.category) ? (
+          <div className="grid grid-cols-2 gap-4">
+            <FormField
+              label="Урьдчилгаа (сар)"
+              htmlFor={fid("rent_advance_months")}
+              error={err("rent_advance_months")}
+              unconfirmed={auto("rent_advance_months")}
+              onConfirm={() => confirm("rent_advance_months")}
+            >
+              <NumberInput
+                id={fid("rent_advance_months")}
+                inputMode="numeric"
+                enterKeyHint="next"
+                value={form.rent_advance_months}
+                disabled={busy}
+                placeholder="жишээ: 1"
+                onValueChange={(v) => set("rent_advance_months", v)}
+              />
+            </FormField>
+            <FormField
+              label="Барьцаа (сар)"
+              htmlFor={fid("rent_deposit_months")}
+              error={err("rent_deposit_months")}
+              unconfirmed={auto("rent_deposit_months")}
+              onConfirm={() => confirm("rent_deposit_months")}
+              hint="Барьцаагүй бол 0."
+            >
+              <NumberInput
+                id={fid("rent_deposit_months")}
+                inputMode="numeric"
+                enterKeyHint="next"
+                value={form.rent_deposit_months}
+                disabled={busy}
+                placeholder="жишээ: 1"
+                onValueChange={(v) => set("rent_deposit_months", v)}
+              />
+            </FormField>
+          </div>
+        ) : null}
+
+        <div className="grid grid-cols-2 gap-4">
+          <FormField
+            label="Ашиглалтад орсон он"
+            htmlFor={fid("year_in_use")}
+            stage={stage("year_in_use")}
+            error={err("year_in_use")}
+            unconfirmed={auto("year_in_use")}
+            onConfirm={() => confirm("year_in_use")}
+          >
             <Input
               id={fid("year_in_use")}
               inputMode="numeric"
+              enterKeyHint="next"
               maxLength={4}
               value={form.year_in_use}
               disabled={busy}
@@ -668,44 +1235,84 @@ export function StaffForm(props: Props) {
             />
             {note("year_in_use", "он")}
           </FormField>
-          <FormField label="Ашиглалтын зардал" htmlFor={fid("operating_cost")} error={err("operating_cost")}>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_7rem]">
-              <NumberInput
-                className="col-span-2 sm:col-span-1"
-                id={fid("operating_cost")}
-                value={form.operating_cost}
-                disabled={busy}
-                aria-invalid={!!err("operating_cost") || undefined}
-                onValueChange={(v) => set("operating_cost", v)}
-              />
-              <Select
-                aria-label="Зардлын валют"
-                value={form.operating_cost_currency}
-                disabled={busy}
-                onChange={(e) => set("operating_cost_currency", e.target.value as Crm2Currency)}
-              >
-                {CURRENCIES.map((c) => (
-                  <option key={c} value={c}>
-                    {CURRENCY_LABEL[c]}
-                  </option>
-                ))}
-              </Select>
-              <Select
-                aria-label="Зардлын хугацаа"
-                value={form.operating_cost_period}
-                disabled={busy}
-                onChange={(e) => set("operating_cost_period", e.target.value as Crm2PricePeriod)}
-              >
-                {(["month", "day", "total"] as const).map((p) => (
-                  <option key={p} value={p}>
-                    {PRICE_PERIOD_LABEL[p]}
-                  </option>
-                ))}
-              </Select>
-            </div>
+          <FormField
+            label="Зогсоол"
+            htmlFor={fid("parking_spaces")}
+            error={err("parking_spaces")}
+            unconfirmed={auto("parking_spaces")}
+            onConfirm={() => confirm("parking_spaces")}
+            hint="Тоо; зогсоолгүй бол 0."
+          >
+            <NumberInput
+              id={fid("parking_spaces")}
+              inputMode="numeric"
+              enterKeyHint="next"
+              value={form.parking_spaces}
+              disabled={busy}
+              onValueChange={(v) => set("parking_spaces", v)}
+            />
+          </FormField>
+          <FormField
+            label={operatingCostIsSimple(form) ? "Ашиглалтын зардал (₮/сар)" : "Ашиглалтын зардал"}
+            htmlFor={fid("operating_cost")}
+            error={err("operating_cost")}
+            className="col-span-2"
+            hint={operatingCostIsSimple(form) ? "СӨХ, дулаан, цахилгаан г.м. сарын дундаж." : undefined}
+          >
+            {operatingCostIsSimple(form) ? (
+              <div className="flex h-11 items-center rounded-xl border border-line bg-surface focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/20">
+                <NumberInput
+                  id={fid("operating_cost")}
+                  inputMode="decimal"
+                  enterKeyHint="next"
+                  value={form.operating_cost}
+                  disabled={busy}
+                  aria-invalid={!!err("operating_cost") || undefined}
+                  onValueChange={(v) => set("operating_cost", v)}
+                  className="h-full border-0 focus:ring-0"
+                />
+                <span className="shrink-0 pr-3.5 text-sm text-muted">₮/сар</span>
+              </div>
+            ) : (
+              // Хуучин ($ эсвэл өдрийн) утга — хэвээр засна.
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_7rem]">
+                <NumberInput
+                  className="col-span-2 sm:col-span-1"
+                  id={fid("operating_cost")}
+                  value={form.operating_cost}
+                  disabled={busy}
+                  aria-invalid={!!err("operating_cost") || undefined}
+                  onValueChange={(v) => set("operating_cost", v)}
+                />
+                <Select
+                  aria-label="Зардлын валют"
+                  value={form.operating_cost_currency}
+                  disabled={busy}
+                  onChange={(e) => set("operating_cost_currency", e.target.value as Crm2Currency)}
+                >
+                  {CURRENCIES.map((c) => (
+                    <option key={c} value={c}>
+                      {CURRENCY_LABEL[c]}
+                    </option>
+                  ))}
+                </Select>
+                <Select
+                  aria-label="Зардлын хугацаа"
+                  value={form.operating_cost_period}
+                  disabled={busy}
+                  onChange={(e) => set("operating_cost_period", e.target.value as Crm2PricePeriod)}
+                >
+                  {(["month", "day", "total"] as const).map((p) => (
+                    <option key={p} value={p}>
+                      {PRICE_PERIOD_LABEL[p]}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            )}
             {note("operating_cost", "зардал")}
           </FormField>
-          <FormField label="Зардлын тайлбар" htmlFor={fid("operating_cost_note")} error={err("operating_cost_note")} className="sm:col-span-2">
+          <FormField label="Зардлын тайлбар" htmlFor={fid("operating_cost_note")} error={err("operating_cost_note")} className="col-span-2">
             <Input
               id={fid("operating_cost_note")}
               maxLength={1000}
@@ -718,125 +1325,55 @@ export function StaffForm(props: Props) {
         </div>
       </FormSection>
 
-      {/* 4. Тайлбар */}
-      <FormSection id="staff-describe" title="Хөрөнгийн тайлбар" icon={ScrollText}>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <FormField label="Нөхцөл" htmlFor={fid("condition")} error={err("condition")}>
-            <Textarea
-              id={fid("condition")}
-              maxLength={4000}
-              value={form.condition}
-              disabled={busy}
-              placeholder="Засвар, тавилга, техникийн байдал"
-              onChange={(e) => set("condition", e.target.value)}
-            />
-          </FormField>
-          <FormField label="Харууц" htmlFor={fid("view_note")} error={err("view_note")}>
-            <Textarea
-              id={fid("view_note")}
-              maxLength={4000}
-              value={form.view_note}
-              disabled={busy}
-              placeholder="Цонхны харагдах байдал, нар тусах тал"
-              onChange={(e) => set("view_note", e.target.value)}
-            />
-          </FormField>
-          <FormField label="Давуу тал" htmlFor={fid("advantages")} error={err("advantages")}>
-            <Textarea
-              id={fid("advantages")}
-              maxLength={4000}
-              value={form.advantages}
-              disabled={busy}
-              onChange={(e) => set("advantages", e.target.value)}
-            />
-          </FormField>
-          <FormField label="Нэмэлт тайлбар" htmlFor={fid("notes")} error={err("notes")}>
-            <Textarea id={fid("notes")} maxLength={8000} value={form.notes} disabled={busy} onChange={(e) => set("notes", e.target.value)} />
-          </FormField>
-        </div>
-        {featureOptions.length ? (
-          <FormField label="Онцлог" error={err("features")}>
-            <ToggleChips label="Онцлог" values={form.features} options={featureOptions} disabled={busy} onChange={(v) => set("features", v)} />
-          </FormField>
-        ) : null}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <FormField label="Хэзээнээс боломжтой" htmlFor={fid("available_from")} error={err("available_from")}>
-            <Input
-              id={fid("available_from")}
-              type="date"
-              value={form.available_from}
-              disabled={busy}
-              onChange={(e) => set("available_from", e.target.value)}
-            />
-            {note("available_from", "боломжтой огноо")}
-          </FormField>
-          <FormField label="Боломжийн тайлбар" htmlFor={fid("availability_note")} error={err("availability_note")}>
-            <Input
-              id={fid("availability_note")}
-              maxLength={1000}
-              value={form.availability_note}
-              disabled={busy}
-              placeholder="жишээ: одоогийн түрээслэгч 12-р сард гарна"
-              onChange={(e) => set("availability_note", e.target.value)}
-            />
-          </FormField>
-        </div>
-      </FormSection>
+      {/* 4. Шинэ хөрөнгөд: зураг (эхний алхамд — тайлбараас өмнө) */}
+      {!isEdit ? (
+        <FormSection
+          id="staff-media-new"
+          title="Зураг, бичлэг"
+          icon={Images}
+          description={
+            <>
+              Утсан дээр хадгалагдаж, хөрөнгийг хадгалахад дарааллаар хуулагдана.{" "}
+              {stage("images") ? <StageTag stage={stage("images")!} /> : null}
+            </>
+          }
+        >
+          <MediaQueue value={media} onChange={setMedia} limits={limits} disabled={busy} flow="full" onProcessingChange={setProcessing} />
+        </FormSection>
+      ) : null}
 
-      {/* 5. Агентын 3 үүрэг */}
-      <FormSection
-        id="staff-agents"
-        title="Агентын үүрэг"
-        icon={UsersRound}
-        description="Листлэгч, гэрээ хийсэн, зураг авсан агент — хэлцлийн хариуцагчаас тусдаа."
-      >
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {PROPERTY_AGENT_ROLES.map((role) => {
-            const locked = lockedRole(role);
-            return (
-              <FormField
-                key={role}
-                label={PROPERTY_AGENT_ROLE_LABEL[role]}
-                htmlFor={fid(role)}
-                required={required.has(role)}
-                error={err(role)}
-                hint={locked ? "Томилогдсон агентыг багийн ахлагч эсвэл менежер солино." : undefined}
-              >
-                <AgentSelect
-                  id={fid(role)}
-                  value={form[role]}
-                  staff={staff}
-                  me={me}
-                  disabled={busy || locked}
-                  currentName={agentName(role)}
-                  invalid={!!err(role)}
-                  onChange={(v) => set(role, v)}
-                />
-              </FormField>
-            );
-          })}
-        </div>
-      </FormSection>
-
-      {/* 6. Хувийн хэсэг */}
+      {/* 5. Хувийн хэсэг */}
       {canEditPrivate ? (
         <FormSection
           id="staff-private"
           title="Эзэн ба үзүүлэх заавар"
           icon={KeyRound}
           locked
-          description="Зөвхөн хөрөнгийн үүрэгт агент, гэрээний хариуцагч, ахлагч, менежерт харагдана."
+          description="Хөрөнгийн үүрэгт агент, гэрээний хариуцагч, ахлагч, менежер л харна."
         >
-          <div className="space-y-1.5">
-            <span className="block text-sm font-medium text-ink">
+          <div id={fid("owner_contact_id")} tabIndex={-1} className="space-y-1.5 outline-none">
+            <span className="flex flex-wrap items-center gap-1.5 text-sm font-medium text-ink">
               Эзэн
-              {required.has("owner") ? (
-                <span className="ml-0.5 text-brand-600" title="Идэвхжүүлэхэд заавал">
-                  *
-                </span>
-              ) : null}
+              {stage("owner") ? <StageTag stage={stage("owner")!} /> : null}
             </span>
-            <OwnerPicker idPrefix="sf-private" value={priv.owner} onChange={(o) => setPriv((s) => ({ ...s, owner: o }))} disabled={busy} />
+            {draft.privateLost && !priv.owner ? <FormAlert tone="warn">{PRIVATE_LOST_TEXT}</FormAlert> : null}
+            {quickPhone && !priv.owner ? (
+              <FormAlert tone="info">
+                Шуурхай бүртгэлд оруулсан эзний дугаар: <span className="font-semibold tabular-nums">{formatPhone(quickPhone)}</span>.
+                Доороос хайж сонгох эсвэл шинэ эзэн болгон бүртгэнэ үү.
+              </FormAlert>
+            ) : null}
+            <OwnerPicker
+              idPrefix="sf-private"
+              value={priv.owner}
+              onChange={(o) => {
+                markInput();
+                setPriv((s) => ({ ...s, owner: o }));
+                if (o) setQuickPhone(null);
+                setErrors((e) => omitKey(e, "private.owner_contact_id"));
+              }}
+              disabled={busy}
+            />
             {err("private.owner_contact_id") ? <p className="text-xs text-danger">{err("private.owner_contact_id")}</p> : null}
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -853,7 +1390,7 @@ export function StaffForm(props: Props) {
             <FormField
               label="Үзүүлэх заавар"
               htmlFor={fid("showing_instructions")}
-              required={required.has("showing_instructions")}
+              stage={stage("showing_instructions")}
               error={err("private.showing_instructions")}
             >
               <Textarea
@@ -871,121 +1408,294 @@ export function StaffForm(props: Props) {
         <FormAlert tone="info">Эзэн ба үзүүлэх зааврыг зөвхөн эрх бүхий ажилтан засна.</FormAlert>
       )}
 
-      {/* 7–8. Шинэ хөрөнгөд: медиа ба зуучлалын гэрээ */}
-      {!isEdit ? (
-        <>
-          <FormSection
-            id="staff-media-new"
-            title="Зураг, бичлэг"
-            icon={Images}
-            description={`Хөрөнгийг хадгалахад дарааллаар нь хуулагдана.${required.has("images") ? " Идэвхжүүлэхэд дор хаяж нэг зураг заавал." : ""}`}
+      {/* 6. Тайлбар */}
+      <FormSection id="staff-describe" title="Хөрөнгийн тайлбар" icon={ScrollText}>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <FormField label="Засвар, тавилга, техникийн байдал" htmlFor={fid("condition")} error={err("condition")}>
+            <Textarea
+              id={fid("condition")}
+              maxLength={4000}
+              value={form.condition}
+              disabled={busy}
+              placeholder="Засвар, тавилга, техникийн байдал"
+              onChange={(e) => set("condition", e.target.value)}
+            />
+          </FormField>
+          <FormField label={VIEW_NOTE_LABEL} htmlFor={fid("view_note")} error={err("view_note")}>
+            <Textarea
+              id={fid("view_note")}
+              maxLength={4000}
+              value={form.view_note}
+              disabled={busy}
+              placeholder="Цонхны харагдах байдал, нар тусах тал"
+              onChange={(e) => set("view_note", e.target.value)}
+            />
+          </FormField>
+          <FormField
+            label="Давуу тал"
+            htmlFor={fid("advantages")}
+            error={err("advantages")}
+            unconfirmed={auto("advantages")}
+            onConfirm={() => confirm("advantages")}
           >
-            <MediaQueue value={media} onChange={setMedia} limits={limits} disabled={busy} />
-          </FormSection>
+            <Textarea
+              id={fid("advantages")}
+              maxLength={4000}
+              value={form.advantages}
+              disabled={busy}
+              onChange={(e) => set("advantages", e.target.value)}
+            />
+          </FormField>
+          <FormField
+            label="Дотоод тэмдэглэл"
+            htmlFor={fid("notes")}
+            error={err("notes")}
+            unconfirmed={auto("notes")}
+            onConfirm={() => confirm("notes")}
+          >
+            <Textarea id={fid("notes")} maxLength={8000} value={form.notes} disabled={busy} onChange={(e) => set("notes", e.target.value)} />
+          </FormField>
+        </div>
+        {featureOptions.length ? (
+          <FormField
+            label="Онцлог"
+            error={err("features")}
+            stage={stage("features")}
+            unconfirmed={auto("features")}
+            onConfirm={() => confirm("features")}
+          >
+            <div id={fid("features")} tabIndex={-1} className="outline-none">
+              <ToggleChips label="Онцлог" values={form.features} options={featureOptions} disabled={busy} onChange={(v) => set("features", v)} />
+            </div>
+          </FormField>
+        ) : null}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <FormField
+            label="Хэзээнээс боломжтой"
+            htmlFor={fid("available_from")}
+            error={err("available_from")}
+            unconfirmed={auto("available_from")}
+            onConfirm={() => confirm("available_from")}
+          >
+            <div className="space-y-2">
+              <Input
+                id={fid("available_from")}
+                type="date"
+                value={form.available_from}
+                disabled={busy}
+                onChange={(e) => set("available_from", e.target.value)}
+              />
+              {form.available_from !== today ? (
+                <SuggestionChips
+                  label="Огнооны санал"
+                  disabled={busy}
+                  items={[{ key: "today", label: "Өнөөдөр", value: today }]}
+                  onPick={(v) => {
+                    markInput();
+                    set("available_from", v);
+                  }}
+                />
+              ) : null}
+            </div>
+            {note("available_from", "боломжтой огноо")}
+          </FormField>
+          <FormField label="Боломжийн тайлбар" htmlFor={fid("availability_note")} error={err("availability_note")}>
+            <Input
+              id={fid("availability_note")}
+              maxLength={1000}
+              value={form.availability_note}
+              disabled={busy}
+              placeholder="жишээ: одоогийн түрээслэгч 12-р сард гарна"
+              onChange={(e) => set("availability_note", e.target.value)}
+            />
+          </FormField>
+        </div>
+      </FormSection>
 
-          <FormSection
-            id="staff-brokerage-new"
-            title="Зуучлалын гэрээ"
-            icon={FileSignature}
-            locked
-            description="Эзэнтэй байгуулсан зуучлалын гэрээ батлагдмагц хөрөнгө Staff-д идэвхтэй болно."
-          >
-            <BrokerageFields
-              idPrefix="sfb"
-              value={brokerage}
-              onChange={(v) => {
-                setBrokerage(v);
-                setBErrors({});
-              }}
-              owner={brokerageOwner}
-              onOwnerChange={(o) => {
-                setBOwnerTouched(true);
-                setBOwner(o);
-              }}
-              ownerNote={
-                !bOwnerTouched
-                  ? priv.owner
-                    ? "Хөрөнгийн эзэнтэй ижил."
-                    : "Дээрх «Эзэн» хэсэгт сонгосон эзэн энд орно."
-                  : undefined
-              }
-              requireOwner={settings["brokerage.require_owner"]}
-              staff={staff}
-              responsibleStaff={staff.filter((s) =>
-                brokerageResponsibleAllowed(responsibleCtx, [form.listing_agent_id, form.contract_agent_id, form.photo_agent_id])({
-                  id: s.profile_id,
-                  teamId: s.team_id,
-                })
-              )}
-              me={me}
-              errors={bErrors}
-              disabled={busy}
-            />
-            <DocList
-              items={docs.map((d) => ({ id: d.id, name: d.file.name, size: d.file.size }))}
-              disabled={busy}
-              canAdd={docs.length < limits.maxDocsPerContract}
-              onAdd={(files) => {
-                const problems: string[] = [];
-                const next = [...docs];
-                for (const file of files) {
-                  const e = validateDocFile(file, limits, next.length);
-                  if (e) problems.push(e);
-                  else next.push({ id: newLocalId(), file });
-                }
-                setDocErrors(problems);
-                setDocs(next);
-              }}
-              onRemove={(item) => setDocs((list) => list.filter((d) => d.id !== item.id))}
-              hint={`PDF, JPEG, PNG, WebP, ≤${limits.maxDocMb} МБ. ${
-                settings["brokerage.require_file"] ? "Батлуулахад дор хаяж нэг файл заавал." : ""
-              }`}
-            />
-            {docErrors.length ? (
-              <FormAlert tone="warn">
-                <ul className="list-inside list-disc space-y-0.5">
-                  {docErrors.map((e, i) => (
-                    <li key={i}>{e}</li>
-                  ))}
-                </ul>
-              </FormAlert>
-            ) : null}
-          </FormSection>
-        </>
+      {/* 7. Агентын 3 үүрэг */}
+      <FormSection
+        id="staff-agents"
+        title="Агентын үүрэг"
+        icon={UsersRound}
+        description="Хэлцлийн хариуцагчаас тусдаа."
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {PROPERTY_AGENT_ROLES.map((role) => {
+            const locked = lockedRole(role);
+            return (
+              <FormField
+                key={role}
+                label={PROPERTY_AGENT_ROLE_LABEL[role]}
+                htmlFor={fid(role)}
+                stage={stage(role)}
+                error={err(role)}
+                unconfirmed={auto(role)}
+                onConfirm={() => confirm(role)}
+                hint={locked ? "Томилогдсон агентыг багийн ахлагч эсвэл менежер солино." : undefined}
+              >
+                <div className="space-y-2">
+                  <AgentSelect
+                    id={fid(role)}
+                    label={PROPERTY_AGENT_ROLE_LABEL[role]}
+                    value={form[role]}
+                    staff={staff}
+                    me={me}
+                    disabled={busy || locked}
+                    currentName={agentName(role)}
+                    invalid={!!err(role)}
+                    onChange={(v) => {
+                      markInput();
+                      set(role, v);
+                    }}
+                  />
+                  {!locked && form[role] !== me ? (
+                    <SuggestionChips
+                      label="Агентын санал"
+                      disabled={busy}
+                      items={[{ key: "me", label: "Би", value: me }]}
+                      onPick={(v) => {
+                        markInput();
+                        set(role, v);
+                      }}
+                    />
+                  ) : null}
+                </div>
+              </FormField>
+            );
+          })}
+        </div>
+      </FormSection>
+
+      {/* 8. Шинэ хөрөнгөд: зуучлалын гэрээ */}
+      {!isEdit ? (
+        <FormSection
+          id="staff-brokerage-new"
+          title="Зуучлалын гэрээ"
+          icon={FileSignature}
+          locked
+          description="Заавал биш — дараа нь картаас нэмж болно. Батлагдмагц хөрөнгө Staff-д идэвхтэй болно."
+        >
+          <BrokerageFields
+            idPrefix="sfb"
+            value={brokerage}
+            onChange={(v) => {
+              setBrokerage(v);
+              setBErrors({});
+            }}
+            owner={brokerageOwner}
+            onOwnerChange={(o) => {
+              setBOwnerTouched(true);
+              setBOwner(o);
+            }}
+            ownerNote={
+              !bOwnerTouched
+                ? priv.owner
+                  ? "Хөрөнгийн эзэнтэй ижил."
+                  : "Дээрх «Эзэн» хэсэгт сонгосон эзэн энд орно."
+                : undefined
+            }
+            requireOwner={settings["brokerage.require_owner"]}
+            staff={staff}
+            responsibleStaff={staff.filter((s) =>
+              brokerageResponsibleAllowed(responsibleCtx, [form.listing_agent_id, form.contract_agent_id, form.photo_agent_id])({
+                id: s.profile_id,
+                teamId: s.team_id,
+              })
+            )}
+            me={me}
+            errors={bErrors}
+            disabled={busy}
+          />
+          <DocList
+            items={docs.map((d) => ({ id: d.id, name: d.file.name, size: d.file.size }))}
+            disabled={busy}
+            canAdd={docs.length < limits.maxDocsPerContract}
+            busyText={docBusy ? "Боловсруулж байна…" : null}
+            onAdd={(files) => void addDocs(files, false)}
+            onCamera={(files) => void addDocs(files, true)}
+            onRemove={(item) => setDocs((list) => list.filter((d) => d.id !== item.id))}
+            hint={`PDF, JPEG, PNG, WebP, ≤${limits.maxDocMb} МБ. ${
+              settings["brokerage.require_file"] ? "Батлуулахад дор хаяж нэг файл заавал." : ""
+            } Файлыг утсан дээр хадгалахгүй — хөрөнгийг хадгалахад шууд хуулагдана.`}
+          />
+          {docErrors.length ? (
+            <FormAlert tone="warn">
+              <ul className="list-inside list-disc space-y-0.5">
+                {docErrors.map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
+              </ul>
+            </FormAlert>
+          ) : null}
+        </FormSection>
       ) : null}
 
-      {/* Хадгалах */}
-      <div className="sticky bottom-0 z-20 -mx-4 space-y-2 border-t border-line bg-surface/95 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-2xl sm:border sm:shadow-sm">
-        {serverError ? <FormAlert>{serverError}</FormAlert> : null}
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <p className={cn("text-xs text-muted", step && "font-medium text-brand-700")} aria-live="polite">
-            {step ?? (isEdit ? "Медиа, гэрээг доорх хэсгүүдэд тус тусад нь хадгална." : "Хадгалахад хөрөнгө НООРОГ болж бүртгэгдэнэ.")}
+      {/* Хадгалсан ч давхардал илэрсэн */}
+      {saved ? (
+        <div id="staff-saved" className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+          <p role="status">
+            <span className="font-semibold">{saved.code} ноорог бүртгэгдлээ.</span> Доорх мэдээллийг шалгаад үргэлжлүүлнэ үү.
           </p>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            {isEdit ? (
-              <Button type="button" onClick={() => void onSave()} disabled={busy}>
-                {busy ? "Хадгалж байна…" : "Хадгалах"}
-              </Button>
-            ) : (
-              <>
-                <Button type="button" variant={hasContractInput ? "outline" : "primary"} onClick={() => void onCreate(false)} disabled={busy}>
-                  {busy ? "Хадгалж байна…" : "Ноорог хадгалах"}
+          <DuplicateNotice
+            propertyId={saved.id}
+            duplicates={saved.duplicates}
+            onArchived={() => router.replace(paths.staff())}
+          />
+          <Button type="button" size="lg" className="w-full sm:w-auto" onClick={() => router.replace(`${paths.propertyEdit(saved.id)}?created=1`)}>
+            Хөрөнгө рүү үргэлжлүүлэх
+          </Button>
+        </div>
+      ) : null}
+
+      {/* Хадгалах — гар нээлттэй үед гарын дээр */}
+      {!saved ? (
+        <div
+          style={{ bottom: keyboardInset }}
+          className="sticky bottom-0 z-20 -mx-4 space-y-2 border-t border-line bg-surface/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:mx-0 sm:rounded-2xl sm:border sm:shadow-sm"
+        >
+          {serverError ? <FormAlert>{serverError}</FormAlert> : null}
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className={cn("text-xs text-muted", step && "font-medium text-brand-700")} aria-live="polite">
+              {step ??
+                (processing
+                  ? "Зураг боловсруулж байна…"
+                  : isEdit
+                    ? "Медиа, гэрээг доорх хэсгүүдэд тус тусад нь хадгална."
+                    : (draftStatus ?? "Дутуу бөглөсөн ч хадгална — дараа нь картаас гүйцээнэ."))}
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              {isEdit ? (
+                <Button type="button" size="lg" onClick={() => void onSave()} disabled={busy}>
+                  {busy ? "Хадгалж байна…" : "Хадгалах"}
                 </Button>
-                <Button
-                  type="button"
-                  variant={hasContractInput ? "primary" : "outline"}
-                  onClick={() => void onCreate(true)}
-                  disabled={busy || !hasContractInput}
-                  title={hasContractInput ? undefined : "Эхлээд зуучлалын гэрээний мэдээллийг бөглөнө үү"}
-                >
-                  <Send className="size-4" aria-hidden />
-                  Хадгалаад гэрээг батлуулахаар илгээх
-                </Button>
-              </>
-            )}
+              ) : (
+                <>
+                  <Button
+                    type="button"
+                    size="lg"
+                    variant={hasContractInput ? "outline" : "primary"}
+                    onClick={() => void onCreate(false)}
+                    disabled={busy || processing}
+                  >
+                    {saving ? "Хадгалж байна…" : SAVE_DRAFT_LABEL}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="lg"
+                    variant={hasContractInput ? "primary" : "outline"}
+                    onClick={() => void onCreate(true)}
+                    disabled={busy || processing || !hasContractInput}
+                    title={hasContractInput ? undefined : "Эхлээд зуучлалын гэрээний мэдээллийг бөглөнө үү"}
+                  >
+                    <Send className="size-4" aria-hidden />
+                    Хадгалаад гэрээг батлуулахаар илгээх
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
     </form>
   );
 }

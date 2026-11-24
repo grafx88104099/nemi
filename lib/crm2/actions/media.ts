@@ -185,6 +185,7 @@ export async function addBrokerageFileRow(input: BrokerageFileRowInput): Promise
       contract_id: parsed.data.contract_id,
       storage_path: parsed.data.storage_path,
       file_name: parsed.data.file_name ?? null,
+      kind: parsed.data.kind,
       uploaded_by: session.userId,
     })
     .select("id")

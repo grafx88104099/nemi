@@ -1,15 +1,16 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ExternalLink,
+  GitCompareArrows,
   Images,
   Lock,
   Megaphone,
   Pencil,
   RefreshCw,
+  RotateCcw,
   Save,
   ShieldCheck,
   Stamp,
@@ -23,15 +24,41 @@ import { Field, Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast";
 import { ReasonDialog } from "@/components/crm2/ui/reason-dialog";
 import { publishProperty, unpublishProperty, updateListingText } from "@/lib/crm2/actions/publish";
-import { NO_WATERMARK_ERROR, syncListingPhotos, type PublishPhotoProgress } from "@/lib/crm2/publish-photos";
-import { crm2Paths, type Crm2Panel } from "@/lib/crm2/paths";
+import {
+  NO_WATERMARK_ERROR,
+  publishPhotoMode,
+  syncListingPhotos,
+  type PublishPhotoMode,
+  type PublishPhotoProgress,
+} from "@/lib/crm2/publish-photos";
+import type { Crm2Panel } from "@/lib/crm2/paths";
 import type { Crm2PublishState } from "@/lib/crm2/queries/publish";
+import type { Crm2PublishPreview } from "@/lib/crm2/types";
 import { fmtDateTime } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 import { Note, Section, TextBlock } from "../parts";
+import { LinkChoice } from "./LinkChoice";
 import { PhotoProgress } from "./PhotoProgress";
 import { PrivacyNotice } from "./PrivacyNotice";
+import { PublishDiff } from "./PublishDiff";
+import { ReadinessSection } from "./ReadinessSection";
 import { listingStatusLabel, listingStatusTone } from "./listing-status";
+import {
+  checkPublishTexts,
+  defaultChoice,
+  effectiveTexts,
+  hasMaskedPhone,
+  initialTexts,
+  linkArgs,
+  needsWatermark,
+  normalizeChoice,
+  publishDiffRows,
+  riskMessage,
+  textsToSend,
+  type PublishChoice,
+} from "./publish-model";
+import type { PublishReadiness } from "./readiness";
 
 const TITLE_MAX = 160;
 const DESC_MAX = 4000;
@@ -56,40 +83,120 @@ export const textareaClass =
  * Зар нь хөрөнгөтэйгөө холбоотой: үнэ, үзүүлэлт, төлөв нь автоматаар дагана;
  * зөвхөн гарчиг, танилцуулга агентынх. Зургийг энэ браузерт PMC-ийн тамга дарж
  * байж нийтийн bucket руу хуулна (lib/crm2/publish-photos.ts).
+ *
+ * «Нийтлэхэд бэлэн» бүлэг (readiness) ноорог шатнаас харагдана. «Миний зараас үүсгэсэн» хөрөнгийг
+ * эх зартай нь зөвхөн нийтлэх үед холбоно (preview.link_mode) — ялгааг гарчиг, тайлбартай нь харуулна.
  * Эрхийг RPC эцэслэн шалгана — энд зөвхөн тусгана.
  */
 export function PublishPanel({
   panel,
   propertyId,
   state,
+  preview = null,
+  readiness = null,
 }: {
   panel: Crm2Panel;
   propertyId: string;
   state: Crm2PublishState;
+  /** crm2_publish_preview — зөвхөн засах эрхтэй, зар болоогүй үед; алдаа/эрхгүй бол null. */
+  preview?: Crm2PublishPreview | null;
+  /** Шалгах жагсаалтын «Нийтлэхэд бэлэн» хэсэг; байхгүй бол харуулахгүй. */
+  readiness?: PublishReadiness | null;
 }) {
   const router = useRouter();
-  const paths = crm2Paths(panel);
   const ids = React.useId();
+  const descRef = React.useRef<HTMLTextAreaElement>(null);
+  const titleRef = React.useRef<HTMLInputElement>(null);
 
-  const [title, setTitle] = React.useState(state.title ?? state.defaultTitle);
-  const [description, setDescription] = React.useState(state.description ?? state.defaultDescription);
+  const linked = !!state.listingId;
+  const candidate = !linked ? (preview?.link_candidate ?? null) : null;
+  const mode = !linked && candidate ? (preview?.link_mode ?? "new_only") : "new_only";
+  const fallbackTexts = React.useMemo(
+    () => ({
+      title: state.title ?? state.defaultTitle,
+      description: state.description ?? state.defaultDescription,
+    }),
+    [state.title, state.defaultTitle, state.description, state.defaultDescription]
+  );
+
+  const [choiceRaw, setChoice] = React.useState<PublishChoice>(() => defaultChoice(mode));
+  const choice = normalizeChoice(mode, choiceRaw);
+  const linking = !linked && !!candidate && choice === "link";
+  const [replacePhotos, setReplacePhotos] = React.useState(false);
+
+  const initial = initialTexts(choice, preview, fallbackTexts);
+  const [title, setTitle] = React.useState(initial.title);
+  const [description, setDescription] = React.useState(initial.description);
+  const [textTouched, setTextTouched] = React.useState(false);
+
   const [busy, setBusy] = React.useState<null | "publish" | "text" | "photos">(null);
   const [progress, setProgress] = React.useState<PublishPhotoProgress | null>(null);
   // Явцыг дарсан товчных нь хажууд харуулна (нийтлэх товч ¦ зураг шинэчлэх товч).
   const [progressAt, setProgressAt] = React.useState<"publish" | "photos">("photos");
   const [photoError, setPhotoError] = React.useState<string | null>(null);
+  const [serverTextError, setServerTextError] = React.useState<string | null>(null);
   const [unpublishOpen, setUnpublishOpen] = React.useState(false);
 
-  const linked = !!state.listingId;
+  /** Горим солиход агент текстэд хүрээгүй бол тухайн горимын анхдагч текст. */
+  function selectChoice(next: PublishChoice) {
+    setChoice(next);
+    if (!textTouched) {
+      const t = initialTexts(next, preview, fallbackTexts);
+      setTitle(t.title);
+      setDescription(t.description);
+    }
+    if (next === "new") setReplacePhotos(false);
+  }
+
+  function resetToCrmText() {
+    setTitle(preview?.title || state.defaultTitle);
+    setDescription(preview?.description ?? state.defaultDescription);
+    setTextTouched(true);
+    setServerTextError(null);
+  }
+
+  // Нийтэд гарах бодит текст (хоосон бол анхдагч / эх зарынх) дээр эрсдэл шалгана.
+  const effective = effectiveTexts(
+    linked ? "new" : choice,
+    { title, description },
+    {
+      candidate: linking ? candidate : null,
+      defaultTitle: preview?.title || state.defaultTitle,
+      defaultDescription: preview?.description ?? state.defaultDescription,
+    }
+  );
+  const risks = checkPublishTexts(effective);
+  const titleRisk = riskMessage(risks.title);
+  const descRisk = riskMessage(risks.description);
+
   const blocked = state.blockers.length > 0;
+  const watermarkNeeded = needsWatermark(choice, linking, replacePhotos);
   const noWatermark = !state.watermark;
   const readOnly = !state.canPublish;
   const working = busy !== null;
-  const canPublishNow = !readOnly && !blocked && !noWatermark && !working && title.trim().length > 0;
+  const hasTitle = title.trim().length > 0 || (linking && !!candidate?.title);
+  const canPublishNow =
+    !readOnly && !blocked && !(noWatermark && watermarkNeeded) && !working && hasTitle && !risks.blocking;
   const textDirty = title !== (state.title ?? "") || description !== (state.description ?? "");
 
+  const diffRows = React.useMemo(
+    () =>
+      preview && !linked
+        ? publishDiffRows(preview, {
+            choice,
+            title,
+            description,
+            defaultTitle: preview.title || state.defaultTitle,
+            defaultDescription: preview.description ?? state.defaultDescription,
+            replacePhotos,
+            imageCount: state.imageCount,
+          })
+        : null,
+    [preview, linked, choice, title, description, replacePhotos, state.defaultTitle, state.defaultDescription, state.imageCount]
+  );
+
   /** Зураг бүрд тамга дарж, нийтийн bucket руу хуулаад зард холбоно. */
-  async function runPhotos(from: "publish" | "photos"): Promise<boolean> {
+  async function runPhotos(from: "publish" | "photos", photoMode: PublishPhotoMode = "stamp_all"): Promise<boolean> {
     setPhotoError(null);
     setProgressAt(from);
     setBusy("photos");
@@ -100,13 +207,14 @@ export function PublishPanel({
         media: state.media,
         watermark: state.watermark,
         onProgress: setProgress,
+        mode: photoMode,
       });
       if (!res.ok) {
         setPhotoError(res.error);
         toast.error(res.error);
         return false;
       }
-      toast.success(`${res.data.uploaded} зураг тамгатайгаар зард орлоо`);
+      if (!res.data.skipped) toast.success(`${res.data.uploaded} зураг тамгатайгаар зард орлоо`);
       return true;
     } catch (e) {
       // Тамга/хуулалт гэнэт шидвэл (жишээ нь задрахгүй файл) зар зураггүй үлдэнэ —
@@ -122,17 +230,40 @@ export function PublishPanel({
     }
   }
 
+  /** DB-ийн утасны алдаа ('description') — тайлбарын талбарт харуулж фокуслана. */
+  function showTextError(text: string) {
+    setServerTextError(text);
+    const target = risks.title.includes("phone") && !risks.description.includes("phone") ? titleRef.current : descRef.current;
+    target?.focus();
+    target?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
+
   async function onPublish() {
     setBusy("publish");
+    setServerTextError(null);
     try {
-      const res = await publishProperty({ property_id: propertyId, title: title.trim(), description: description.trim() });
+      const texts = linked ? textsToSend("new", { title, description }, null) : textsToSend(choice, { title, description }, linking ? candidate : null);
+      const res = await publishProperty({
+        property_id: propertyId,
+        ...texts,
+        ...(linked ? {} : linkArgs(choice, linking ? candidate : null, replacePhotos)),
+      });
       if (!res.ok) {
+        if (res.field === "description" || res.field === "title") showTextError(res.error);
         toast.error(res.error);
         return;
       }
-      toast.success(linked ? "Зар дахин нийтлэгдлээ" : "Зар нийтлэгдлээ", { description: "Одоо зургийг тамга дарж байршуулна." });
+      const photoMode = publishPhotoMode({ linked: res.data.linked, replacePhotos });
+      if (photoMode === "keep") {
+        toast.success("Таны зар шинэчлэгдлээ", { description: "Зарын зураг хэвээр үлдлээ. Цаашид зар CRM-ээр шинэчлэгдэнэ." });
+        router.refresh();
+        return;
+      }
+      toast.success(res.data.linked ? "Таны зар шинэчлэгдлээ" : linked ? "Зар дахин нийтлэгдлээ" : "Зар нийтлэгдлээ", {
+        description: "Одоо зургийг тамга дарж байршуулна.",
+      });
       // Тамгагүй зартай үлдэхгүйн тулд нийтэлсэн даруйд зургаа шинэчилнэ.
-      await runPhotos("publish");
+      await runPhotos("publish", photoMode);
     } catch (e) {
       // Server action шиднэ (сүлжээ тасрах, дахин байршуулалт) — товчнууд түгжээтэй үлдэхгүй.
       console.error("PublishPanel нийтлэх:", e);
@@ -144,9 +275,11 @@ export function PublishPanel({
 
   async function onSaveText() {
     setBusy("text");
+    setServerTextError(null);
     try {
       const res = await updateListingText({ property_id: propertyId, title: title.trim(), description: description.trim() });
       if (!res.ok) {
+        if (res.field === "description" || res.field === "title") showTextError(res.error);
         toast.error(res.error);
         return;
       }
@@ -162,10 +295,20 @@ export function PublishPanel({
 
   // Нийтийн зарын хуудас (app/(site)/listings/[id]). Буцаасан зар нийтэд нээгдэхгүй тул зөвхөн нийтлэгдсэн үед.
   const publicHref = state.published && state.listingId ? `/listings/${state.listingId}` : null;
+  const publishLabel =
+    busy === "publish"
+      ? "Нийтэлж байна…"
+      : linking
+        ? "Зарыг шинэчилж нийтлэх"
+        : linked
+          ? "Дахин нийтлэх"
+          : "Нийтэд зарлах";
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <div className="min-w-0 space-y-4 lg:col-span-2">
+        {readiness && !state.published ? <ReadinessSection panel={panel} propertyId={propertyId} readiness={readiness} /> : null}
+
         <Section
           title="Нийтийн зар"
           icon={Megaphone}
@@ -192,43 +335,81 @@ export function PublishPanel({
               <p className="text-sm text-muted">
                 Зар нийтээс буцаагдсан байна. Дахин нийтлэхэд өмнөх зар (гарчиг, танилцуулга) сэргэнэ.
               </p>
+            ) : candidate && !readOnly ? (
+              <LinkChoice
+                mode={mode}
+                candidate={candidate}
+                choice={choice}
+                onChoice={selectChoice}
+                replacePhotos={replacePhotos}
+                onReplacePhotos={setReplacePhotos}
+                imageCount={state.imageCount}
+                disabled={working}
+              />
             ) : (
               <>
                 <p className="text-sm text-muted">
                   Staff-д бүртгэсэн энэ хөрөнгийг nemi.mn дээр нийтийн зар болгож болно. Зар нь хөрөнгөтэйгөө холбоотой үлдэж, үнэ,
                   үзүүлэлт, төлөв нь автоматаар шинэчлэгдэнэ.
                 </p>
-                <PrivacyNotice watermarkLabel={state.watermark?.label} />
+                {!readiness ? <PrivacyNotice watermarkLabel={state.watermark?.label} /> : null}
               </>
             )}
 
-            {blocked ? (
-              <div className="space-y-1.5">
-                <Note icon={TriangleAlert} tone="amber">
-                  Нийтлэхэд дараах зүйл дутуу байна:
-                </Note>
-                <ul className="list-disc space-y-0.5 pl-5 text-sm text-amber-900">
-                  {state.blockers.map((b) => (
-                    <li key={b}>{b}</li>
-                  ))}
-                </ul>
-                <p className="text-xs text-muted">
-                  Дутууг{" "}
-                  <Link href={paths.property(propertyId, "info")} className="font-semibold text-brand-700 hover:underline">
-                    «Үндсэн мэдээлэл»
-                  </Link>{" "}
-                  табаас нөхнө.
-                </p>
+            {state.warnings.length > 0 ? (
+              <div className="space-y-1" role="status">
+                {state.warnings.map((w) => (
+                  <Note key={w} icon={TriangleAlert} tone="amber">
+                    {w}
+                  </Note>
+                ))}
               </div>
             ) : null}
 
-            {noWatermark ? <Note icon={Stamp} tone="rose">{NO_WATERMARK_ERROR}</Note> : null}
+            {blocked ? (
+              readiness && !state.published ? (
+                <details className="rounded-xl bg-amber-50 px-3 text-sm text-amber-900">
+                  <summary className="flex min-h-11 cursor-pointer items-center gap-1.5 text-xs font-semibold">
+                    <TriangleAlert className="size-3.5 shrink-0" aria-hidden /> Нийтлэх товч хаалттай — шалтгаан ({state.blockers.length})
+                  </summary>
+                  <ul className="list-disc space-y-0.5 pb-2 pl-5 text-sm">
+                    {state.blockers.map((b) => (
+                      <li key={b}>{b}</li>
+                    ))}
+                  </ul>
+                </details>
+              ) : (
+                <div className="space-y-1.5">
+                  <Note icon={TriangleAlert} tone="amber">
+                    Нийтлэхэд дараах зүйл дутуу байна:
+                  </Note>
+                  <ul className="list-disc space-y-0.5 pl-5 text-sm text-amber-900">
+                    {state.blockers.map((b) => (
+                      <li key={b}>{b}</li>
+                    ))}
+                  </ul>
+                </div>
+              )
+            ) : null}
+
+            {noWatermark && watermarkNeeded ? <Note icon={Stamp} tone="rose">{NO_WATERMARK_ERROR}</Note> : null}
+            {risks.blocking && !readOnly ? (
+              <Note icon={TriangleAlert} tone="rose">
+                Гарчиг эсвэл танилцуулгад утасны дугаар байна — хасаж байж нийтэлнэ.
+              </Note>
+            ) : null}
 
             <div className="flex flex-wrap gap-2">
               {!readOnly && !state.published ? (
-                <Button type="button" size="touch" disabled={!canPublishNow} onClick={() => void onPublish()}>
+                <Button
+                  type="button"
+                  size="lg"
+                  className="w-full sm:h-11 sm:w-auto"
+                  disabled={!canPublishNow}
+                  onClick={() => void onPublish()}
+                >
                   <Megaphone className="size-4" aria-hidden />
-                  {busy === "publish" ? "Нийтэлж байна…" : linked ? "Дахин нийтлэх" : "Нийтэд зарлах"}
+                  {publishLabel}
                 </Button>
               ) : null}
               {/* Нийтэд байгаа зарыг харах — эрхгүй хүн ч шалгаж болно. */}
@@ -262,7 +443,17 @@ export function PublishPanel({
           </div>
         </Section>
 
-        <Section title="Зарын гарчиг, танилцуулга" icon={Pencil}>
+        <Section
+          title="Зарын гарчиг, танилцуулга"
+          icon={Pencil}
+          action={
+            !readOnly && !linked && preview ? (
+              <Button type="button" size="touch" variant="ghost" disabled={working} onClick={resetToCrmText}>
+                <RotateCcw className="size-4" aria-hidden /> CRM-ийн анхдагч текст
+              </Button>
+            ) : null
+          }
+        >
           {readOnly ? (
             <dl className="space-y-3">
               <div>
@@ -279,32 +470,71 @@ export function PublishPanel({
           ) : (
             <div className="space-y-3">
               <p className="text-xs text-muted">
-                Зөвхөн эдгээр текстийг агент чөлөөтэй бичнэ. Хаяг, эзний мэдээлэл, дотоод тэмдэглэл бичихгүй — нийтэд харагдана.
+                {linking
+                  ? "Одоогийн зарын текст. Өөрчлөхгүй бол хэвээр үлдэнэ (доторх утасны дугаарыг нууна)."
+                  : "Зөвхөн эдгээр текстийг агент чөлөөтэй бичнэ. Хаяг, тоот, эзний мэдээлэл, утас бичихгүй — нийтэд харагдана."}
               </p>
               <Field label="Гарчиг" htmlFor={`${ids}-title`} hint={`${title.length}/${TITLE_MAX}`}>
                 <Input
                   id={`${ids}-title`}
+                  ref={titleRef}
                   value={title}
                   maxLength={TITLE_MAX}
                   disabled={working}
+                  enterKeyHint="next"
+                  className="text-base sm:text-sm"
+                  aria-invalid={titleRisk?.tone === "error" || undefined}
+                  aria-describedby={titleRisk ? `${ids}-title-risk` : undefined}
                   placeholder={state.defaultTitle || "Жишээ: Зайсан, 3 өрөө, 86 м²"}
-                  onChange={(e) => setTitle(e.target.value)}
+                  onChange={(e) => {
+                    setTitle(e.target.value);
+                    setTextTouched(true);
+                    setServerTextError(null);
+                  }}
                 />
               </Field>
+              {titleRisk ? <RiskLine id={`${ids}-title-risk`} risk={titleRisk} /> : null}
               <Field label="Танилцуулга" htmlFor={`${ids}-desc`} hint={`${description.length}/${DESC_MAX}`}>
                 <textarea
                   id={`${ids}-desc`}
+                  ref={descRef}
                   value={description}
                   rows={6}
                   maxLength={DESC_MAX}
                   disabled={working}
+                  aria-invalid={descRisk?.tone === "error" || !!serverTextError || undefined}
+                  aria-describedby={descRisk || serverTextError ? `${ids}-desc-risk` : undefined}
                   placeholder={state.defaultDescription || "Хөрөнгийн давуу тал, орчин, орох боломжийг товч бичнэ."}
-                  className={textareaClass}
-                  onChange={(e) => setDescription(e.target.value)}
+                  className={cn(textareaClass, "text-base sm:text-sm")}
+                  onChange={(e) => {
+                    setDescription(e.target.value);
+                    setTextTouched(true);
+                    setServerTextError(null);
+                  }}
                 />
               </Field>
+              <div id={`${ids}-desc-risk`} className="space-y-1">
+                {descRisk ? <RiskLine risk={descRisk} /> : null}
+                {serverTextError && !descRisk ? <RiskLine risk={{ tone: "error", text: serverTextError }} /> : null}
+                {!description.trim() && !linked ? (
+                  <p className="text-xs text-muted">
+                    Хоосон бол {linking ? "одоогийн зарын танилцуулга хэвээр үлдэнэ." : "CRM-ийн анхдагч танилцуулга орно."}
+                  </p>
+                ) : null}
+              </div>
+              {linking && (hasMaskedPhone(candidate?.title) || hasMaskedPhone(candidate?.description)) ? (
+                <Note icon={ShieldCheck} tone="blue">
+                  Одоогийн зарын текстэд байсан утасны дугаарыг «•••• ••••» болгон нууна.
+                </Note>
+              ) : null}
               {linked ? (
-                <Button type="button" size="touch" variant="outline" disabled={working || !title.trim() || !textDirty} onClick={() => void onSaveText()}>
+                <Button
+                  type="button"
+                  size="touch"
+                  variant="outline"
+                  disabled={working || !title.trim() || !textDirty || risks.blocking}
+                  onClick={() => void onSaveText()}
+                >
                   <Save className="size-4" aria-hidden /> {busy === "text" ? "Хадгалж байна…" : "Зарын текст засах"}
                 </Button>
               ) : (
@@ -313,6 +543,19 @@ export function PublishPanel({
             </div>
           )}
         </Section>
+
+        {diffRows && !readOnly ? (
+          <Section title={linking ? "Зарт өөрчлөгдөх зүйл" : "Нийтэд гарах утга"} icon={GitCompareArrows}>
+            <div className="space-y-2">
+              <p className="text-xs text-muted">
+                {linking
+                  ? "Одоогийн зар ба нийтэлсний дараах нийтийн талбар. Эзний мэдээлэл, дотоод тэмдэглэл энд орохгүй."
+                  : "Нийтлэх үед зард яг ингэж гарна. Эзний мэдээлэл, дотоод тэмдэглэл энд орохгүй."}
+              </p>
+              <PublishDiff rows={diffRows} linking={linking} />
+            </div>
+          </Section>
+        ) : null}
       </div>
 
       <div className="min-w-0 space-y-4">
@@ -320,12 +563,14 @@ export function PublishPanel({
           <div className="space-y-3">
             <p className="text-sm text-ink">
               CRM-д <span className="font-semibold tabular-nums">{state.imageCount}</span> зураг · зард{" "}
-              <span className="font-semibold tabular-nums">{state.photoCount}</span> зураг
+              <span className="font-semibold tabular-nums">{linking ? (candidate?.photo_count ?? 0) : state.photoCount}</span> зураг
             </p>
             <p className="text-xs text-muted">
-              {state.watermark?.label
-                ? `Зураг бүрд «${state.watermark.label}»-ийн тамга дарагдаж, нийтийн зар руу орно. Тамгагүй эх зураг нийтэд гарахгүй.`
-                : "Зураг бүрд оффисын тамга дарагдаж байж зар руу орно."}
+              {linking && !replacePhotos
+                ? "Одоогийн зарын зураг хэвээр үлдэнэ. Солих бол «Зургийг солих»-ыг сонгоно."
+                : state.watermark?.label
+                  ? `Зураг бүрд «${state.watermark.label}»-ийн тамга дарагдаж, нийтийн зар руу орно. Тамгагүй эх зураг нийтэд гарахгүй.`
+                  : "Зураг бүрд оффисын тамга дарагдаж байж зар руу орно."}
             </p>
 
             {progress && progressAt === "photos" ? <PhotoProgress progress={progress} /> : null}
@@ -354,11 +599,11 @@ export function PublishPanel({
               </Button>
             ) : null}
             {state.media.length === 0 ? <p className="text-xs text-subtle">Хөрөнгөд зураг оруулаагүй байна.</p> : null}
-            {noWatermark ? <p className="text-xs text-rose-700">{NO_WATERMARK_ERROR}</p> : null}
+            {noWatermark && (linked || watermarkNeeded) ? <p className="text-xs text-rose-700">{NO_WATERMARK_ERROR}</p> : null}
           </div>
         </Section>
 
-        {linked ? (
+        {linked || readiness ? (
           <Section title="Нууцлал" icon={ShieldCheck}>
             <PrivacyNotice watermarkLabel={state.watermark?.label} />
           </Section>
@@ -384,5 +629,22 @@ export function PublishPanel({
         }}
       />
     </div>
+  );
+}
+
+/** Бичвэрийн эрсдэлийн мөр: утас — алдаа (DB хориглоно), тоот/код — сануулга. */
+function RiskLine({ id, risk }: { id?: string; risk: { tone: "error" | "warning"; text: string } }) {
+  return (
+    <p
+      id={id}
+      role={risk.tone === "error" ? "alert" : "status"}
+      className={cn(
+        "flex items-start gap-1.5 rounded-lg px-2.5 py-1.5 text-xs",
+        risk.tone === "error" ? "bg-rose-50 text-rose-800" : "bg-amber-50 text-amber-900"
+      )}
+    >
+      <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+      <span className="min-w-0">{risk.text}</span>
+    </p>
   );
 }

@@ -50,14 +50,28 @@ function withQuery(path: string, query?: Query): string {
   return s ? `${path}?${s}` : path;
 }
 
+export type StaffNewQuery = { full?: 1 | "1" | boolean; draft?: string | null; share?: string | null };
+export type PropertyQuery = Query & { sheet?: string | null };
+
+/**
+ * PWA Web Share Target-ийн action (app/manifest.ts share_target). Зөвхөн агентын панель — PWA-ийн
+ * start_url /agent/crm. Service worker POST-ийг барьж /agent/crm/staff/new?share=<id> руу шилжүүлнэ.
+ */
+export const STAFF_SHARE_PATH = "/agent/crm/staff/share";
+
 /** Нэг панелийн бүх CRM холбоос. */
 export function crm2Paths(panel: Crm2Panel) {
   const base = panelBase(panel);
   return {
     base,
     staff: (query?: Query) => withQuery(`${base}/staff`, query),
-    staffNew: () => `${base}/staff/new`,
-    property: (id: string, tab?: PropertyTab, query?: Query) =>
+    /** Шинэ хөрөнгө: ?full=1 — бүрэн форм, ?draft=<clientKey> — тухайн ноорог, ?share=<id> — хуваалцсан зар. */
+    staffNew: (query?: StaffNewQuery) =>
+      withQuery(`${base}/staff/new`, { full: query?.full ? 1 : undefined, draft: query?.draft, share: query?.share }),
+    /** «Миний дутуу хөрөнгө» (?scope=me|team|office). */
+    staffIncomplete: (query?: Query) => withQuery(`${base}/staff/incomplete`, query),
+    /** Картын таб ба доод цонх (?sheet=next|checklist|contract|owner|…) — query-г дамжуулна. */
+    property: (id: string, tab?: PropertyTab, query?: PropertyQuery) =>
       withQuery(`${base}/staff/${id}`, { ...(tab && tab !== "info" ? { tab } : {}), ...query }),
     propertyEdit: (id: string) => `${base}/staff/${id}/edit`,
     deal: (propertyId: string, dealId: string) => `${base}/staff/${propertyId}/deals/${dealId}`,
@@ -71,6 +85,7 @@ export function crm2Paths(panel: Crm2Panel) {
     calendar: () => `${base}/calendar`,
     /** Батлах хүлээгдэж буй гэрээ, хүсэлт (crm2_my_context.can_approve). */
     approvals: () => `${base}/approvals`,
+    staffShare: STAFF_SHARE_PATH,
   };
 }
 

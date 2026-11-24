@@ -1,6 +1,9 @@
 import type { z } from "zod";
 
+import { UNCONFIRMABLE_KEYS } from "@/lib/crm2/checklist";
 import { isIsoDate } from "@/lib/crm2/datetime";
+import { mergeSnapshot } from "@/lib/crm2/device/draft-store";
+import { perM2FromTotal, totalFromPerM2, type FieldValidationInput } from "@/lib/crm2/field-validation";
 import { CATEGORY_PRICE_PERIODS, defaultPricePeriod, missingItemLabel } from "@/lib/crm2/labels";
 import { normalizePhone } from "@/lib/crm2/phone";
 import { propertyCreateSchema } from "@/lib/crm2/schemas";
@@ -100,13 +103,29 @@ export type PropertyFormState = {
   listing_agent_id: string;
   contract_agent_id: string;
   photo_agent_id: string;
+  /** Зогсоолын тоо (хоосон = тодорхойгүй, 0 = зогсоолгүй). */
+  parking_spaces: string;
+  /** Түрээсийн урьдчилгаа, барьцаа (сараар). */
+  rent_advance_months: string;
+  rent_deposit_months: string;
+  /**
+   * Автоматаар бөглөгдсөн (наасан, зараас, санал болгосон), агент шалгаагүй талбарууд
+   * (UNCONFIRMABLE_KEYS). Агент утгыг өөрчлөх эсвэл «Зөв» дарахад хасагдана.
+   */
+  unconfirmed: string[];
 };
 
-/** Шинэ хөрөнгө: листлэгч ба гэрээ хийсэн агент анхдагчаар — өөрөө. */
+/** Анхдагч хөрөнгийн төрөл (Staff-ийн ихэнх нь орон сууц). */
+export const DEFAULT_PROPERTY_TYPE = "apartment";
+
+/**
+ * Шинэ хөрөнгө: төрөл — орон сууц; листлэгч ба гэрээ хийсэн агент анхдагчаар — өөрөө.
+ * Ашиглалтын зардал нэг мөр (₮/сар).
+ */
 export function emptyPropertyForm(me: string | null): PropertyFormState {
   return {
     category: "",
-    property_type: "",
+    property_type: DEFAULT_PROPERTY_TYPE,
     project_name: "",
     project_id: null,
     district: "",
@@ -139,6 +158,10 @@ export function emptyPropertyForm(me: string | null): PropertyFormState {
     listing_agent_id: me ?? "",
     contract_agent_id: me ?? "",
     photo_agent_id: "",
+    parking_spaces: "",
+    rent_advance_months: "",
+    rent_deposit_months: "",
+    unconfirmed: [],
   };
 }
 
@@ -185,6 +208,10 @@ export function propertyToForm(
     listing_agent_id: str(row.listing_agent_id),
     contract_agent_id: str(row.contract_agent_id),
     photo_agent_id: str(row.photo_agent_id),
+    parking_spaces: numStr(row.parking_spaces),
+    rent_advance_months: numStr(row.rent_advance_months),
+    rent_deposit_months: numStr(row.rent_deposit_months),
+    unconfirmed: normalizeUnconfirmed(row.unconfirmed),
   };
 }
 
@@ -238,6 +265,10 @@ export type PropertyPayload = {
   listing_agent_id: string | null;
   contract_agent_id: string | null;
   photo_agent_id: string | null;
+  parking_spaces: number | string | null;
+  rent_advance_months: number | string | null;
+  rent_deposit_months: number | string | null;
+  unconfirmed: string[];
 };
 
 export function propertyPayload(s: PropertyFormState): PropertyPayload {
@@ -275,7 +306,134 @@ export function propertyPayload(s: PropertyFormState): PropertyPayload {
     listing_agent_id: textOrNull(s.listing_agent_id),
     contract_agent_id: textOrNull(s.contract_agent_id),
     photo_agent_id: textOrNull(s.photo_agent_id),
+    parking_spaces: parseNumberInput(s.parking_spaces),
+    rent_advance_months: parseNumberInput(s.rent_advance_months),
+    rent_deposit_months: parseNumberInput(s.rent_deposit_months),
+    unconfirmed: normalizeUnconfirmed(s.unconfirmed),
   };
+}
+
+// ── Баталгаажаагүй (автомат) утга ──────────────────────────────────────────
+
+/** UNCONFIRMABLE_KEYS-ийн дарааллаар, давхардалгүй, мэдэгдэхгүй түлхүүргүй. */
+export function normalizeUnconfirmed(list: readonly string[] | null | undefined): string[] {
+  const set = new Set(list ?? []);
+  return UNCONFIRMABLE_KEYS.filter((k) => set.has(k));
+}
+
+/** Маягтын талбар → unconfirmed-ийн түлхүүр (байхгүй бол null). */
+export function unconfirmedKeyOf(formKey: string): string | null {
+  const k = formKey === "project_name" || formKey === "project_id" ? "project" : formKey === "lng" ? "lat" : formKey;
+  return (UNCONFIRMABLE_KEYS as readonly string[]).includes(k) ? k : null;
+}
+
+/** Талбарыг баталгаажуулсан (утгыг өөрчилсөн эсвэл «Зөв» дарсан) — жагсаалтаас хасна. */
+export function confirmFields(list: readonly string[], formKeys: readonly string[]): string[] {
+  const drop = new Set(formKeys.map(unconfirmedKeyOf).filter((k): k is string => !!k));
+  if (!drop.size) return [...list];
+  return list.filter((k) => !drop.has(k));
+}
+
+export function isUnconfirmed(list: readonly string[], formKey: string): boolean {
+  const k = unconfirmedKeyOf(formKey);
+  return !!k && list.includes(k);
+}
+
+// ── Талбарын шалгалт (blur) ───────────────────────────────────────────────
+
+const numOrNull = (v: string): number | null => {
+  const n = parseNumberInput(v);
+  return typeof n === "number" ? n : null;
+};
+
+/** lib/crm2/field-validation-ийн оролт (тоо уншигдаагүй бол null). */
+export function validationInput(s: PropertyFormState): FieldValidationInput {
+  return {
+    category: s.category || null,
+    price: numOrNull(s.price),
+    currency: s.currency,
+    price_period: s.price_period,
+    price_basis: s.price_basis,
+    area_m2: numOrNull(s.area_m2),
+    floor: numOrNull(s.floor),
+    building_floors: numOrNull(s.building_floors),
+  };
+}
+
+/** Ашиглалтын зардал энгийн «₮/сар» мөрөөр бичигдэх эсэх (хуучин $ эсвэл өдрийн утгыг хадгална). */
+export function operatingCostIsSimple(s: Pick<PropertyFormState, "operating_cost_currency" | "operating_cost_period">): boolean {
+  return s.operating_cost_currency === "MNT" && s.operating_cost_period === "month";
+}
+
+/** Түрээсийн нөхцөл (урьдчилгаа/барьцаа) хамаарах ангилал. */
+export function hasRentTerms(category: Crm2PropertyCategory | ""): boolean {
+  return category === "rent" || category === "lease" || category === "managed_rent";
+}
+
+const COUNTED_FIELDS: readonly (keyof PropertyFormState)[] = [
+  "category",
+  "project_name",
+  "district",
+  "location_text",
+  "address_detail",
+  "area_m2",
+  "rooms",
+  "floor",
+  "building_floors",
+  "price",
+  "year_in_use",
+  "operating_cost",
+  "condition",
+  "view_note",
+  "notes",
+  "advantages",
+  "available_from",
+  "availability_note",
+  "parking_spaces",
+  "rent_advance_months",
+  "rent_deposit_months",
+  "photo_agent_id",
+];
+
+/** Хэмжилт: бөглөсөн талбарын тоо (зөвхөн тоо — утга хэзээ ч илгээхгүй). */
+export function fieldsFilled(s: PropertyFormState): number {
+  let n = 0;
+  for (const k of COUNTED_FIELDS) {
+    const v = s[k];
+    if (typeof v === "string" ? v.trim() !== "" : v !== null && v !== undefined) n++;
+  }
+  if (s.lat !== null && s.lng !== null) n++;
+  if (s.features.length) n++;
+  return n;
+}
+
+// ── Сүүлд ашигласан дүүрэг (нэг товшилтын санал) ─────────────────────────
+
+export const RECENT_DISTRICTS_MAX = 3;
+
+/** localStorage түлхүүр — хэрэглэгч бүрт тусдаа (гарахад «crm2:»-ээр эхэлсэн бүгд устна). */
+export function recentDistrictsKey(profileId: string): string {
+  return `crm2:recent-districts:${profileId}`;
+}
+
+/** Шинэ утгыг эхэнд нэмж, давхардлыг хасаж, max-аар таслана. */
+export function pushRecent(list: readonly string[], value: string, max = RECENT_DISTRICTS_MAX): string[] {
+  const v = value.trim();
+  if (!v) return list.slice(0, max);
+  return [v, ...list.filter((x) => x !== v)].slice(0, max);
+}
+
+/** localStorage-оос уншсан утгыг цэвэрлэнэ (зөвхөн оффисын дүүргийн жагсаалтад байгаа). */
+export function parseRecent(raw: string | null, allowed: readonly string[], max = RECENT_DISTRICTS_MAX): string[] {
+  if (!raw) return [];
+  try {
+    const v: unknown = JSON.parse(raw);
+    if (!Array.isArray(v)) return [];
+    const ok = new Set(allowed);
+    return [...new Set(v.filter((x): x is string => typeof x === "string" && ok.has(x)))].slice(0, max);
+  } catch {
+    return [];
+  }
 }
 
 /** Төслийн холбоос: сонгосон id, шинэ нэр, эсвэл хасах. */
@@ -372,13 +530,20 @@ export function withCategory(s: PropertyFormState, category: Crm2PropertyCategor
   return { ...s, category, price_period: period };
 }
 
-/** м²-ийн үнээр нийт дүн (урьдчилан харах). */
+/** м²-ийн үнээр нийт дүн (урьдчилан харах; field-validation-ийн тооцоо). */
 export function previewTotal(s: Pick<PropertyFormState, "price" | "area_m2" | "price_basis">): number | null {
-  const price = parseNumberInput(s.price);
-  if (typeof price !== "number") return null;
+  const price = numOrNull(s.price);
+  if (price === null) return null;
   if (s.price_basis !== "per_m2") return price;
-  const area = parseNumberInput(s.area_m2);
-  return typeof area === "number" ? Math.round(price * area * 100) / 100 : null;
+  return totalFromPerM2(price, numOrNull(s.area_m2));
+}
+
+/** Нийт үнээс м²-ийн үнэ (м²-ийн үнээр бол өөрөө). */
+export function previewPerM2(s: Pick<PropertyFormState, "price" | "area_m2" | "price_basis">): number | null {
+  const price = numOrNull(s.price);
+  if (price === null) return null;
+  if (s.price_basis === "per_m2") return price;
+  return perM2FromTotal(price, numOrNull(s.area_m2));
 }
 
 // ── Хувийн талбар (эзэн, үзүүлэх заавар) ───────────────────────────────────
@@ -517,6 +682,146 @@ export function brokerageSubmitMissing(
 /** Дутуу зүйлсийг энгийн монгол өгүүлбэр болгоно. */
 export function missingSentence(keys: string[]): string {
   return keys.map(missingItemLabel).join(", ");
+}
+
+// ── Утсан дээрх ноорог (P5) ────────────────────────────────────────────────
+
+export type MediaLinkDraft = { id: string; url: string };
+
+/**
+ * Бүрэн формын ноорог (crm2:draft:{profileId}:staff-new:{clientKey}) — шуурхай бүртгэлтэй ижил
+ * бичлэг. Зөвхөн нийтийн талбар: address_detail ба эзний мэдээлэл ЗӨВХӨН хувийн (битүүмжилсэн) хэсэгт.
+ */
+export type CreateDraftForm = PropertyFormState & {
+  brokerage: BrokerageFormState;
+  media_links: MediaLinkDraft[];
+};
+
+/** Ноорогийн хувийн хэсэг (vault, 24 цаг). owner_phone — шуурхай бүртгэлд бичсэн дугаар. */
+export type CreateDraftPrivate = {
+  owner: OwnerRef | null;
+  owner_note: string;
+  showing_instructions: string;
+  address_detail: string;
+  brokerage_owner: OwnerRef | null;
+  brokerage_owner_touched: boolean;
+  owner_phone?: string;
+};
+
+export type CreateDraftParts = {
+  form: PropertyFormState;
+  priv: PrivateFormState;
+  brokerage: BrokerageFormState;
+  brokerageOwner: OwnerRef | null;
+  brokerageOwnerTouched: boolean;
+  links: MediaLinkDraft[];
+};
+
+/** Маягтын төлөв → ноорогийн нийтийн ба хувийн хэсэг. */
+export function toCreateDraft(p: CreateDraftParts, quickPhone?: string | null): {
+  form: CreateDraftForm;
+  private: CreateDraftPrivate;
+} {
+  const priv: CreateDraftPrivate = {
+    owner: p.priv.owner,
+    owner_note: p.priv.owner_note,
+    showing_instructions: p.priv.showing_instructions,
+    address_detail: p.form.address_detail,
+    brokerage_owner: p.brokerageOwnerTouched ? p.brokerageOwner : null,
+    brokerage_owner_touched: p.brokerageOwnerTouched,
+  };
+  // Шуурхай бүртгэлийн дугаарыг эзэн сонгогдтол хадгална (алдагдахгүй).
+  if (quickPhone && !p.priv.owner) priv.owner_phone = quickPhone;
+  return {
+    form: { ...p.form, address_detail: "", brokerage: p.brokerage, media_links: p.links },
+    private: priv,
+  };
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+
+function ownerRefOf(v: unknown): OwnerRef | null {
+  if (!isRecord(v) || typeof v.id !== "string" || !v.id || typeof v.name !== "string") return null;
+  return {
+    id: v.id,
+    name: v.name,
+    code: typeof v.code === "string" ? v.code : null,
+    phone: typeof v.phone === "string" ? v.phone : null,
+  };
+}
+
+const oneOf = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T =>
+  typeof v === "string" && (allowed as readonly string[]).includes(v) ? (v as T) : fallback;
+
+const CATEGORIES = ["rent", "lease", "managed_rent", "sale"] as const;
+const PERIODS = ["total", "month", "day"] as const;
+const BASES = ["total", "per_m2"] as const;
+const COMMISSION_TYPES = ["percent", "fixed"] as const;
+
+/**
+ * Ноорогоос маягтын төлөв (кодын хувилбар солигдсон, шуурхай бүртгэлийн ноорог ч аюулгүй):
+ * мэдэгдэхгүй түлхүүр, буруу төрөл, буруу сонголтыг хаяна.
+ */
+export function fromCreateDraft(
+  storedForm: unknown,
+  storedPrivate: unknown,
+  me: string | null
+): CreateDraftParts & { quickPhone: string | null } {
+  const base = emptyPropertyForm(me);
+  const m = mergeSnapshot(base as unknown as Record<string, unknown>, storedForm) as unknown as PropertyFormState;
+  const raw = isRecord(storedForm) ? storedForm : {};
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const lat = num(m.lat);
+  const lng = num(m.lng);
+  const form: PropertyFormState = {
+    ...m,
+    category: oneOf(m.category, [...CATEGORIES, ""] as const, ""),
+    project_id: typeof m.project_id === "string" && m.project_id ? m.project_id : null,
+    lat: lat !== null && lng !== null ? lat : null,
+    lng: lat !== null && lng !== null ? lng : null,
+    currency: cur(m.currency),
+    operating_cost_currency: cur(m.operating_cost_currency),
+    price_period: oneOf(m.price_period, PERIODS, base.price_period),
+    operating_cost_period: oneOf(m.operating_cost_period, PERIODS, base.operating_cost_period),
+    price_basis: oneOf(m.price_basis, BASES, base.price_basis),
+    features: (Array.isArray(m.features) ? m.features : []).filter((f): f is string => typeof f === "string"),
+    field_notes: parseFieldNotes(m.field_notes as Json),
+    unconfirmed: normalizeUnconfirmed((Array.isArray(m.unconfirmed) ? m.unconfirmed : []).filter((k) => typeof k === "string")),
+    address_detail: "",
+  };
+
+  const bBase = emptyBrokerageForm();
+  const b = mergeSnapshot(bBase as unknown as Record<string, unknown>, raw.brokerage) as unknown as BrokerageFormState;
+  const brokerage: BrokerageFormState = {
+    ...b,
+    commission_type: oneOf(b.commission_type, [...COMMISSION_TYPES, ""] as const, ""),
+    commission_currency: cur(b.commission_currency),
+  };
+
+  const links: MediaLinkDraft[] = (Array.isArray(raw.media_links) ? raw.media_links : [])
+    .filter((l): l is MediaLinkDraft => isRecord(l) && typeof l.id === "string" && typeof l.url === "string")
+    .map((l) => ({ id: l.id, url: l.url }));
+
+  const p = isRecord(storedPrivate) ? storedPrivate : {};
+  const text = (v: unknown) => (typeof v === "string" ? v : "");
+  form.address_detail = text(p.address_detail);
+  const owner = ownerRefOf(p.owner);
+  const touched = p.brokerage_owner_touched === true;
+  const quickPhone = !owner && typeof p.owner_phone === "string" && p.owner_phone.trim() ? p.owner_phone.trim() : null;
+  return {
+    form,
+    priv: { owner, owner_note: text(p.owner_note), showing_instructions: text(p.showing_instructions) },
+    brokerage,
+    brokerageOwner: touched ? ownerRefOf(p.brokerage_owner) : null,
+    brokerageOwnerTouched: touched,
+    links,
+    quickPhone,
+  };
+}
+
+/** Ноорогийн жагсаалтад харагдах товч нэр (зөвхөн төсөл/дүүрэг — эзний мэдээлэл хэзээ ч үгүй). */
+export function draftTitleParts(s: Pick<PropertyFormState, "project_name" | "district">): { project: string; district: string } {
+  return { project: s.project_name.trim(), district: s.district.trim() };
 }
 
 // ── Утас (шинэ эзэн) ───────────────────────────────────────────────────────

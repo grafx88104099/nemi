@@ -1,19 +1,19 @@
 import Link from "next/link";
-import { CircleCheck } from "lucide-react";
+import { CircleCheck, FileSignature } from "lucide-react";
 
 import { BackLink } from "@/components/ui/back-link";
 import { CodeChip, NoAccessState, NotFoundState, PropertyStatusBadge } from "@/components/crm2/ui";
 import { getCrm2Context, getCrm2Settings } from "@/lib/crm2/context";
+import { quickAddEnabled } from "@/lib/crm2/feature-flags";
 import { fileLimits } from "@/lib/crm2/settings";
 import { crm2Paths, type Crm2Panel } from "@/lib/crm2/paths";
 import { getStaffDirectory } from "@/lib/crm2/queries/lookups";
+import { buildCardChecklist } from "@/lib/crm2/queries/checklist";
 import { getProperty } from "@/lib/crm2/queries/properties";
-import { brokerageResponsibleAllowed } from "@/components/crm2/deals/types";
+import { ChecklistSummary } from "@/components/crm2/staff/card/ChecklistSheet";
 
-import { ActivationPanel } from "./ActivationPanel";
-import { BrokerageEditSection } from "./BrokerageEditSection";
 import { MediaManager } from "./MediaManager";
-import { StaffForm } from "./StaffForm";
+import { QuickAddLink, StaffForm } from "./StaffForm";
 
 /**
  * S02 — Staff хөрөнгө нэмэх (propertyId-гүй) ба засах дэлгэц (хоёр панелийн
@@ -24,11 +24,14 @@ export async function StaffFormScreen({
   panel,
   propertyId,
   created = false,
+  sharedNotice = false,
 }: {
   panel: Crm2Panel;
   propertyId?: string;
   /** Шинээр үүсгэсний дараах анхны нээлт (?created=1). */
   created?: boolean;
+  /** Хуваалцсан зараар нээгдсэн (шуурхай бүртгэлгүй хэрэглэгч) — гараар бөглөх зөвлөгөө. */
+  sharedNotice?: boolean;
 }) {
   const p = crm2Paths(panel);
   const [ctx, settings, directory] = await Promise.all([getCrm2Context(), getCrm2Settings(), getStaffDirectory()]);
@@ -61,11 +64,21 @@ export async function StaffFormScreen({
     return (
       <Frame>
         <BackLink href={p.staff()} label="Staff руу буцах" />
-        <div className="mb-4">
-          <h1 className="text-xl font-extrabold text-ink sm:text-2xl">Шинэ хөрөнгө</h1>
+        <div className="mb-4 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h1 className="text-xl font-extrabold text-ink sm:text-2xl">Шинэ хөрөнгө</h1>
+            {/* Шуурхай бүртгэл — ижил ноорогоор (feature flag асаалттай үед). */}
+            {quickAddEnabled(settings, ctx.profileId) ? <QuickAddLink panel={panel} /> : null}
+          </div>
           <p className="text-sm text-muted">
-            Хадгалахад ноорог болж бүртгэгдэнэ. Зуучлалын гэрээ батлагдмагц Staff-ийн идэвхтэй санд орно.
+            Хадгалахад ноорог болж бүртгэгдэнэ; бөглөсөн бүхэн утсан дээр автоматаар хадгалагдана. Зуучлалын гэрээ батлагдмагц
+            Staff-ийн идэвхтэй санд орно.
           </p>
+          {sharedNotice ? (
+            <p role="status" className="rounded-2xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
+              Хуваалцсан зарыг энэ формд автоматаар оруулахгүй. Зарын мэдээллийг гараар бөглөж, зургийг «Галерей» товчоор нэмнэ үү.
+            </p>
+          ) : null}
         </div>
         <StaffForm
           mode="create"
@@ -105,17 +118,7 @@ export async function StaffFormScreen({
     );
   }
 
-  const allowResponsible = brokerageResponsibleAllowed(responsibleCtx, [prop.listing_agent_id, prop.contract_agent_id, prop.photo_agent_id]);
-  const responsibleStaff = staff.filter((s) => allowResponsible({ id: s.profile_id, teamId: s.team_id }));
-
-  const owner = detail.private?.owner
-    ? {
-        id: detail.private.owner.id,
-        name: detail.private.owner.full_name,
-        code: detail.private.owner.code,
-        phone: detail.private.owner.phones[0]?.phone ?? null,
-      }
-    : null;
+  const { checklist, next } = buildCardChecklist(detail, settings);
 
   return (
     <Frame>
@@ -131,7 +134,7 @@ export async function StaffFormScreen({
           <div role="status" className="flex flex-wrap items-start gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
             <CircleCheck className="mt-0.5 size-4 shrink-0" aria-hidden />
             <p className="min-w-0 flex-1">
-              <span className="font-semibold">{prop.code} ноорог бүртгэгдлээ.</span> Медиа, гэрээгээ доор нэмж эсвэл засаж болно.{" "}
+              <span className="font-semibold">{prop.code} ноорог бүртгэгдлээ.</span> Медиагаа доор нэмж, дутуу зүйлсийг шалгах жагсаалтаас гүйцээнэ.{" "}
               <Link href={cardHref} className="font-semibold text-emerald-800 underline">
                 Хөрөнгийн карт
               </Link>
@@ -139,7 +142,8 @@ export async function StaffFormScreen({
           </div>
         ) : null}
 
-        <ActivationPanel status={prop.status} activation={detail.activation} />
+        {/* Шалгах жагсаалт (хуучин «идэвхжүүлэх нөхцөл»-ийн оронд) — дарахад картын жагсаалт нээгдэнэ. */}
+        <ChecklistSummary checklist={checklist} next={next} href={p.property(prop.id, "info", { sheet: "checklist" })} />
 
         <StaffForm
           key={prop.id}
@@ -162,21 +166,17 @@ export async function StaffFormScreen({
           items={detail.media}
           limits={fileLimits(settings)}
           imagesRequired={settings["property.activation_required"].includes("images")}
+          profileId={ctx.profileId}
         />
 
-        {detail.can.viewPrivate || detail.brokerage.length ? (
-          <BrokerageEditSection
-            propertyId={prop.id}
-            officeId={prop.office_id}
-            contracts={detail.brokerage}
-            propertyOwner={owner}
-            staff={staff}
-            responsibleStaff={responsibleStaff}
-            me={ctx.profileId}
-            settings={settings}
-            agreementHref={p.property(prop.id, "agreement")}
-          />
-        ) : null}
+        {/* Зуучлалын гэрээ энд засагдахгүй — картын «Гэрээ» доод цонх (урьдчилан бөглөсөн, 2 алхам). */}
+        <Link
+          href={p.property(prop.id, "info", { sheet: "contract" })}
+          className="flex min-h-11 items-center gap-2 rounded-2xl border border-line bg-surface px-3 py-2 text-sm font-semibold text-brand-700 hover:border-line-strong sm:px-4"
+        >
+          <FileSignature className="size-4 shrink-0" aria-hidden />
+          Гэрээг картын «Гэрээ» хэсгээс засна
+        </Link>
       </div>
     </Frame>
   );

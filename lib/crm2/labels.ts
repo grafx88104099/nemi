@@ -182,7 +182,8 @@ export const CATEGORY_PRICE_PERIODS: Record<Crm2PropertyCategory, Crm2PricePerio
 };
 
 export function defaultPricePeriod(category: Crm2PropertyCategory): Crm2PricePeriod {
-  return category === "sale" ? "total" : category === "lease" ? "day" : "month";
+  // Хөлслөх ч сарын үнээр эхэлнэ: «өдрийн» үнийг нийтлэх боломжгүй (crm2_publish_blockers).
+  return category === "sale" ? "total" : "month";
 }
 
 // ── Медиа ──────────────────────────────────────────────────────────────────
@@ -409,10 +410,87 @@ export const PROPERTY_AGENT_ROLES = ["listing_agent_id", "contract_agent_id", "p
 export type PropertyAgentRole = (typeof PROPERTY_AGENT_ROLES)[number];
 
 export const PROPERTY_AGENT_ROLE_LABEL: Record<PropertyAgentRole, string> = {
-  listing_agent_id: "Листлэгч агент",
-  contract_agent_id: "Гэрээ хийсэн агент",
+  listing_agent_id: "Хөрөнгө авчирсан агент",
+  contract_agent_id: "Гэрээ байгуулсан агент",
   photo_agent_id: "Зураг авсан агент",
 };
+
+// ── Staff бүртгэлийн шошго (P1) ───────────────────────────────────────────
+
+/** view_note талбарын нэр (маягт, карт, түүх). */
+export const VIEW_NOTE_LABEL = "Цонхноос харагдах байдал";
+
+/** Ноорог хадгалах үндсэн товч — дутуу бөглөсөн ч хадгална. */
+export const SAVE_DRAFT_LABEL = "Хадгалах (дараа гүйцээнэ)";
+
+/** Эзэн хүлээгдэж буй (owner_pending) үеийн шошго. */
+export const OWNER_PENDING_LABEL = "Эзнийг шалгах шаардлагатай";
+
+/**
+ * Ангиллын чипийн доорх анхдагч тайлбар — crm2_setting_default('property.category_hints')-тэй ижил
+ * («Хөлслөх»-ийг оффис тодорхойлтол тайлбаргүй).
+ */
+export const CATEGORY_HINT_DEFAULT: Partial<Record<Crm2PropertyCategory, string>> = {
+  rent: "Сарын түрээсээр",
+  managed_rent: "Түрээс + оффисын менежментийн үйлчилгээ",
+  sale: "Худалдах, нийт үнээр",
+};
+
+/** Харилцагчийн зөвшөөрлийн төлөв (crm2_contacts.consent). */
+export const CONTACT_CONSENTS = ["unknown", "verbal", "written", "declined"] as const;
+export type Crm2ContactConsent = (typeof CONTACT_CONSENTS)[number];
+
+export const CONTACT_CONSENT_LABEL: Record<Crm2ContactConsent, string> = {
+  unknown: "Тодорхойгүй",
+  verbal: "Амаар зөвшөөрсөн",
+  written: "Бичгээр зөвшөөрсөн",
+  declined: "Татгалзсан",
+};
+
+/** Талбар хэзээ хэрэгтэй болох (маягтын шошгоны хажууд). */
+export type Crm2FieldStage = "start" | "contract" | "publish";
+
+export const STAGE_TAG_LABEL: Record<Crm2FieldStage, string> = {
+  start: "эхлэхэд хэрэгтэй",
+  contract: "гэрээнд хэрэгтэй",
+  publish: "нийтлэхэд хэрэгтэй",
+};
+
+/** Картын шалгах жагсаалтын 4 бүлэг. */
+export const CHECKLIST_GROUPS = ["intake", "contract", "publish", "extra"] as const;
+export type Crm2ChecklistGroup = (typeof CHECKLIST_GROUPS)[number];
+
+export const CHECKLIST_GROUP_LABEL: Record<Crm2ChecklistGroup, string> = {
+  intake: "Бүртгэл",
+  contract: "Гэрээ",
+  publish: "Нийтлэхэд бэлэн",
+  extra: "Нэмэлт",
+};
+
+/** Хөрөнгө хаанаас бүртгэгдсэн (crm2_properties.source). */
+export const PROPERTY_SOURCES = ["manual", "paste", "share", "listing"] as const;
+export type Crm2PropertySourceKey = (typeof PROPERTY_SOURCES)[number];
+
+export const PROPERTY_SOURCE_LABEL: Record<Crm2PropertySourceKey, string> = {
+  manual: "Гараар бүртгэсэн",
+  paste: "Зарын текстээс",
+  share: "Хуваалцсан зарнаас",
+  listing: "Миний зараас",
+};
+
+/** Гэрээний файлын төрөл (crm2_brokerage_files.kind). */
+export const BROKERAGE_FILE_KINDS = ["contract", "ownership", "id", "other"] as const;
+export type Crm2BrokerageFileKindKey = (typeof BROKERAGE_FILE_KINDS)[number];
+
+export const BROKERAGE_FILE_KIND_LABEL: Record<Crm2BrokerageFileKindKey, string> = {
+  contract: "Гэрээ",
+  ownership: "Өмчлөлийн баримт",
+  id: "Иргэний үнэмлэх",
+  other: "Бусад баримт",
+};
+
+/** Хязгаарлагдсан хавтаст (restricted) хадгалагдах файлын төрөл. */
+export const RESTRICTED_FILE_KINDS: readonly Crm2BrokerageFileKindKey[] = ["ownership", "id"];
 
 // ── Идэвхжүүлэх нөхцөл (crm2_missing_text-тэй ижил) ───────────────────────
 
@@ -429,18 +507,27 @@ export const MISSING_ITEM_LABEL: Record<string, string> = {
   floor: "давхар",
   price: "үнэ",
   year_in_use: "ашиглалтад орсон он",
-  listing_agent_id: "листлэгч агент",
-  contract_agent_id: "гэрээ хийсэн агент",
+  listing_agent_id: "хөрөнгө авчирсан агент",
+  contract_agent_id: "гэрээ байгуулсан агент",
   photo_agent_id: "зураг авсан агент",
   owner: "эзэн",
+  owner_source: "эзний эх сурвалж",
+  owner_name: "эзний нэр (баталгаажаагүй)",
+  owner_pending: "эзнийг шалгах шаардлагатай",
   showing_instructions: "үзүүлэх заавар",
   images: "зураг",
+  unconfirmed: "баталгаажаагүй утга",
   brokerage_contract: "батлагдсан, хүчинтэй зуучлалын гэрээ",
   start_date: "эхлэх огноо",
   end_date: "дуусах огноо",
   end_date_past: "дуусах огноо өнгөрсөн",
   commission: "шимтгэл",
   file: "гэрээний файл",
+  special_terms: "онцгой нөхцөл (эсвэл «онцгой нөхцөлгүй»)",
+  signer_authority: "гарын үсэг зурах эрхийн тайлбар",
+  defaults_unconfirmed: "оффисын анхдагч утгыг баталгаажуулаагүй",
+  ownership_doc: "өмчлөлийн баримт",
+  role_unconfirmed: "гэрээ байгуулсан агентыг баталгаажуулаагүй",
 };
 
 export function missingItemLabel(item: string): string {

@@ -1,0 +1,215 @@
+{
+  "about": "TUNE — задлагчийг тааруулах олонлог. Нийтийн зарын бүтэц, тоог хадгалж үгийг нь бүрэн өөрчилсөн (paraphrase) бичвэр; утас, нэр, тоотыг зохиомлоор сольсон. synthetic = Viber маягийн зохиомол пост. expect нь зарын бүтэцтэй баганаас (бичвэрт дурдсан талбар л).",
+  "posts": [
+    {
+      "id": "t01",
+      "source": "listing",
+      "text": "Энх-Өргөө хотхонд 2 өрөө байр зарна. Баянзүрх, автобусны буудлын яг ард, төв зам ойрхон. Баянзүрхийн зах, 44, 53, 189-р сургууль, 105-р цэцэрлэг ойр. 50.06 мкв. Үнэ 194 сая₮.",
+      "phones": [],
+      "expect": { "category": "sale", "property_type": "apartment", "rooms": 2, "area_m2": 50.06, "price": 194000000, "currency": "MNT", "price_basis": "total", "district": "Баянзүрх" }
+    },
+    {
+      "id": "t02",
+      "source": "listing",
+      "text": "Хан-Уул, Нүхтийн баруун талд Хангарьд сити 1 хотхонд 2 өрөө байр түрээслүүлнэ. 54.9 мкв. Гал тогооны тавилгатай: хөргөгч, плитк. Сарын 1.55 сая, урьдчилгаа 3 сар, барьцаа 1 сар.",
+      "phones": [],
+      "expect": { "category": "rent", "property_type": "apartment", "rooms": 2, "area_m2": 54.9, "price": 1550000, "currency": "MNT", "price_basis": "total", "price_period": "month", "district": "Хан-Уул", "rent_advance_months": 3, "rent_deposit_months": 1, "features": [] }
+    },
+    {
+      "id": "t03",
+      "source": "listing",
+      "text": "RIVER GARDEN ХОТХОНД 7 өрөө байр түрээслүүлнэ 🌿 Цэвэр агаартай орчин 🛋 Бүрэн тавилгатай, шууд орж амьдрахад бэлэн 🛏 5 унтлагын өрөө 💎 Тав тухтай. ХУД. Сард 18 сая төгрөг. 3+1",
+      "phones": [],
+      "expect": { "category": "rent", "property_type": "apartment", "rooms": 7, "price": 18000000, "currency": "MNT", "price_basis": "total", "price_period": "month", "district": "Хан-Уул", "rent_advance_months": 3, "rent_deposit_months": 1, "features": ["furnished"] }
+    },
+    {
+      "id": "t04",
+      "source": "listing",
+      "text": "Оддын хотхонд 4 өрөө 114.119 мкв байр зарна ✅ Төвд ойр, нам гүм ✅ Баруун 1, хойд 1, зүүн 3 цонхтой ✅ Дулаан зогсоолтой (үнэ нь тусдаа). Хан-Уул дүүрэг. Үнэ: 530,000,000₮",
+      "phones": [],
+      "expect": { "category": "sale", "property_type": "apartment", "rooms": 4, "area_m2": 114.12, "price": 530000000, "currency": "MNT", "price_basis": "total", "district": "Хан-Уул" }
+    },
+    {
+      "id": "t05",
+      "source": "listing",
+      "text": "Misheel residence, 166 mkv, 4 uruu bair zarna. 3 untlagiin uruu, 3 ariun tsevriin uruu, 1 ugaalgiin uruu, 1 aguulah, 2 tagttai. Gerchilgee belen. 14/16 davhar. 2024 on. KhUD. Une 798 saya",
+      "phones": [],
+      "expect": { "category": "sale", "property_type": "apartment", "rooms": 4, "area_m2": 166, "floor": 14, "building_floors": 16, "price": 798000000, "currency": "MNT", "price_basis": "total", "district": "Хан-Уул", "year_in_use": 2024 }
+    },
+    {
+      "id": "t06",
+      "source": "listing",
+      "text": "La Vie La хаус хотхонд таун хаус худалдана ✅ Belmonte хотхоны дээд талд ✅ Яармагийн гүүрийг давж эхний аманд ✅ 2 машины дулаан зогсоолтой. 213.39 мкв, 4 өрөө, 2 давхар. ХУД. 1 тэрбум 350 сая₮",
+      "phones": [],
+      "expect": { "category": "sale", "property_type": "house", "rooms": 4, "area_m2": 213.39, "price": 1350000000, "currency": "MNT", "price_basis": "total", "district": "Хан-Уул", "parking_spaces": 2 }
+    },
+    {
+      "id": "t07",
+      "source": "listing",
+      "text": "Оршил хотхонд 2 өрөө 50 мкв түрээслүүлнэ. Тавилгатай, лифттэй, өвөл дулаахан, буудал ойр. Зүүн 4 замд, Номины байр. 10 давхарт. БЗД. 2 сая/сар",
+      "phones": [],
+      "expect": { "category": "rent", "property_type": "apartment", "rooms": 2, "area_m2": 50, "floor": 10, "price": 2000000, "currency": "MNT", "price_basis": "total", "price_period": "month", "district": "Баянзүрх", "features": ["furnished", "elevator"] }
+    },
+    {
+      "id": "t08",
+      "source": "listing",
+      "text": "Japan Town C5-д 4 өрөө 138 мкв орон сууц зарна ✅ Хотын төвд ойр ✅ Сургууль, цэцэрлэг, худалдаа үйлчилгээний газрууд ойр ✅ Эрэлттэй байршил ✅ Гол замтай холбогдоно ✅ 2 дулаан зогсоол үнэдээ орсон. Хан-Уул",
+      "phones": [],
+      "expect": { "category": "sale", "property_type": "apartment", "rooms": 4, "area_m2": 138, "district": "Хан-Уул", "parking_spaces": 2 }
+    },
+    {
+      "id": "t09",
+      "source": "listing",
+      "text": "Z64 apartment-д 2 өрөө 65.19 мкв байр худалдана ✅ Хотын төвийн ААА бүс ✅ Царс модон гал тогооны тавилга ✅ Түрээслүүлэхэд ашигтай байршил. СБД. м2 нь 8.7 сая, нийт 567,153,000₮",
+      "phones": [],
+      "expect": { "category": "sale", "property_type": "apartment", "rooms": 2, "area_m2": 65.19, "price": 567153000, "currency": "MNT", "price_basis": "total", "district": "Сүхбаатар" }
+    },
+    {
+      "id": "t10",
+      "source": "listing",
+      "text": "ХУД 25-р хороо, Буянт-Ухаа 1 хороололд 51,78 мкв 2 өрөө байр зарна. - Баруун тийш цонхтой - 9/9 давхар - 2011 он. Үнэ: 140 сая",
+      "phones": [],
+      "expect": { "category": "sale", "property_type": "apartment", "rooms": 2, "area_m2": 51.78, "floor": 9, "building_floors": 9, "price": 140000000, "currency": "MNT", "price_basis": "total", "district": "Хан-Уул", "year_in_use": 2011 }
+    },
+    {
+      "id": "t11",
+      "source": "listing",
+      "text": "VEGA CITY ХОТХОНД 4 ӨРӨӨ БАЙР ЗАРНА! 📍 ХУД, 15-р хороо, Tara Center-ийн зүүн талаар, Vega City 3-р ээлж. 148.8 м² | 4 өрөө | 15/23 давхар ✓ Баруун урд, баруун цонхтой ✓ 1 дулаан авто зогсоол тусдаа үнэтэй ✓ Хүүхдийн тоглоомын талбайтай. 2026 онд ашиглалтад орно. Мкв нь 11 сая",
+      "phones": [],
+      "expect": { "category": "sale", "property_type": "apartment", "rooms": 4, "area_m2": 148.8, "floor": 15, "building_floors": 23, "price": 11000000, "currency": "MNT", "price_basis": "per_m2", "district": "Хан-Уул", "year_in_use": 2026, "parking_spaces": 1, "features": ["kids_playground"] }
+    },
+    {
+      "id": "t12",
+      "source": "listing",
+      "text": "Bella Vista хотхонд 5 өрөө 161 мкв байр түрээслүүлнэ ✅ 2 дулаан гражтай ✅ Хагас тавилгатай ✅ Шинэ засвартай ✅ Урд, хойд цонхтой ✅ Хотхондоо фитнесс, бассейн ✅ Харуул хамгаалалт сайн. Хан-Уул. Сард 9 сая₮",
+      "phones": [],
+      "expect": { "category": "rent", "property_type": "apartment", "rooms": 5, "area_m2": 161, "price": 9000000, "currency": "MNT", "price_basis": "total", "price_period": "month", "district": "Хан-Уул", "parking_spaces": 2, "features": ["garage", "security"] }
+    },
+    {
+      "id": "t13",
+      "source": "listing",
+      "text": "Nova Nest Town 91м.кв таун хаус худалдана. СБД, Гачуурт Хар усан тохой. Бүрэн цутгамал, эрчим хүч хэмнэлттэй 2 давхар - 2 унтлагын өрөө - зочны өрөө - давхар бүрт ариун цэврийн өрөө. 2026 онд ашиглалтад орсон. Тоглоомын талбайтай. Үнэ 370 сая",
+      "phones": [],
+      "expect": { "category": "sale", "area_m2": 91, "price": 370000000, "currency": "MNT", "price_basis": "total", "district": "Сүхбаатар", "year_in_use": 2026 }
+    },
+    {
+      "id": "t14",
+      "source": "listing",
+      "text": "29-р байранд гал тогоо тусдаа 3 өрөө 79.74 мкв байр зарна ✅ Супер засвартай ✅ Сант, 1-р сургууль, Оросын 3-р сургууль ойр ✅ Циркийн зүүн талд. СБД. 786 сая",
+      "phones": [],
+      "expect": { "category": "sale", "property_type": "apartment", "rooms": 3, "area_m2": 79.74, "price": 786000000, "currency": "MNT", "price_basis": "total", "district": "Сүхбаатар" }
+    },
+    {
+      "id": "t15",
+      "source": "listing",
+      "text": "#ForRent | Blue Sky Tower | Хотын төв, СБД. 478 м² оффисын талбай * Бизнесийн төв * Орчин үеийн орчин * Авто зогсоол * 23 давхар барилгын 6-р давхар. 2015 он. Мкв 99.000₮ НӨАТ, менежмент багтсан. Урьдчилгаа 2 сар, барьцаа 1 сар",
+      "phones": [],
+      "expect": { "category": "rent", "property_type": "office", "area_m2": 478, "floor": 6, "building_floors": 23, "price": 99000, "currency": "MNT", "price_basis": "per_m2", "price_period": "month", "district": "Сүхбаатар", "year_in_use": 2015, "rent_advance_months": 2, "rent_deposit_months": 1 }
+    },
+    {
+      "id": "t16",
+      "source": "listing",
+      "text": "Хос өргөө апартментад 2 өрөө 50.61 мкв байр хөлслүүлнэ ✅ Гал тогооны тавилга, плитк, угаалгын машинтай ✅ Цэвэрхэн ✅ Төвд ойр. Баянгол, Алтай хотхон. 1.8 сая₮/сар",
+      "phones": [],
+      "expect": { "category": "rent", "property_type": "apartment", "rooms": 2, "area_m2": 50.61, "price": 1800000, "currency": "MNT", "price_basis": "total", "price_period": "month", "district": "Баянгол" }
+    },
+    {
+      "id": "t17",
+      "source": "listing",
+      "text": "Буянт гарден, Яармаг Арцатын аманд 4 өрөө 170м2 байр зарна ✅ Мастер өрөөтэй ✅ 3 унтлагын, 3 ариун цэврийн өрөө ✅ Угаалгын өрөө ✅ Гурван талдаа цонхтой ✅ Гэрчилгээтэй ✅ Бүрэн тавилгатай нь. Лифттэй. 7 давхарт. 2024 он. Хан-Уул. 1м2 нь 4.6 сая, нийт 782 сая",
+      "phones": [],
+      "expect": { "category": "sale", "property_type": "apartment", "rooms": 4, "area_m2": 170, "floor": 7, "price": 782000000, "currency": "MNT", "price_basis": "total", "district": "Хан-Уул", "year_in_use": 2024, "features": ["furnished", "elevator"] }
+    },
+    {
+      "id": "t18",
+      "source": "listing",
+      "text": "120 мянгат, Тэмээтэй хөшөөний ойролцоо Regis Place-д 158мкв 2 өрөө байр зарна ✅ Саарал хэлбэрээр авч бүрэн интерьер хийсэн ✅ Суурин тавилга, гал тогоо үлдэнэ ✅ 2 ариун цэврийн өрөө ✅ Урагшаа 2 том цонх. 12/25 давхар. 1 зогсоолтой. Лифттэй. Хан-Уул. Үнэ 1.4 тэрбум",
+      "phones": [],
+      "expect": { "category": "sale", "property_type": "apartment", "rooms": 2, "area_m2": 158, "floor": 12, "building_floors": 25, "price": 1400000000, "currency": "MNT", "price_basis": "total", "district": "Хан-Уул", "parking_spaces": 1 }
+    },
+    {
+      "id": "t19",
+      "source": "listing",
+      "text": "Energy luxury residence-д 4 өрөө 113.19 мкв байр зарна ✅ Мастер унтлагын өрөөтэй ✅ Шинэ ашиглалтад орсон ✅ Яармаг, Арцатын ам. СБД. м2 нь 4.3 сая₮",
+      "phones": [],
+      "expect": { "category": "sale", "property_type": "apartment", "area_m2": 113.19, "price": 4300000, "currency": "MNT", "price_basis": "per_m2", "district": "Сүхбаатар" }
+    },
+    {
+      "id": "t20",
+      "source": "listing",
+      "text": "Japan Town C2 хотхонд 2 өрөө 62.75 мкв байр хөлслүүлнэ ✅ Гал тогоо тусдаа ✅ Агааржуулагчтай ✅ Шкаф ✅ Бойлертой ✅ Үүдэндээ агуулахтай, хувцасны өрөөтэй ✅ Цахилгаан хэрэгсэлтэй. ХУД. Сарын 3 сая, 3+1",
+      "phones": [],
+      "expect": { "category": "rent", "property_type": "apartment", "area_m2": 62.75, "price": 3000000, "currency": "MNT", "price_basis": "total", "price_period": "month", "district": "Хан-Уул", "rent_advance_months": 3, "rent_deposit_months": 1, "features": ["storage"] }
+    },
+    {
+      "id": "t21",
+      "source": "listing",
+      "text": "Mandala garden хотхонд 3 өрөө 79.8м2 байр түрээслүүлнэ ✅ Бүрэн тавилгатай ✅ Маш дулаан ✅ Машингүй хашаатай. Хан-Уул. 2.8 сая сард",
+      "phones": [],
+      "expect": { "category": "rent", "property_type": "apartment", "area_m2": 79.8, "price": 2800000, "currency": "MNT", "price_basis": "total", "price_period": "month", "district": "Хан-Уул", "features": ["furnished"] }
+    },
+    {
+      "id": "t22",
+      "source": "listing",
+      "text": "2-р байранд гал тогоо тусдаа 4 өрөө 65 мкв байр зарна ✅ Хуучин тээврийн товчоо, 4 зам руу ✅ Баруун 2, зүүн 2 цонх ✅ Засвартай. Сүхбаатар дүүрэг. 425 сая төгрөг",
+      "phones": [],
+      "expect": { "category": "sale", "property_type": "apartment", "rooms": 4, "area_m2": 65, "price": 425000000, "currency": "MNT", "price_basis": "total", "district": "Сүхбаатар" }
+    },
+    {
+      "id": "t23",
+      "source": "listing",
+      "text": "🌿 VILLA VERDE ХОТХОНД 4 ӨРӨӨ ОРОН СУУЦ ЗАРНА 🌿 📍 ХУД, 22-р хороо 🏡 142.82 м², мастер өрөөтэй 4 өрөө 🚗 Зэрэгцээ 2 дулаан зогсоолтой /зогсоол 120 сая төгрөг/ ✨ Зүүн, урд, баруун цонхтой * Давхартаа 2 айлтай * Ногоон байгууламжтай. 2025 он. Үнэ 985,458,000₮ 📞 8800-4512",
+      "phones": ["88004512"],
+      "expect": { "category": "sale", "property_type": "apartment", "rooms": 4, "area_m2": 142.82, "price": 985458000, "currency": "MNT", "price_basis": "total", "district": "Хан-Уул", "year_in_use": 2025, "parking_spaces": 2 }
+    },
+    {
+      "id": "t24",
+      "source": "listing",
+      "text": "Алтай резиденс 6-р ээлжид 1 давхрын үйлчилгээний талбай зарна ✅ Нэг давхар бүхэлдээ үйлчилгээний зориулалттай ✅ Хүнсний дэлгүүрт тохиромжтой ✅ Сургалтын төв, карго зэрэгт болно. 56.21 мкв. Баянгол. мкв нь 6 сая",
+      "phones": [],
+      "expect": { "category": "sale", "property_type": "commercial", "area_m2": 56.21, "price": 6000000, "currency": "MNT", "price_basis": "per_m2", "district": "Баянгол" }
+    },
+    {
+      "id": "t25",
+      "source": "synthetic",
+      "text": "Түрээслүүлнэ: 1 өрөө, 38 мкв, БГД 3-р хороолол. Тавилгатай, угаалгын машинтай. Сард 1,3 сая. Урьдчилгаа 1 сар, барьцаагүй. Эзэн Оюунаа 9909-1234. 45 тоот, орцны код 2580#",
+      "phones": ["99091234"],
+      "expect": { "category": "rent", "property_type": "apartment", "rooms": 1, "area_m2": 38, "price": 1300000, "currency": "MNT", "price_basis": "total", "price_period": "month", "district": "Баянгол", "rent_advance_months": 1, "rent_deposit_months": 0, "features": ["furnished"] }
+    },
+    {
+      "id": "t26",
+      "source": "synthetic",
+      "text": "ЯАРАЛТАЙ ЗАРНА ‼ 2 өрөө 3 давхар, 81,47 мкв, СХД 1-р хороолол. Үнэ 165 сая. Утас 8899 0011",
+      "phones": ["88990011"],
+      "expect": { "category": "sale", "property_type": "apartment", "rooms": 2, "area_m2": 81.47, "floor": 3, "price": 165000000, "currency": "MNT", "price_basis": "total", "district": "Сонгинохайрхан" }
+    },
+    {
+      "id": "t27",
+      "source": "synthetic",
+      "text": "For rent: office space 250 sqm at Central Tower, Sukhbaatar district. 1,500 USD per month.",
+      "phones": [],
+      "expect": { "category": "rent", "property_type": "office", "area_m2": 250, "price": 1500, "currency": "USD", "price_basis": "total", "price_period": "month", "district": "Сүхбаатар" }
+    },
+    {
+      "id": "t28",
+      "source": "synthetic",
+      "text": "Байр зарна. Баянзүрх, 26-р хороолол, 3 өрөө 72м2, 4/5 давхар, 1998 он. Хагас тавилгатай, тагтгүй. 230 сая, бартер болно. Эзэн нь Батболд утас 9191 2323, 9191-2324",
+      "phones": ["91912323", "91912324"],
+      "expect": { "category": "sale", "property_type": "apartment", "rooms": 3, "area_m2": 72, "floor": 4, "building_floors": 5, "price": 230000000, "currency": "MNT", "price_basis": "total", "district": "Баянзүрх", "year_in_use": 1998, "features": [] }
+    },
+    {
+      "id": "t29",
+      "source": "synthetic",
+      "text": "Хаус түрээслүүлнэ. Зайсан, ХУД. 6 өрөө, 280 мкв, 2 давхар, 2 гаражтай. Сарын $3500, урьдчилгаа 3 сар. Тэжээвэр амьтан зөвшөөрнө.",
+      "phones": [],
+      "expect": { "category": "rent", "property_type": "house", "rooms": 6, "area_m2": 280, "price": 3500, "currency": "USD", "price_basis": "total", "price_period": "month", "district": "Хан-Уул", "parking_spaces": 2, "rent_advance_months": 3, "features": ["garage", "pets"] }
+    },
+    {
+      "id": "t30",
+      "source": "synthetic",
+      "text": "Оффис түрээсэлнэ 120мкв БЗД, Улаанхуаран. м2 нь 45 мянга ₮ сард. Нөхцөл 1+1. 7711-2233 (оффис)",
+      "phones": ["77112233"],
+      "expect": { "category": "rent", "property_type": "office", "area_m2": 120, "price": 45000, "currency": "MNT", "price_basis": "per_m2", "price_period": "month", "district": "Баянзүрх", "rent_advance_months": 1, "rent_deposit_months": 1 }
+    }
+  ]
+}

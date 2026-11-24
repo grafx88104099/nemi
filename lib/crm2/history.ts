@@ -10,8 +10,10 @@ import {
   MEDIA_KIND_LABEL,
   PRICE_BASIS_LABEL,
   PRICE_PERIOD_LABEL,
+  PROPERTY_AGENT_ROLE_LABEL,
   PROPERTY_CATEGORY_LABEL,
   PROPERTY_STATUS_LABEL,
+  VIEW_NOTE_LABEL,
   RECORD_STATUS_LABEL,
   SHOWING_STATUS_LABEL,
   TASK_KIND_LABEL,
@@ -50,6 +52,13 @@ export const HISTORY_ACTION_LABEL: Record<string, string> = {
   reset: "Анхдагч руу буцаасан",
   publish: "Нийтэд зарласан",
   unpublish: "Зарнаас буцаасан",
+  import: "Зараас үүсгэсэн",
+  link_listing: "Эх зартай холбосон",
+  confirm: "Утгыг баталгаажуулсан",
+  duplicate_flag: "Давхардал тэмдэглэсэн",
+  duplicate_flag_update: "Давхардлын тэмдэглэл шинэчилсэн",
+  duplicate_resolve: "Давхардлыг шийдвэрлэсэн",
+  mask_listing_phones: "Зарын бичвэрээс утас нуусан",
 };
 
 /** Талбарын нэр (бүх entity-д нийтлэг; entity-ээс хамаарах цөөн нь доор). */
@@ -66,9 +75,23 @@ export const HISTORY_FIELD_LABEL: Record<string, string> = {
   available_from: "Боломжтой огноо",
   availability_note: "Боломжийн тайлбар",
   last_verified_at: "Эзэнтэй тулгасан",
-  listing_agent_id: "Листлэгч агент",
-  contract_agent_id: "Гэрээ хийсэн агент",
-  photo_agent_id: "Зураг авсан агент",
+  listing_agent_id: PROPERTY_AGENT_ROLE_LABEL.listing_agent_id,
+  contract_agent_id: PROPERTY_AGENT_ROLE_LABEL.contract_agent_id,
+  photo_agent_id: PROPERTY_AGENT_ROLE_LABEL.photo_agent_id,
+  parking_spaces: "Зогсоолын тоо",
+  rent_advance_months: "Урьдчилгаа (сар)",
+  rent_deposit_months: "Барьцаа (сар)",
+  unconfirmed: "Баталгаажаагүй утга",
+  prefilled: "Анхдагчаар бөглөсөн утга",
+  no_special_terms: "Онцгой нөхцөлгүй",
+  signer_differs: "Өөр хүн гарын үсэг зурна",
+  file_at_office: "Гэрээ оффист үлдсэн",
+  approver_file_checked: "Батлагч файлыг шалгасан",
+  owner_pending: "Шалгах эзэн",
+  source: "Эх сурвалж",
+  source_listing_id: "Эх зар",
+  name_unverified: "Нэр баталгаажаагүй",
+  consent: "Зөвшөөрөл",
   project_id: "Төсөл",
   district: "Дүүрэг",
   location_text: "Байршил",
@@ -86,7 +109,7 @@ export const HISTORY_FIELD_LABEL: Record<string, string> = {
   operating_cost_period: "Зардлын хугацаа",
   operating_cost_note: "Зардлын тайлбар",
   condition: "Нөхцөл",
-  view_note: "Харууц",
+  view_note: VIEW_NOTE_LABEL,
   notes: "Нэмэлт тайлбар",
   advantages: "Давуу тал",
   features: "Онцлог",
@@ -195,7 +218,13 @@ const PLAIN_NUMBER_FIELDS = new Set([
   "lat",
   "lng",
   "activity.edit_window_hours",
+  "parking_spaces",
+  "rent_advance_months",
+  "rent_deposit_months",
 ]);
+/** Талбарын түлхүүрийн жагсаалт (unconfirmed, prefilled) — нэр болгон харуулна. */
+const FIELD_LIST_FIELDS = new Set(["unconfirmed", "prefilled"]);
+const LIST_KEY_LABEL: Record<string, string> = { project: "Төсөл", commission: "Шимтгэл" };
 const BOOL_TRUE = "Тийм";
 const BOOL_FALSE = "Үгүй";
 const MAX_TEXT = 160;
@@ -265,6 +294,7 @@ export function formatHistoryValue(
     const parts = value.map((x) => {
       if (typeof x !== "string") return String(x);
       if (f === "features" || f === "required_features") return lookup.features?.[x] ?? x;
+      if (FIELD_LIST_FIELDS.has(f)) return LIST_KEY_LABEL[x] ?? HISTORY_FIELD_LABEL[x] ?? x;
       if (f.startsWith("roles.")) return CRM_ROLE_LABEL[x as keyof typeof CRM_ROLE_LABEL] ?? x;
       return x;
     });

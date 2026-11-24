@@ -1,8 +1,5 @@
-import Link from "next/link";
 import {
   BadgeCheck,
-  CircleCheck,
-  ClipboardCheck,
   ExternalLink,
   FileText,
   Images,
@@ -10,7 +7,6 @@ import {
   MapPin,
   Phone,
   ShieldCheck,
-  TriangleAlert,
   Users,
 } from "lucide-react";
 
@@ -24,20 +20,24 @@ import { Money } from "@/components/crm2/ui/money";
 import { fmtDate, fmtDateTime } from "@/lib/format";
 import { fmtIsoDate } from "@/lib/crm2/datetime";
 import { HISTORY_FIELD_LABEL } from "@/lib/crm2/history";
-import { PROPERTY_AGENT_ROLE_LABEL, missingItemLabel } from "@/lib/crm2/labels";
+import type { Checklist, NextStep } from "@/lib/crm2/checklist";
+import { PROPERTY_AGENT_ROLE_LABEL } from "@/lib/crm2/labels";
 import { formatPrice } from "@/lib/crm2/money";
 import { crm2Paths, type Crm2Panel } from "@/lib/crm2/paths";
 import { formatPhone, telHref } from "@/lib/crm2/phone";
 import type { PropertyDetail } from "@/lib/crm2/queries/properties";
 import { featureLabel, propertyTypeLabel, type Crm2Settings } from "@/lib/crm2/settings";
 
+import { ChecklistSummary } from "../ChecklistSheet";
 import { MediaGallery, type GalleryItem } from "../MediaGallery";
+import { AutoTag } from "../sheets/AutoTag";
+import { OpenSheetButton } from "../sheets/OpenSheetButton";
 import { brokerageEndInfo, mapsHref, verifiedAge } from "../logic";
 import { InfoRow, Note, Section, TextBlock } from "../parts";
 
 /**
  * «Үндсэн мэдээлэл» таб: бүх талбар, медиа, газрын зургийн цэг (зөвхөн харах),
- * 3 үүрэгт агент, хяналтын огноо, идэвхжүүлэх нөхцөл; хувийн хэсэг ба үзүүлэх
+ * 3 үүрэгт агент, хяналтын огноо, шалгах жагсаалтын товч (дарахад жагсаалт нээгдэнэ); хувийн хэсэг ба үзүүлэх
  * заавар зөвхөн эрхтэнд.
  */
 export function InfoTab({
@@ -45,14 +45,18 @@ export function InfoTab({
   settings,
   panel,
   now,
+  checklist,
+  next,
 }: {
   detail: PropertyDetail;
   settings: Crm2Settings;
   panel: Crm2Panel;
   now: number;
+  /** Картын шалгах жагсаалт (queries/checklist buildCardChecklist) — хуучин «идэвхжүүлэх нөхцөл»-ийн оронд. */
+  checklist?: Checklist;
+  next?: NextStep;
 }) {
   const p = detail.property;
-  const paths = crm2Paths(panel);
   const fieldNotes = p.field_notes && typeof p.field_notes === "object" && !Array.isArray(p.field_notes)
     ? Object.entries(p.field_notes as Record<string, unknown>).filter(
         (e): e is [string, string] => typeof e[1] === "string" && e[1].trim() !== ""
@@ -71,63 +75,54 @@ export function InfoTab({
   const hasMapsKey = !!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const verified = verifiedAge(p.last_verified_at, now);
   const endInfo = brokerageEndInfo(p.brokerage_end_date, now);
-  const showActivation =
-    detail.activation && (!detail.activation.ok || p.status === "draft" || p.status === "contract_ended");
+  const unconfirmed = new Set(p.unconfirmed ?? []);
+  /** Утга байгаа ч автоматаар бөглөсөн (баталгаажаагүй) бол саарал «автомат». */
+  const auto = (...keys: string[]) => (keys.some((k) => unconfirmed.has(k)) ? <AutoTag className="ml-1.5 align-middle" /> : null);
+  const canEdit = detail.can.edit;
+  const edit = (sheet: "location" | "size" | "price" | "details" | "photos" | "roles", label?: string) =>
+    canEdit ? <OpenSheetButton sheet={sheet} label={label} /> : null;
   const floor =
     p.floor != null ? (p.building_floors != null ? `${p.floor} / ${p.building_floors}` : String(p.floor)) : p.building_floors != null ? `— / ${p.building_floors}` : null;
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <div className="min-w-0 space-y-4 lg:col-span-2">
-        {showActivation && detail.activation ? (
-          <Section title="Идэвхжүүлэх нөхцөл" icon={ClipboardCheck}>
-            {detail.activation.ok ? (
-              <Note icon={CircleCheck} tone="green">
-                Нөхцөл бүрэн. {p.status === "draft" ? "Зуучлалын гэрээ батлагдахад автоматаар идэвхжинэ (эсвэл «Төлөв өөрчлөх»)." : null}
-              </Note>
-            ) : (
-              <div className="space-y-2">
-                <Note icon={TriangleAlert} tone="amber">
-                  Идэвхтэй Staff санд орохын тулд дараах зүйлс дутуу байна. Ноорог хөрөнгө санал болголтод орохгүй.
-                </Note>
-                <ul className="flex flex-wrap gap-1.5">
-                  {detail.activation.missing.map((m) => (
-                    <li key={m}>
-                      <Badge tone="amber">{missingItemLabel(m)}</Badge>
-                    </li>
-                  ))}
-                </ul>
-                {!detail.activation.has_valid_contract ? (
-                  <p className="text-xs text-muted">
-                    Зуучлалын гэрээг{" "}
-                    <Link href={paths.property(p.id, "agreement")} className="font-semibold text-brand-700 hover:underline">
-                      «Зуучлалын гэрээ»
-                    </Link>{" "}
-                    табаас бүртгэж батлуулна.
-                  </p>
-                ) : null}
-              </div>
-            )}
-          </Section>
-        ) : null}
+        {checklist && next ? <ChecklistSummary checklist={checklist} next={next} /> : null}
 
-        <Section title="Үндсэн мэдээлэл" icon={FileText}>
+        <Section
+          title="Үндсэн мэдээлэл"
+          icon={FileText}
+          action={
+            canEdit ? (
+              <>
+                {edit("location", "Байршил")}
+                {edit("size", "Хэмжээ")}
+                {edit("price", "Үнэ")}
+              </>
+            ) : null
+          }
+        >
           <dl className="divide-y divide-line">
             <InfoRow label="Ангилал">
               <CategoryBadge category={p.category} labels={settings["property.category_labels"]} />
             </InfoRow>
-            <InfoRow label="Хөрөнгийн төрөл">{propertyTypeLabel(settings, p.property_type)}</InfoRow>
-            <InfoRow label="Төсөл">{p.project?.name}</InfoRow>
-            <InfoRow label="Дүүрэг">{p.district}</InfoRow>
-            <InfoRow label="Байршил">{p.location_text}</InfoRow>
+            <InfoRow label="Хөрөнгийн төрөл">
+              {p.property_type ? <>{propertyTypeLabel(settings, p.property_type)}{auto("property_type")}</> : null}
+            </InfoRow>
+            <InfoRow label="Төсөл">{p.project ? <>{p.project.name}{auto("project")}</> : null}</InfoRow>
+            <InfoRow label="Дүүрэг">{p.district ? <>{p.district}{auto("district")}</> : null}</InfoRow>
+            <InfoRow label="Байршил">{p.location_text ? <>{p.location_text}{auto("location_text")}</> : null}</InfoRow>
             <InfoRow label="Байршлын дэлгэрэнгүй">{p.address_detail ? <TextBlock text={p.address_detail} /> : null}</InfoRow>
-            <InfoRow label="Хэмжээ">{p.area_m2 != null ? `${p.area_m2} м²` : null}</InfoRow>
-            <InfoRow label="Өрөө">{p.rooms != null ? String(p.rooms) : null}</InfoRow>
-            <InfoRow label="Давхар / барилгын давхар">{floor}</InfoRow>
-            <InfoRow label="Ашиглалтад орсон он">{p.year_in_use != null ? String(p.year_in_use) : null}</InfoRow>
+            <InfoRow label="Хэмжээ">{p.area_m2 != null ? <>{p.area_m2} м²{auto("area_m2")}</> : null}</InfoRow>
+            <InfoRow label="Өрөө">{p.rooms != null ? <>{p.rooms}{auto("rooms")}</> : null}</InfoRow>
+            <InfoRow label="Давхар / барилгын давхар">{floor ? <>{floor}{auto("floor", "building_floors")}</> : null}</InfoRow>
+            <InfoRow label="Ашиглалтад орсон он">{p.year_in_use != null ? <>{p.year_in_use}{auto("year_in_use")}</> : null}</InfoRow>
             <InfoRow label="Үнэ">
               {p.price != null ? (
-                <Money amount={p.price} currency={p.currency} period={p.price_period} basis={p.price_basis} total={p.price_total} />
+                <>
+                  <Money amount={p.price} currency={p.currency} period={p.price_period} basis={p.price_basis} total={p.price_total} />
+                  {auto("price", "currency", "price_basis", "price_period")}
+                </>
               ) : null}
             </InfoRow>
             <InfoRow label="Ашиглалтын зардал">
@@ -162,7 +157,7 @@ export function InfoTab({
           </dl>
         </Section>
 
-        <Section title="Тайлбар" icon={FileText}>
+        <Section title="Тайлбар" icon={FileText} action={edit("details")}>
           <dl className="divide-y divide-line">
             <InfoRow label="Нөхцөл">{p.condition ? <TextBlock text={p.condition} /> : null}</InfoRow>
             <InfoRow label="Харууц">{p.view_note ? <TextBlock text={p.view_note} /> : null}</InfoRow>
@@ -176,7 +171,7 @@ export function InfoTab({
           </dl>
         </Section>
 
-        <Section title={`Зураг, бичлэг (${detail.media.length})`} icon={Images}>
+        <Section title={`Зураг, бичлэг (${detail.media.length})`} icon={Images} action={edit("photos", "Зураг нэмэх")}>
           {gallery.length ? <MediaGallery items={gallery} /> : <p className="text-sm text-muted">Зураг, бичлэг оруулаагүй.</p>}
         </Section>
 
@@ -215,7 +210,7 @@ export function InfoTab({
       </div>
 
       <div className="min-w-0 space-y-4">
-        <Section title="Үүрэгт агентууд" icon={Users}>
+        <Section title="Үүрэгт агентууд" icon={Users} action={edit("roles")}>
           <ul className="space-y-3">
             <li>
               <AgentChip role={PROPERTY_AGENT_ROLE_LABEL.listing_agent_id} name={p.listing_agent?.full_name} avatarUrl={p.listing_agent?.avatar_url} />
@@ -279,11 +274,12 @@ export function InfoTab({
 
 function PrivateSection({ detail, panel }: { detail: PropertyDetail; panel: Crm2Panel }) {
   const paths = crm2Paths(panel);
+  const canEdit = detail.can.edit;
   const priv = detail.private;
   if (detail.can.viewPrivate && priv) {
     const owner = priv.owner;
     return (
-      <Section title="Эзэн ба дотоод мэдээлэл" icon={Lock}>
+      <Section title="Эзэн ба дотоод мэдээлэл" icon={Lock} action={canEdit ? <OpenSheetButton sheet="owner" /> : null}>
         <dl className="divide-y divide-line">
           <InfoRow label="Эзэн">
             {owner ? (

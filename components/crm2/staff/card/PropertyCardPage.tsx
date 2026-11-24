@@ -3,12 +3,16 @@ import { brokerageResponsibleOptions, callAgentOptions, dealUiSettings, workStaf
 import { getCrm2Context, getCrm2Settings } from "@/lib/crm2/context";
 import { PROPERTY_TAB_LABEL, crm2Paths, isPropertyTab, type Crm2Panel, type PropertyTab } from "@/lib/crm2/paths";
 import { getOfferContext } from "@/lib/crm2/queries/card-tabs";
+import { buildCardChecklist } from "@/lib/crm2/queries/checklist";
 import { getStaffDirectory, getStaffNameMap } from "@/lib/crm2/queries/lookups";
 import { getProperty } from "@/lib/crm2/queries/properties";
+import { fileLimits } from "@/lib/crm2/settings";
 
 import { CardHeader, CardTabsNav } from "./CardHeader";
 import { CardToolbar } from "./CardToolbar";
 import { PendingRequests, type PendingRequestView } from "./PendingRequests";
+import { CardSheetHost } from "./sheets/CardSheetHost";
+import { OwnerPendingBanner } from "./sheets/OwnerPendingBanner";
 import { firstParam, parseOfferParams } from "./logic";
 import { Breadcrumb, PageContainer } from "./parts";
 import { ActivitiesTab } from "./tabs/ActivitiesTab";
@@ -28,6 +32,8 @@ function requestNow(): number {
 /**
  * S03 — Staff хөрөнгийн карт (агент, оффис панелд ижил). Табууд ?tab=-аар:
  * Үндсэн мэдээлэл ¦ Зуучлалын гэрээ ¦ Зар ¦ Дуудлага ¦ Үзүүлэлт ¦ Хэлцлүүд ¦ Өөрчлөлтийн түүх.
+ * Гарчгийн доор «Дараагийн алхам»; засварын доод цонхнууд ?sheet=next|checklist|contract|owner|<цонх>
+ * (&field=) — CardSheetHost. Хүлээгдэж буй эзэн (owner_pending) хамгийн дээр.
  * Бүх үйлдэл хөрөнгийн id-тай; эрхийг DB (RLS, RPC) эцэслэн шалгана.
  */
 export async function PropertyCardPage({
@@ -78,6 +84,12 @@ export async function PropertyCardPage({
   const brokerageStaff = brokerageResponsibleOptions(staff, ctx, [p.listing_agent_id, p.contract_agent_id, p.photo_agent_id]);
   const canWork = !!ctx?.isMember && !!ctx.canWork;
   const now = requestNow();
+  const { checklist, next } = buildCardChecklist(detail, settings);
+  // Үүргийн агентыг AgentPicker-ээр зөвхөн ажлын эрхтэй (roles.work) ажилтнаас сонгоно.
+  const workRoles = new Set(settings["roles.work"]);
+  const pickerStaff = directory.filter((s) => (s.roles ?? []).some((r) => workRoles.has(r)));
+  const canReassign = !!ctx && (ctx.isManager || ctx.isTeamLead);
+  const ownerPending = detail.can.viewPrivate ? (detail.private?.owner_pending ?? null) : null;
 
   const requests: PendingRequestView[] = detail.pendingRequests.map((r) => {
     const payload = r.payload && typeof r.payload === "object" && !Array.isArray(r.payload) ? (r.payload as Record<string, unknown>) : {};
@@ -116,7 +128,8 @@ export async function PropertyCardPage({
     <PageContainer>
       <Breadcrumb items={crumbs} />
       <div className="space-y-4">
-        <CardHeader detail={detail} settings={settings} />
+        {ownerPending ? <OwnerPendingBanner pending={ownerPending} canResolve={detail.can.edit} /> : null}
+        <CardHeader detail={detail} settings={settings} next={next} percent={checklist.percent} />
         <CardToolbar
           panel={panel}
           propertyId={p.id}
@@ -135,7 +148,7 @@ export async function PropertyCardPage({
         <PendingRequests requests={requests} me={me} />
         <CardTabsNav panel={panel} propertyId={p.id} active={tab} />
         <div className="min-w-0">
-          {tab === "info" ? <InfoTab detail={detail} settings={settings} panel={panel} now={now} /> : null}
+          {tab === "info" ? <InfoTab detail={detail} settings={settings} panel={panel} now={now} checklist={checklist} next={next} /> : null}
           {tab === "agreement" ? (
             <AgreementTab detail={detail} settings={settings} panel={panel} staff={brokerageStaff} names={names} now={now} />
           ) : null}
@@ -164,6 +177,30 @@ export async function PropertyCardPage({
           ) : null}
         </div>
       </div>
+      <CardSheetHost
+        panel={panel}
+        tab={tab}
+        property={p}
+        priv={detail.private}
+        canViewPrivate={detail.can.viewPrivate}
+        canEdit={detail.can.edit}
+        media={detail.media}
+        limits={fileLimits(settings)}
+        imagesRequired={settings["property.activation_required"].includes("images")}
+        checklist={checklist}
+        next={next}
+        settings={settings}
+        staff={pickerStaff}
+        me={me}
+        teamIds={ctx?.teamId ? [ctx.teamId] : []}
+        canReassign={canReassign}
+        contract={
+          detail.brokerage.find((c) => c.status === "draft") ??
+          detail.brokerage.find((c) => c.status === "pending") ??
+          detail.brokerage.find((c) => c.status === "active") ??
+          null
+        }
+      />
     </PageContainer>
   );
 }

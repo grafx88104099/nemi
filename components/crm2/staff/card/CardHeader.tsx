@@ -4,14 +4,33 @@ import { MapPin } from "lucide-react";
 import { CategoryBadge, PropertyStatusBadge } from "@/components/crm2/ui/badges";
 import { CodeChip } from "@/components/crm2/ui/code-chip";
 import { Money } from "@/components/crm2/ui/money";
+import type { NextStep } from "@/lib/crm2/checklist";
 import { PROPERTY_TAB_LABEL, PROPERTY_TABS, crm2Paths, type Crm2Panel, type PropertyTab } from "@/lib/crm2/paths";
 import type { PropertyDetail } from "@/lib/crm2/queries/properties";
 import { propertyTypeLabel, type Crm2Settings } from "@/lib/crm2/settings";
 import { cn } from "@/lib/utils";
 
-/** Картын гарчиг: код, төлөв, ангилал, үнэ, байршил (зураг дээрх «P001 Хан-Уул 3 өрөө»). */
-export function CardHeader({ detail, settings }: { detail: PropertyDetail; settings: Crm2Settings }) {
+import { NextStepLine } from "./NextStepLine";
+import { AutoTag } from "./sheets/AutoTag";
+
+/**
+ * Картын гарчиг: код, төлөв, ангилал, үнэ, байршил (зураг дээрх «P001 Хан-Уул 3 өрөө»), гарчгийн доор
+ * «Дараагийн алхам» (шалгах жагсаалт нээнэ). Баталгаажаагүй утга саарал «автомат» шошготой.
+ */
+export function CardHeader({
+  detail,
+  settings,
+  next,
+  percent,
+}: {
+  detail: PropertyDetail;
+  settings: Crm2Settings;
+  next?: NextStep | null;
+  percent?: number;
+}) {
   const p = detail.property;
+  const unconfirmed = new Set(p.unconfirmed ?? []);
+  const autoPrice = ["price", "currency", "price_basis", "price_period"].some((k) => unconfirmed.has(k));
   const cover = detail.media.find((m) => m.kind === "image" && m.is_cover && m.url) ?? detail.media.find((m) => m.kind === "image" && m.url);
   const type = propertyTypeLabel(settings, p.property_type);
   const title = [p.project?.name, p.rooms != null ? `${p.rooms} өрөө` : null, type || null].filter(Boolean).join(" · ") || p.code;
@@ -33,6 +52,7 @@ export function CardHeader({ detail, settings }: { detail: PropertyDetail; setti
           <PropertyStatusBadge status={p.status} />
           <CategoryBadge category={p.category} labels={settings["property.category_labels"]} />
           {p.area_m2 != null ? <span className="text-xs text-muted tabular-nums">{p.area_m2} м²</span> : null}
+          {p.area_m2 != null && unconfirmed.has("area_m2") ? <AutoTag /> : null}
         </div>
         <h1 className="mt-1.5 break-words text-xl font-extrabold text-ink sm:text-2xl">{title}</h1>
         {place ? (
@@ -41,11 +61,17 @@ export function CardHeader({ detail, settings }: { detail: PropertyDetail; setti
             <span className="min-w-0 break-words">{place}</span>
           </p>
         ) : null}
-        <p className="mt-1 text-base">
+        <p className="mt-1 flex flex-wrap items-center gap-2 text-base">
           <Money amount={p.price} currency={p.currency} period={p.price_period} basis={p.price_basis} total={p.price_total} />
+          {p.price != null && autoPrice ? <AutoTag /> : null}
         </p>
         {p.status !== "active" && p.status_reason ? (
           <p className="mt-1 text-xs text-muted">Төлөвийн шалтгаан: {p.status_reason}</p>
+        ) : null}
+        {next ? (
+          <div className="mt-2">
+            <NextStepLine next={next} percent={percent ?? 0} />
+          </div>
         ) : null}
       </div>
     </header>

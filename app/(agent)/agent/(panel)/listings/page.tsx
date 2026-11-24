@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Pencil, Share2 } from "lucide-react";
+import { ClipboardPlus, Pencil, Share2 } from "lucide-react";
 
 import { getMyAgent, getAgentListings, getShareCounts, getSharedWithMe } from "@/lib/queries-agent";
 import { DashboardNav } from "@/components/dashboard/DashboardNav";
@@ -14,6 +14,9 @@ import { getAgentChannelStats } from "@/lib/distribute/share-kit";
 import { formatCountsCompact, formatCountsLine, summarizeByListing, ZERO_COUNTS } from "@/lib/distribute/stats-model";
 import { fmtMNT } from "@/lib/format";
 import { listingStatusMeta as statusMeta, DEAL_TYPE_LABEL, type DealType } from "@/lib/constants";
+import { getCrm2Context } from "@/lib/crm2/context";
+import { crm2Paths } from "@/lib/crm2/paths";
+import { listImportableListings } from "@/lib/crm2/queries/import";
 
 export default async function MyListingsPage() {
   const agent = await getMyAgent();
@@ -26,11 +29,17 @@ export default async function MyListingsPage() {
     );
   }
   const listings = await getAgentListings(agent.id as string);
-  const [shareCounts, sharedWithMe, channelRows] = await Promise.all([
+  const [shareCounts, sharedWithMe, channelRows, crm2] = await Promise.all([
     getShareCounts(listings.map((l) => l.id)),
     getSharedWithMe(agent.id as string),
     getAgentChannelStats(agent.id as string, 30),
+    getCrm2Context(),
   ]);
+  // CRM-ийн гишүүнд: Staff-д хуулагдаагүй, холбогдоогүй зар дээр «Staff-д бүртгэх» чип (P12 — зар ХУУЛАГДАНА,
+  // холболт зөвхөн нийтлэх үед; энэ хуудаснаас автоматаар шилжүүлэхгүй).
+  const importable =
+    crm2?.isMember && crm2.canWork ? new Set((await listImportableListings(200)).map((l) => l.id)) : new Set<string>();
+  const crmPaths = crm2Paths("agent");
   const byListing = summarizeByListing(channelRows);
 
   return (
@@ -66,6 +75,15 @@ export default async function MyListingsPage() {
                 <tr key={l.id} className="border-b border-line last:border-0">
                   <td className="p-3">
                     <Link href={`/listings/${l.id}`} className="font-medium text-ink hover:underline">{l.title}</Link>
+                    {importable.has(l.id) ? (
+                      <Link
+                        href={crmPaths.staffIncomplete({ import: l.id })}
+                        className="mt-1 flex min-h-11 w-fit items-center gap-1 rounded-full bg-amber-50 px-2.5 text-xs font-medium text-amber-900 ring-1 ring-amber-200 hover:bg-amber-100 sm:min-h-8"
+                      >
+                        <ClipboardPlus className="size-3.5 shrink-0" aria-hidden />
+                        Эзэн, гэрээ бүртгэгдээгүй — Staff-д бүртгэх
+                      </Link>
+                    ) : null}
                     {share && (
                       <span className="ml-2 inline-flex items-center gap-1 align-middle text-xs text-brand-600" title={share.names.join(", ")}>
                         <Share2 className="size-3" /> {share.count}

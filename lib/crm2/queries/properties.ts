@@ -18,7 +18,9 @@ import type {
   Crm2ActivityKind,
   Crm2BrokerageFileRow,
   Crm2BrokerageRow,
+  Crm2ContactConsent,
   Crm2ContactPhoneRow,
+  Crm2OwnerPending,
   Crm2PropertyActivityItem,
   Crm2PropertyCategory,
   Crm2PropertyDealItem,
@@ -204,21 +206,25 @@ const PROPERTY_DETAIL_SELECT =
   "*, project:crm2_projects!crm2_properties_project_id_office_id_fkey(id, name), " +
   "listing_agent:profiles!crm2_properties_listing_agent_id_fkey(id, full_name, avatar_url), " +
   "contract_agent:profiles!crm2_properties_contract_agent_id_fkey(id, full_name, avatar_url), " +
-  "photo_agent:profiles!crm2_properties_photo_agent_id_fkey(id, full_name, avatar_url)";
+  "photo_agent:profiles!crm2_properties_photo_agent_id_fkey(id, full_name, avatar_url), " +
+  // crm2_properties → listings 2 FK (listing_id, source_listing_id) тул embed бүрд FK заалт заавал.
+  // RLS-ээр харагдахгүй эх зар бол null.
+  "source_listing:listings!crm2_properties_source_listing_id_fkey(id, title, status, created_at)";
 
 const PROPERTY_PRIVATE_SELECT =
-  "property_id, owner_contact_id, owner_note, showing_instructions, updated_at, updated_by, " +
+  "property_id, owner_contact_id, owner_note, showing_instructions, owner_pending, updated_at, updated_by, " +
   "owner:crm2_contacts!crm2_property_private_owner_contact_id_office_id_fkey(id, code, full_name, status, " +
+  "source, name_unverified, consent, " +
   "phones:crm2_contact_phones!crm2_contact_phones_contact_id_office_id_fkey(id, phone, phone_norm, label, is_primary))";
 
 const PROPERTY_MEDIA_SELECT =
   "id, office_id, property_id, kind, storage_path, external_url, mime_type, size_bytes, caption, sort_order, is_cover, uploaded_by, created_at";
 
 const BROKERAGE_SELECT =
-  "*, owner:crm2_contacts!crm2_brokerage_contracts_owner_contact_id_office_id_fkey(id, code, full_name), " +
+  "*, owner:crm2_contacts!crm2_brokerage_contracts_owner_contact_id_office_id_fkey(id, code, full_name, source, name_unverified), " +
   "responsible:profiles!crm2_brokerage_contracts_responsible_agent_id_fkey(id, full_name), " +
   "files:crm2_brokerage_files!crm2_brokerage_files_contract_id_office_id_fkey(id, office_id, contract_id, property_id, " +
-  "storage_path, file_name, mime_type, size_bytes, uploaded_by, created_at)";
+  "storage_path, file_name, mime_type, size_bytes, kind, uploaded_by, created_at)";
 
 const PROPERTY_REQUEST_SELECT =
   "id, office_id, kind, target_id, property_id, payload, reason, status, requested_by, requested_at, decided_by, decided_at, decision_note";
@@ -230,6 +236,11 @@ export type PropertyOwner = {
   code: string;
   full_name: string;
   status: string;
+  /** contact.sources код. */
+  source: string | null;
+  /** Нэр «Нэр баталгаажаагүй» тэмдэглэгээтэй. */
+  name_unverified: boolean;
+  consent: Crm2ContactConsent;
   phones: Pick<Crm2ContactPhoneRow, "id" | "phone" | "phone_norm" | "label" | "is_primary">[];
 };
 
@@ -237,6 +248,8 @@ export type PropertyPrivate = {
   owner_contact_id: string | null;
   owner_note: string | null;
   showing_instructions: string | null;
+  /** Холбогдоогүй эзний хадгалсан утас/нэр/төлөв (эзэн шийдвэрлэгдтэл). */
+  owner_pending: Crm2OwnerPending | null;
   updated_at: string;
   updated_by: string | null;
   owner: PropertyOwner | null;
@@ -247,7 +260,7 @@ export type PropertyMediaItem = Crm2PropertyMediaRow & { url: string | null };
 export type BrokerageFileItem = Crm2BrokerageFileRow & { url: string | null };
 
 export type BrokerageItem = Crm2BrokerageRow & {
-  owner: { id: string; code: string; full_name: string } | null;
+  owner: { id: string; code: string; full_name: string; source: string | null; name_unverified: boolean } | null;
   responsible: { id: string; full_name: string | null } | null;
   files: BrokerageFileItem[];
   /** Ноорог засах/илгээх/хаях (ба буцааж авах). */
@@ -269,6 +282,8 @@ export type PropertyRequestItem = Crm2RequestRow & {
   dealCode: string | null;
 };
 
+export type PropertySourceListing = { id: string; title: string; status: string; created_at: string };
+
 export type PropertyDetail = {
   property: Crm2PropertyRow & {
     project: { id: string; name: string } | null;
@@ -276,6 +291,10 @@ export type PropertyDetail = {
     contract_agent: AgentRef;
     photo_agent: AgentRef;
   };
+  /** «Миний зараас үүсгэсэн» бол эх зар (RLS-ээр харагдвал), эс бөгөөс null. */
+  sourceListing: PropertySourceListing | null;
+  /** Хөрөнгө авчирсан агент nemi.mn-д идэвхтэй нийтийн бүртгэлтэй (нийтлэх нөхцөл). */
+  listingAgentPublic: boolean;
   /** Хувийн талбар — харах эрхгүй бол null. */
   private: PropertyPrivate | null;
   /** Үзүүлэх заавар (дунд түвшин) — эрхгүй бол null. */
@@ -312,7 +331,10 @@ export const getProperty = cache(async (id: string): Promise<PropertyDetail | nu
     throw new Error("crm2 getProperty: load failed");
   }
   if (!row) return null;
-  const property = row as unknown as PropertyDetail["property"];
+  const { source_listing: sourceListing, ...propertyRow } = row as unknown as PropertyDetail["property"] & {
+    source_listing: PropertySourceListing | null;
+  };
+  const property = propertyRow as PropertyDetail["property"];
 
   const [canEdit, canViewPrivate, canViewShowingInfo, approveStatus, names, ctx] = await Promise.all([
     rpcBool(supabase.rpc("crm2_can_edit_property", { p_property: id }), "can_edit_property"),
@@ -323,7 +345,7 @@ export const getProperty = cache(async (id: string): Promise<PropertyDetail | nu
     getCrm2Context(),
   ]);
 
-  const [priv, showingInfo, media, brokerage, activation, pendingRequests] = await Promise.all([
+  const [priv, showingInfo, media, brokerage, activation, pendingRequests, listingAgentPublic] = await Promise.all([
     canViewPrivate ? loadPrivate(supabase, id) : Promise.resolve(null),
     canViewShowingInfo && !canViewPrivate ? loadShowingInfo(supabase, id) : Promise.resolve(null),
     loadMedia(supabase, id),
@@ -336,10 +358,13 @@ export const getProperty = cache(async (id: string): Promise<PropertyDetail | nu
     }),
     loadActivation(supabase, id),
     loadPropertyRequests(supabase, id, names),
+    loadListingAgentPublic(supabase, property.listing_agent_id),
   ]);
 
   return {
     property,
+    sourceListing: sourceListing ?? null,
+    listingAgentPublic,
     private: priv,
     showingInfo: canViewPrivate ? (priv?.showing_instructions ?? null) : showingInfo,
     media,
@@ -366,6 +391,19 @@ async function loadPrivate(supabase: Crm2Supabase, id: string): Promise<Property
   const p = data as unknown as PropertyPrivate;
   if (p.owner?.phones) p.owner.phones.sort((a, b) => Number(b.is_primary) - Number(a.is_primary));
   return p;
+}
+
+/** Листлэгч агентын nemi.mn-ийн идэвхтэй нийтийн бүртгэл (agents.status = active) байгаа эсэх. */
+async function loadListingAgentPublic(supabase: Crm2Supabase, profileId: string | null): Promise<boolean> {
+  if (!profileId || !UUID_RE.test(profileId)) return false;
+  const { data, error } = await supabase
+    .from("agents")
+    .select("id")
+    .eq("profile_id", profileId)
+    .eq("status", "active")
+    .limit(1);
+  if (error) console.error("crm2 listingAgentPublic:", error.message);
+  return (data?.length ?? 0) > 0;
 }
 
 async function loadShowingInfo(supabase: Crm2Supabase, id: string): Promise<string | null> {

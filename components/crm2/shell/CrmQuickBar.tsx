@@ -11,14 +11,14 @@ type QuickItem = { href: string; label: string; icon: LucideIcon; unreadChatId?:
 /**
  * Утсанд (md-ээс доош) доод хэсэгт байнга харагдах хурдан үйлдэл. Агент
  * ихэнхдээ талбай дээр, утсаараа ажилладаг: дуудлага ирэхэд цэс ухалгүй нэг
- * товчоор хөрөнгөө сонгож бүртгэнэ, шинэ хөрөнгийг тэр дор нь нэмнэ.
+ * товчоор хөрөнгөө сонгож бүртгэнэ, шинэ хөрөнгийг тэр дор нь нэмнэ («+ Хөрөнгө» — үргэлж шинэ ноорог).
  * Багийн гишүүнд «Багийн чат» (уншаагүй тоотой) — багийнхантайгаа нэг товчоор.
  */
 export function CrmQuickBar({ panel, teamChatId = null }: { panel: Crm2Panel; teamChatId?: string | null }) {
   const p = crm2Paths(panel);
   const items: QuickItem[] = [
     { href: p.staff({ call: "1" }), label: "Дуудлага", icon: Phone },
-    { href: p.staffNew(), label: "Хөрөнгө нэмэх", icon: Building2 },
+    { href: p.staffNew(), label: "+ Хөрөнгө", icon: Building2 },
     { href: p.contacts(), label: "Харилцагч", icon: Users },
     { href: p.myWork(), label: "Миний ажил", icon: ListTodo },
   ];

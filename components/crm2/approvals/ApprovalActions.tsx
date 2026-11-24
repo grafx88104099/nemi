@@ -7,10 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast";
 import { ConfirmDialog, ReasonDialog } from "@/components/crm2/ui";
-import { approveBrokerage, rejectBrokerage } from "@/lib/crm2/actions/brokerage";
+import { rejectBrokerage } from "@/lib/crm2/actions/brokerage";
 import { cancelRequest, decideRequest } from "@/lib/crm2/actions/requests";
 import { approvedToast, storedCallsNotice } from "@/lib/crm2/approvals-view";
-import { missingItemLabel } from "@/lib/crm2/labels";
+
+import { ApproveBrokerageDialog, type ApproveFile } from "./ApproveBrokerageDialog";
 
 /**
  * Батлах дэлгэцийн товчнууд: зуучлалын гэрээ батлах/татгалзах, хүсэлт шийдвэрлэх,
@@ -35,34 +36,30 @@ function NoteField({ id, value, onChange }: { id: string; value: string; onChang
   );
 }
 
-/** Илгээсэн зуучлалын гэрээг батлах / татгалзах. */
+/** Илгээсэн зуучлалын гэрээг батлах / татгалзах. require_file үед файлыг тулгасныг заавал тэмдэглэнэ. */
 export function BrokerageDecision({
   contractId,
   number,
   propertyCode,
   updatedAt,
+  requireFile = false,
+  files,
 }: {
   contractId: string;
   number: string;
   propertyCode: string | null;
   updatedAt: string;
+  requireFile?: boolean;
+  /** RLS-ээр харагдсан файлууд (хязгаарлагдсан баримт эрхгүй хүнд ирэхгүй). */
+  files?: readonly ApproveFile[];
 }) {
-  const ids = React.useId();
   const [approveOpen, setApproveOpen] = React.useState(false);
   const [rejectOpen, setRejectOpen] = React.useState(false);
-  const [note, setNote] = React.useState("");
   const what = [number, propertyCode].filter(Boolean).join(" · ");
 
   return (
     <>
-      <Button
-        type="button"
-        size="touch"
-        onClick={() => {
-          setNote("");
-          setApproveOpen(true);
-        }}
-      >
+      <Button type="button" size="touch" onClick={() => setApproveOpen(true)}>
         <Check className="size-4" aria-hidden />
         Батлах
       </Button>
@@ -71,29 +68,15 @@ export function BrokerageDecision({
         Татгалзах
       </Button>
 
-      <ConfirmDialog
+      <ApproveBrokerageDialog
         open={approveOpen}
         onClose={() => setApproveOpen(false)}
+        contractId={contractId}
         title={`Гэрээ батлах — ${what}`}
-        description="Батлагдсан гэрээний агуулгыг дахин засахгүй. Хөрөнгө ноорог бөгөөд бүх нөхцөл бүрдсэн бол автоматаар идэвхжинэ."
-        confirmLabel="Батлах"
-        onConfirm={async () => {
-          const r = await approveBrokerage({ contract_id: contractId, note, expected_updated_at: updatedAt });
-          if (!r.ok) return r.error;
-          const res = r.data;
-          if (res.property_status === "active") toast.success("Гэрээ батлагдлаа. Хөрөнгө идэвхтэй боллоо.");
-          else if (res.activate_on_start) toast.success("Гэрээ батлагдлаа. Эхлэх өдөр нь хөрөнгө идэвхжинэ.");
-          else if (res.property_missing?.length) {
-            toast.info("Гэрээ батлагдлаа. Хөрөнгө идэвхжээгүй — дутуу мэдээлэлтэй.", {
-              description: res.property_missing.map(missingItemLabel).join(", "),
-              durationMs: 10000,
-            });
-          } else toast.success("Гэрээ батлагдлаа.");
-          return null;
-        }}
-      >
-        <NoteField id={`${ids}-note`} value={note} onChange={setNote} />
-      </ConfirmDialog>
+        updatedAt={updatedAt}
+        requireFile={requireFile}
+        files={files}
+      />
 
       <ReasonDialog
         open={rejectOpen}
