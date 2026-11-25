@@ -8,7 +8,6 @@ import { UNCONFIRMABLE_KEYS } from "@/lib/crm2/checklist";
 import { UI_EVENTS, UI_FLOWS } from "@/lib/crm2/feature-flags";
 import {
   BROKERAGE_FILE_KINDS,
-  COMMISSION_TYPES,
   CONTACT_CONSENTS,
   CURRENCIES,
   DEAL_STAGES,
@@ -440,6 +439,9 @@ export const mediaReorderSchema = z.object({
 
 export const brokerageFileKindEnum = z.enum(BROKERAGE_FILE_KINDS, { error: "Файлын төрөл буруу." });
 
+/** Гэрээ (kind='contract') зөвхөн PDF — crm2_brokerage_files_guard ч `\.pdf$` ба application/pdf шаардана. */
+export const CONTRACT_PDF_ONLY_ERROR = "Гэрээ зөвхөн PDF (PMC-ийн тамга, гарын үсэгтэй) байна.";
+
 export const brokerageFileRowSchema = z
   .object({
     contract_id: idSchema,
@@ -452,6 +454,9 @@ export const brokerageFileRowSchema = z
     if (restricted !== v.storage_path.includes("/restricted/") || (restricted && !RESTRICTED_DOC_RE.test(v.storage_path))) {
       ctx.addIssue({ code: "custom", path: ["storage_path"], message: "Гэрээний файлын зам буруу." });
     }
+    if (v.kind === "contract" && !/\.pdf$/i.test(v.storage_path)) {
+      ctx.addIssue({ code: "custom", path: ["storage_path"], message: CONTRACT_PDF_ONLY_ERROR });
+    }
   });
 
 /** Файл байршуулах (төрөлтэй). */
@@ -462,69 +467,37 @@ export const brokerageFileSchema = z.object({
 export type BrokerageFileRowInput = z.input<typeof brokerageFileRowSchema>;
 
 // ── Зуучлалын гэрээ ────────────────────────────────────────────────────────
+//
+// 20261125000100: батлах алхамгүй. Гэрээ = PMC-ийн тамга, гарын үсэгтэй НЭГ PDF + дуусах огноо.
+// Дугаарыг DB (B###), эхлэх огноог бүртгэсэн өдрөөр тавина; шимтгэл, онцгой нөхцөл, гарын үсэг
+// зурагч, оффисын анхдагч агентын урсгалд байхгүй (баганууд хуучин бичлэгт л үлдэнэ).
 
-const brokerageShape = {
-  number: optText(60, "Гэрээний дугаар"),
-  owner_contact_id: optId,
-  start_date: optDate("Эхлэх огноо"),
+/** Ноорог гэрээ: хөрөнгө ба (сонголттой) дуусах огноо. Бусад түлхүүрийг z.object хасна. */
+export const brokerageCreateSchema = z.object({
+  property_id: idSchema,
   end_date: optDate("Дуусах огноо"),
-  terms: optText(8000, "Нөхцөл"),
-  commission_type: z.preprocess(emptyToNull, z.enum(COMMISSION_TYPES, { error: "Шимтгэлийн төрөл буруу." }).nullable().optional()),
-  commission_value: optNumber({ min: 0, lt: 1e10, label: "Шимтгэл" }),
-  commission_currency: currencyEnum.optional(),
-  commission_note: optText(2000, "Шимтгэлийн тайлбар"),
-  responsible_agent_id: optId,
-  /** «Онцгой нөхцөлгүй» — нөхцөл хоосон ч илгээж болно. */
-  no_special_terms: z.boolean().optional(),
-  /** Эзнээс өөр хүн гарын үсэг зурна (signer_note-д холбоо/эрх). */
-  signer_differs: z.boolean().optional(),
-  signer_note: optText(500, "Гарын үсэг зурах эрхийн тайлбар"),
-  /** «Гэрээ оффист үлдсэн» — зөвхөн сануулга, файлын шаардлагыг хангахгүй. */
-  file_at_office: z.boolean().optional(),
-  /** Оффисын анхдагчаар бөглөсөн, баталгаажаагүй талбар (засахад зөвхөн багасна). */
-  prefilled: z
-    .array(z.enum(["number", "start_date", "end_date", "commission"], { error: "Талбар буруу." }))
-    .max(4)
-    .optional(),
-};
-
-type BrokerageCheck = {
-  start_date?: string | null;
-  end_date?: string | null;
-  commission_type?: string | null;
-  commission_value?: number | null;
-};
-
-function checkBrokerage(v: BrokerageCheck, ctx: z.RefinementCtx) {
-  if (v.start_date && v.end_date && v.end_date < v.start_date) {
-    ctx.addIssue({ code: "custom", path: ["end_date"], message: "Дуусах огноо эхлэх огнооноос өмнө байж болохгүй." });
-  }
-  if (v.commission_type === "percent" && v.commission_value != null && v.commission_value > 100) {
-    ctx.addIssue({ code: "custom", path: ["commission_value"], message: "Шимтгэлийн хувь 100-аас ихгүй." });
-  }
-}
-
-export const brokerageCreateSchema = z
-  .object({ property_id: idSchema, ...brokerageShape })
-  .superRefine(checkBrokerage);
+});
 export type BrokerageCreateInput = z.input<typeof brokerageCreateSchema>;
 
-export const brokerageUpdateSchema = z
-  .object({ contract_id: idSchema, ...brokerageShape })
-  .superRefine(checkBrokerage);
-export type BrokerageUpdateInput = z.input<typeof brokerageUpdateSchema>;
-
-export const brokerageApproveSchema = z.object({
+/** Гэрээ бүртгэх (crm2_brokerage_register): дуусах огноо заавал, «PMC-ийн тамга, гарын үсэгтэй» заавал. */
+export const brokerageRegisterSchema = z.object({
   contract_id: idSchema,
-  note: optText(2000, "Тэмдэглэл"),
-  /** Батлагчийн харсан updated_at (өөрчлөгдсөн бол DB татгалзана). */
-  expected_updated_at: z.preprocess(emptyToNull, z.string().nullable().optional()),
-  /** «Гэрээний файлтай тулгаж шалгасан» (brokerage.require_file үед заавал). */
-  file_checked: z.boolean().optional(),
+  end_date: z
+    .string({ error: "Дуусах огноо оруулна уу." })
+    .trim()
+    .min(1, "Дуусах огноо оруулна уу.")
+    .refine(isIsoDate, "Дуусах огноо буруу (ОООО-СС-ӨӨ)."),
+  stamp_confirmed: z.literal(true, { error: "PMC-ийн тамга, гарын үсэгтэйг баталгаажуулна уу." }),
 });
+export type BrokerageRegisterInput = z.input<typeof brokerageRegisterSchema>;
 
-/** Шалтгаан заавал (татгалзах, цуцлах). */
+/** Шалтгаан заавал (цуцлах). */
 export const contractReasonSchema = z.object({ contract_id: idSchema, reason: reqText(2000, "Шалтгаан") });
+/**
+ * «Гэрээ буруу» (crm2_brokerage_invalidate) — шалтгаан заавал. DB «Гэрээ буруу: » угтвартай хадгалж
+ * 1900 тэмдэгтээр хязгаарлана.
+ */
+export const brokerageInvalidateSchema = contractReasonSchema.extend({ reason: reqText(1900, "Шалтгаан") });
 /** Шалтгаан сонголттой (ноорог хаях). */
 export const contractOptReasonSchema = z.object({ contract_id: idSchema, reason: optText(2000, "Шалтгаан") });
 

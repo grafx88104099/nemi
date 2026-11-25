@@ -5,7 +5,6 @@ import {
   PROPERTY_CATEGORY_LABEL,
   PROPERTY_STATUS_LABEL,
 } from "@/lib/crm2/labels";
-import { commissionDefaultError, parseCommissionDefault } from "@/lib/crm2/commission-defaults";
 import {
   CRM2_SETTING_DEFAULTS,
   CRM2_SETTING_LABEL,
@@ -34,8 +33,6 @@ export type SettingEditor =
   | { kind: "codeLabel"; fixedCodes: string[] | null; requiredCodes: string[]; maxItems: number; maxLabel: number }
   /** Оффисын идэвхтэй ажилтны profile id-ийн жагсаалт (staff.quick_add_pilot). */
   | { kind: "staffPicker"; maxItems: number }
-  /** Ангилал бүрт '<төрөл>:<утга>' (brokerage.default_commission). */
-  | { kind: "commissionDefaults" }
   /** 4 ангиллын дурын дэд олонлогт тайлбар (property.category_hints). */
   | { kind: "categoryHints"; maxLabel: number };
 
@@ -104,7 +101,6 @@ const UNIT: Partial<Record<Crm2SettingKey, string>> = {
   "property.min_images": "ширхэг",
   "brokerage.default_term_months": "сар",
   "digest.owner_days": "хоног",
-  "digest.pending_days": "хоног",
 };
 
 /** profile id (crm2_set_setting-тэй ижил: жижиг үсгээр uuid). */
@@ -125,14 +121,11 @@ export function settingEditor(key: Crm2SettingKey): SettingEditor {
     case "brokerage.on_expiry":
     case "approvals.allow_self":
     case "contact.foreign_deal":
-    case "brokerage.activation_mode":
     case "staff.quick_add":
     case "digest.scope":
       return { kind: "choice", options: choiceOptions(key) };
     case "staff.quick_add_pilot":
       return { kind: "staffPicker", maxItems: 20 };
-    case "brokerage.default_commission":
-      return { kind: "commissionDefaults" };
     case "property.category_hints":
       return { kind: "categoryHints", maxLabel: 80 };
     case "contact.sources":
@@ -188,7 +181,7 @@ export const SETTING_GROUPS: SettingGroup[] = [
   {
     id: "staff",
     title: "Staff ба гэрээ",
-    description: "Хөрөнгийн харагдац, идэвхжүүлэлт, зуучлалын гэрээний шаардлага.",
+    description: "Хөрөнгийн харагдац, идэвхжүүлэлт, зуучлалын гэрээ (PMC тамгатай PDF) бүртгэх шаардлага.",
     keys: [
       "property.visibility",
       "property.activation_required",
@@ -196,19 +189,16 @@ export const SETTING_GROUPS: SettingGroup[] = [
       "property.same_agent_multi_role",
       "property.min_images",
       "brokerage.require_owner",
-      "brokerage.require_file",
       "brokerage.require_ownership_doc",
-      "brokerage.require_special_terms",
       "brokerage.default_term_months",
-      "brokerage.default_commission",
-      "brokerage.activation_mode",
       "brokerage.on_expiry",
     ],
   },
   {
     id: "access",
     title: "Эрх ба батлалт",
-    description: "Хэн бүртгэх, батлах, санхүүд хандах вэ. Энэ бүлгийг зөвхөн гүйцэтгэх захирал өөрчилнө.",
+    description:
+      "Хэн бүртгэх, хүсэлт батлах, бүртгэгдсэн гэрээг «Гэрээ буруу» гэж буцаах, санхүүд хандах вэ. Энэ бүлгийг зөвхөн гүйцэтгэх захирал өөрчилнө.",
     keys: [
       "roles.work",
       "roles.approve",
@@ -258,7 +248,6 @@ export const SETTING_GROUPS: SettingGroup[] = [
       "property.duplicate_check",
       "digest.scope",
       "digest.owner_days",
-      "digest.pending_days",
       "ai.listing_parse",
     ],
   },
@@ -277,7 +266,7 @@ export const SETTING_DESCRIPTION: Record<Crm2SettingKey, string> = {
   "property.agent_direct_statuses":
     "Агент батлуулахгүйгээр шууд тавьж болох төлөвүүд. Хоосон бол агент төлөв солихдоо батлагчид хүсэлт илгээнэ.",
   "property.activation_required":
-    "Хөрөнгө идэвхжихээс өмнө бөглөгдсөн байх ёстой талбарууд. Батлагдсан хүчинтэй гэрээ ба ангилалд тохирох үнийн хугацаа үргэлж шаардлагатай.",
+    "Хөрөнгө идэвхжихээс өмнө бөглөгдсөн байх ёстой талбарууд. Бүртгэгдсэн хүчинтэй гэрээ ба ангилалд тохирох үнийн хугацаа үргэлж шаардлагатай; бүгд бүрэн болмогц хөрөнгө автоматаар идэвхжинэ.",
   "property.same_agent_multi_role":
     "Нэг агент хөрөнгө авчирсан, гэрээ байгуулсан, зураг авсан үүргээс хэд хэдийг зэрэг авч болох эсэх. Хориглосон үед одоо байгаа бичлэгт нөлөөлөхгүй, зөвхөн агент шинээр оноох үед шалгана.",
   "property.category_labels":
@@ -285,18 +274,20 @@ export const SETTING_DESCRIPTION: Record<Crm2SettingKey, string> = {
   "property.types": "Хөрөнгийн төрлийн сонголт (код ба нэр). Ашиглагдаж буй кодыг хасвал хуучин бичлэг кодоороо харагдана.",
   "property.districts": "Хөрөнгө ба шаардлагад сонгох дүүргийн жагсаалт. nemi.mn-ийн дүүргийн бичлэгтэй ижил байлгавал тааруулахад хялбар.",
   "property.features": "Хөрөнгийн онцлог ба шаардлагын «зайлшгүй онцлог»-т сонгох жагсаалт.",
-  "brokerage.require_owner": "Зуучлалын гэрээг илгээх, батлахад хөрөнгийн эзэн (харилцагч) заавал холбогдсон байх эсэх.",
-  "brokerage.require_file": "Зуучлалын гэрээг илгээх, батлахад дор хаяж нэг скан эсвэл PDF файл хавсаргасан байх эсэх.",
+  "brokerage.require_owner": "Зуучлалын гэрээг бүртгэхэд хөрөнгийн эзэн (харилцагч) заавал холбогдсон байх эсэх.",
   "brokerage.remind_days_before":
     "Зуучлалын гэрээ дуусахаас хэдэн хоногийн өмнө хариуцсан агент ба түүний ахлагчид апп доторх мэдэгдэл очих вэ.",
   "brokerage.on_expiry":
     "Гэрээний хугацаа дуусаад өөр хүчинтэй гэрээгүй үлдсэн хөрөнгийг «Гэрээ дууссан» болгох уу, төлөвийг хэвээр үлдээх үү. Түрээслэгдсэн, зарагдсан хөрөнгө өөрчлөгдөхгүй.",
-  "approvals.team_lead": "Багийн ахлагч өөрийн багийн агентын гэрээ, хүсэлтийг батлах эсэх.",
-  "approvals.office_admin": "Оффисын админ гэрээ, хүсэлт батлах эсэх (анхдагчаар батлахгүй).",
+  "approvals.team_lead":
+    "Багийн ахлагч өөрийн багийн агентын төлөвийн болон шилжүүлэх хүсэлтийг батлах эсэх. Шинэ гэрээний мэдэгдэл, «Гэрээ буруу» эрх ахлагчид энэ тохиргооноос үл хамааран байна.",
+  "approvals.office_admin":
+    "Оффисын админ төлөвийн болон шилжүүлэх хүсэлтийг батлах, бүртгэгдсэн гэрээг «Гэрээ буруу» гэж буцаах эсэх (анхдагчаар үгүй).",
   "approvals.allow_self":
-    "Өөрийн хариуцсан, илгээсэн гэрээ эсвэл өөрийн хөрөнгийн хүсэлтийг хэн өөрөө баталж болох вэ.",
+    "Өөрийн хөрөнгийн хүсэлтийг (ба өөрийн хариуцсан гэрээг цуцлахыг) хэн өөрөө баталж болох вэ.",
   "roles.work": "Staff хөрөнгө, харилцагч, дуудлага, үзүүлэлт бүртгэж ажиллах дүрүүд.",
-  "roles.approve": "Зуучлалын гэрээ, төлөвийн болон шилжүүлэх хүсэлтийг батлах дүрүүд. Системийн админыг нэмэхгүй.",
+  "roles.approve":
+    "Төлөвийн болон шилжүүлэх хүсэлтийг батлах, шинээр бүртгэгдсэн зуучлалын гэрээний мэдэгдэл авч буруу бол «Гэрээ буруу» гэж буцаах дүрүүд. Системийн админыг нэмэхгүй.",
   "roles.finance":
     "Санхүүгийн хэсэгт (нэхэмжлэл, төлбөр батлах) хандах дүрүүд. Админ, захирлын дүр энэ эрхийг дагуулж өгөхгүй — хэрэгтэй бол тусад нь нэмнэ.",
   "contact.foreign_deal":
@@ -315,7 +306,8 @@ export const SETTING_DESCRIPTION: Record<Crm2SettingKey, string> = {
   "media.max_videos": "Нэг хөрөнгөд хуулж болох бичлэгийн дээд тоо (урт бичлэгийг холбоосоор нэмнэ).",
   "media.max_image_mb": "Нэг зургийн дээд хэмжээ.",
   "media.max_video_mb": "Нэг бичлэгийн дээд хэмжээ (сангийн хязгаар 50 МБ).",
-  "docs.max_file_mb": "Зуучлалын гэрээний нэг файлын дээд хэмжээ (PDF, JPEG, PNG, WebP).",
+  "docs.max_file_mb":
+    "Зуучлалын гэрээний нэг файлын дээд хэмжээ. Гэрээ зөвхөн PDF (камераар скан хийсэн хуудсууд нэг PDF болно); өмчлөлийн баримт PDF эсвэл зураг.",
   "docs.max_files_per_contract": "Нэг зуучлалын гэрээнд хавсаргах файлын дээд тоо.",
   "property.category_hints":
     "Ангилал сонгох товчны доор харагдах богино тайлбар. Хоосон үлдээсэн ангилалд тайлбар харагдахгүй.",
@@ -323,15 +315,10 @@ export const SETTING_DESCRIPTION: Record<Crm2SettingKey, string> = {
     "Хөрөнгө хадгалсны дараа ижил төсөл, давхар, талбай эсвэл эзний утастай хөрөнгийг оффис дотор шалгаж, агентад мэдэгдэнэ. Харах эрхгүй хөрөнгийн мэдээллийг харуулахгүй.",
   "property.min_images":
     "Хөрөнгийг нийтлэх (ба «зураг» шаардлагатай үед идэвхжүүлэх)-эд хэрэгтэй хамгийн цөөн зураг. 0 бол зураггүй ч болно.",
-  "brokerage.default_term_months": "Шинэ зуучлалын гэрээний дуусах огноог эхлэх өдрөөс хэдэн сарын дараа гэж урьдчилан бөглөх вэ.",
-  "brokerage.default_commission":
-    "Ангилал бүрийн шимтгэлийг гэрээнд урьдчилан бөглөнө (хувь, сарын түрээсийн дахин, тогтмол дүн). Агент утга бүрийг баталгаажуулна; хоосон бол бөглөхгүй.",
-  "brokerage.activation_mode":
-    "Зуучлалын гэрээ батлагдахад хөрөнгийг автоматаар идэвхжүүлэх үү, эсвэл агент өөрөө «Идэвхжүүлэх» дарах уу. Дутуу зүйлтэй бол аль ч горимд мэдэгдэл очно.",
-  "brokerage.require_special_terms":
-    "Ноорог гэрээг илгээхэд онцгой нөхцөлийг бичих эсвэл «онцгой нөхцөлгүй» гэж тэмдэглэхийг шаардах эсэх.",
+  "brokerage.default_term_months":
+    "Дуусах огноог бүртгэсэн өдрөөс энэ хэдэн сарын дараа гэж бөглөнө (агент өөрчилнө, 5 жилээс хол байж болохгүй).",
   "brokerage.require_ownership_doc":
-    "Ноорог гэрээг илгээхэд өмчлөлийн баримт хавсаргахыг шаардах эсэх. Баримтыг хариуцагч, батлагч, менежер л харна.",
+    "Гэрээ бүртгэхэд өмчлөлийн баримт хавсаргахыг шаардах эсэх. Баримтыг хариуцагч, батлагч, менежер л харна.",
   "contact.sources":
     "Эзэн (харилцагч) хаанаас ирснийг сонгох жагсаалт. «other» (Бусад) заавал байх ба сонговол тайлбар бичнэ.",
   "staff.quick_add":
@@ -339,9 +326,8 @@ export const SETTING_DESCRIPTION: Record<Crm2SettingKey, string> = {
   "staff.quick_add_pilot":
     "«Туршилтын агентуудад» горимд шуурхай бүртгэлийг ашиглах ажилтнууд (20 хүртэл). Хуучин бүрэн форм хүн бүрт «Бүрэн форм» холбоосоор үргэлж нээлттэй.",
   "digest.scope":
-    "Өдөрт нэг удаа (19:00 цагт) дутуу бүртгэл, батлагдаагүй гэрээний товч сануулга хэнд очих вэ. Шөнө (21:00–09:00) мэдэгдэл явахгүй.",
+    "Өдөрт нэг удаа (19:00 цагт) дутуу бүртгэл, бүртгэгдээгүй гэрээний товч сануулга хэнд очих вэ. Шөнө (21:00–09:00) мэдэгдэл явахгүй.",
   "digest.owner_days": "Эзэн тодорхойгүй эсвэл шалгах шаардлагатай хөрөнгийг бүртгэснээс хэдэн хоногийн дараа сануулах вэ.",
-  "digest.pending_days": "Батлуулахаар илгээсэн гэрээ хэдэн хоног хүлээгдвэл батлагчид сануулах вэ.",
   "ai.listing_parse":
     "Агентын наасан зарын текстийг (утас, хувийн мэдээллийг нуусны дараа) Anthropic-ийн AI-аар задлах эсэх. Асаахаас өмнө нууцлалын зөвшөөрлийг шийднэ; сервер дээр түлхүүр тохируулаагүй бол ажиллахгүй.",
 };
@@ -390,9 +376,8 @@ export function normalizeSettingValue(key: Crm2SettingKey, value: unknown): unkn
       return Array.isArray(value)
         ? [...new Set(value.filter((x): x is string => typeof x === "string").map((x) => x.trim().toLowerCase()).filter(Boolean))]
         : value;
-    case "commissionDefaults":
     case "categoryHints": {
-      // Хоосон утга = тухайн ангилалд урьдчилан бөглөхгүй / тайлбаргүй.
+      // Хоосон утга = тухайн ангилалд тайлбаргүй.
       if (!isRecord(value)) return value;
       const out: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(value)) {
@@ -515,16 +500,6 @@ export function validateSettingValue(key: Crm2SettingKey, value: unknown): strin
       if (new Set(value).size !== value.length) return "Нэг агентыг давхар сонгосон байна.";
       return null;
     }
-    case "commissionDefaults": {
-      if (!isRecord(value)) return "Жагсаалт буруу.";
-      for (const [code, raw] of Object.entries(value)) {
-        if (!CATEGORY_CODES.includes(code)) return "Зөвхөн 4 ангиллын шимтгэлийг тохируулна.";
-        if (typeof raw !== "string") return "Шимтгэлийн анхдагч буруу.";
-        const err = commissionDefaultError(raw);
-        if (err) return `${categoryName(code)}: ${err}`;
-      }
-      return null;
-    }
     case "categoryHints": {
       if (!isRecord(value)) return "Жагсаалт буруу.";
       for (const [code, hint] of Object.entries(value)) {
@@ -540,15 +515,6 @@ export function validateSettingValue(key: Crm2SettingKey, value: unknown): strin
 
 function categoryName(code: string): string {
   return PROPERTY_CATEGORY_LABEL[code as keyof typeof PROPERTY_CATEGORY_LABEL] ?? code;
-}
-
-/** Шимтгэлийн анхдагчийн текст: «3%», «сарын түрээсийн 1 дахин», «500 000 ₮». */
-export function commissionDefaultText(raw: string): string {
-  const d = parseCommissionDefault(raw);
-  if (!d) return raw;
-  if (d.kind === "percent") return `${d.value}%`;
-  if (d.kind === "rent_x") return `сарын түрээсийн ${d.value} дахин`;
-  return `${String(d.value).replace(/\B(?=(\d{3})+(?!\d))/g, " ")} ₮`;
 }
 
 // ── Харуулах текст ─────────────────────────────────────────────────────────
@@ -580,13 +546,6 @@ export function settingValueText(key: Crm2SettingKey, value: unknown): string {
       return Object.values(value).filter((v) => typeof v === "string").join(", ") || "—";
     case "staffPicker":
       return Array.isArray(value) && value.length ? `${value.length} агент` : "Сонгоогүй";
-    case "commissionDefaults": {
-      if (!isRecord(value)) return "—";
-      const parts = Object.entries(value)
-        .filter(([, v]) => typeof v === "string")
-        .map(([k, v]) => `${categoryName(k)}: ${commissionDefaultText(v as string)}`);
-      return parts.length ? parts.join("; ") : "Урьдчилан бөглөхгүй";
-    }
     case "categoryHints": {
       if (!isRecord(value)) return "—";
       const parts = Object.entries(value)
@@ -612,13 +571,13 @@ export const DEFAULT_DECISIONS: DefaultDecision[] = [
     keys: ["property.category_labels"],
   },
   {
-    title: "Гэрээ ба хүсэлтийн батлагч",
-    note: "Анхдагчаар удирдлага (менежер) болон тухайн агентын багийн ахлагч батална; оффисын админд энэ эрх олгогдоогүй.",
+    title: "Хүсэлтийн батлагч ба гэрээний хяналт",
+    note: "Анхдагчаар удирдлага (менежер) болон тухайн агентын багийн ахлагч хүсэлт батална. Шинэ гэрээ бүртгэгдэхэд тэд мэдэгдэл авч, буруу бол «Гэрээ буруу» гэж буцаана; оффисын админд энэ эрх олгогдоогүй.",
     keys: ["roles.approve", "approvals.team_lead", "approvals.office_admin"],
   },
   {
-    title: "Өөрийн гэрээ, хүсэлтийг батлах",
-    note: "Анхдагчаар зөвхөн менежер өөрт хамаатай гэрээ, хүсэлтээ өөрөө баталж чадна.",
+    title: "Өөрийн хүсэлтийг батлах",
+    note: "Анхдагчаар зөвхөн менежер өөрт хамаатай хүсэлтээ өөрөө баталж (өөрийн гэрээг цуцалж) чадна.",
     keys: ["approvals.allow_self"],
   },
   {
@@ -643,7 +602,7 @@ export const DEFAULT_DECISIONS: DefaultDecision[] = [
   },
   {
     title: "Идэвхжүүлэхэд заавал бөглөх талбар",
-    note: "Батлагдсан хүчинтэй гэрээнээс гадна эдгээр талбар бөглөгдсөн байх ёстой.",
+    note: "Бүртгэгдсэн хүчинтэй гэрээнээс гадна эдгээр талбар бөглөгдсөн байх ёстой. Гэрээ бүртгэгдсэн бол бүрэн болмогц хөрөнгө автоматаар идэвхжинэ.",
     keys: ["property.activation_required"],
   },
   {
@@ -672,19 +631,9 @@ export const DEFAULT_DECISIONS: DefaultDecision[] = [
     keys: ["staff.quick_add", "staff.quick_add_pilot"],
   },
   {
-    title: "Шимтгэлийн анхдагч",
-    note: "Анхдагчаар гэрээнд шимтгэл урьдчилан бөглөхгүй. Удирдлага ангилал бүрийн утгыг баталсны дараа тохируулна; агент урьдчилан бөглөсөн утга бүрийг баталгаажуулна.",
-    keys: ["brokerage.default_commission"],
-  },
-  {
     title: "Гэрээний анхдагч хугацаа",
-    note: "Шинэ гэрээний дуусах огноог эхлэх өдрөөс 12 сарын дараа гэж урьдчилан бөглөнө (агент баталгаажуулна).",
+    note: "Гэрээний дуусах огноог бүртгэсэн өдрөөс 12 сарын дараа гэж бөглөнө (агент өөрчилж болно).",
     keys: ["brokerage.default_term_months"],
-  },
-  {
-    title: "Гэрээ батлагдсаны дараах идэвхжүүлэлт",
-    note: "Анхдагчаар хөрөнгө гэрээ батлагдмагц автоматаар идэвхжинэ (одоогийнх шиг). «Гар» горимд агент өөрөө идэвхжүүлнэ.",
-    keys: ["brokerage.activation_mode"],
   },
   {
     title: "Зарын текстийг AI-аар задлах",
@@ -698,7 +647,7 @@ export const DEFAULT_DECISIONS: DefaultDecision[] = [
   },
   {
     title: "Өмчлөлийн баримт",
-    note: "Анхдагчаар заавал биш. Асаавал ноорог гэрээг илгээхэд өмчлөлийн баримт хавсаргана; баримтыг хариуцагч, батлагч, менежер л харна.",
+    note: "Анхдагчаар заавал биш. Асаавал гэрээ бүртгэхэд өмчлөлийн баримт хавсаргана; баримтыг хариуцагч, батлагч, менежер л харна.",
     keys: ["brokerage.require_ownership_doc"],
   },
 ];
@@ -706,6 +655,7 @@ export const DEFAULT_DECISIONS: DefaultDecision[] = [
 /** Тохиргоогоор өөрчлөгдөхгүй, тогтсон дүрэм (тоймд мэдээлэл болгон). */
 export const FIXED_RULES: string[] = [
   "Нэг талбайг хэсэгчлэн түрээслүүлбэл хэсэг тус бүрийг өөр өөр Staff хөрөнгө болгон бүртгэнэ.",
+  "Зуучлалын гэрээ = PMC-ийн тамга, гарын үсэгтэй нэг PDF; батлах алхамгүй. Агент бүртгэмэгц хүчинтэй болж, хөрөнгийн мэдээлэл бүрэн бол хөрөнгө автоматаар идэвхжинэ.",
   "Жагсаалтын «идэвхжсэн» огноо нь хөрөнгө хамгийн анх идэвхтэй болсон өдөр бөгөөд дахин идэвхжүүлсэн ч хөдлөхгүй.",
   "Дуудлага ба үзүүлэлт тусдаа бүртгэл: үзүүлэлтийн үр дүнг агент бодит цагтай нь өөрөө тэмдэглэнэ, товлосон цаг өнгөрөхөд систем өөрөө «үзүүлсэн» гэж тооцохгүй.",
 ];

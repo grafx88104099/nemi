@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef } from "react";
 import { X } from "lucide-react";
 
-import { dialogOpener, focusDialogStart, trapTab } from "./dialog-focus";
+import { dialogOpener, focusDialogStart, ownsKeyboard, trapTab } from "./dialog-focus";
 
 /**
  * Хүртээмжтэй модал — role=dialog, aria-modal, Escape хаах, focus trap,
@@ -47,6 +47,8 @@ export function Modal({
     focusDialogStart(dialogRef.current);
 
     function onKey(e: KeyboardEvent) {
+      // Дээр нь давхарласан өөр диалог фокустай бол тэр нь шийднэ.
+      if (!ownsKeyboard(dialogRef.current)) return;
       if (e.key === "Escape") {
         e.preventDefault();
         onCloseRef.current();

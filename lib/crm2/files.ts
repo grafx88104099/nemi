@@ -3,7 +3,8 @@ import type { Crm2FileLimits } from "@/lib/crm2/settings";
 /**
  * Медиа ба гэрээний файлын дүрэм (цэвэр модуль — клиент шалгалт, тест).
  * Bucket-ийн зөвшөөрөгдсөн төрөл миграцийнхтай ижил. HEIC/HEIF хүлээж авахгүй
- * (Chrome/Edge харуулдаггүй) — хэрэглэгч JPEG болгож хуулна.
+ * (Chrome/Edge харуулдаггүй) — хэрэглэгч JPEG болгож хуулна. Гэрээ (kind='contract') зөвхөн PDF;
+ * зураг зөвхөн өмчлөлийн/бусад баримтад.
  */
 
 export const CRM2_MEDIA_BUCKET = "crm2-media";
@@ -11,11 +12,18 @@ export const CRM2_DOCS_BUCKET = "crm2-docs";
 
 export const MEDIA_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 export const MEDIA_VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm"] as const;
+/** Өмчлөлийн баримт, иргэний үнэмлэх, бусад баримт (kind ≠ 'contract'). */
 export const DOC_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp"] as const;
+/**
+ * Зуучлалын гэрээ (kind='contract') — зөвхөн PDF (20261125000100 crm2_brokerage_files_guard). Камераар скан
+ * хийсэн хуудсуудыг нэг PDF болгож хуулна; зураг гэрээ гэж тооцогдохгүй.
+ */
+export const CONTRACT_PDF_TYPES = ["application/pdf"] as const;
 
 /** <input accept="..."> утга. */
 export const MEDIA_ACCEPT = [...MEDIA_IMAGE_TYPES, ...MEDIA_VIDEO_TYPES, ".jpg", ".jpeg", ".png", ".webp", ".mp4", ".mov", ".webm"].join(",");
 export const DOC_ACCEPT = [...DOC_TYPES, ".pdf", ".jpg", ".jpeg", ".png", ".webp"].join(",");
+export const CONTRACT_PDF_ACCEPT = "application/pdf,.pdf";
 
 const EXT_BY_TYPE: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -97,7 +105,37 @@ export function validateMediaFile(
   return null;
 }
 
-/** Гэрээний файлын шалгалт → алдааны текст эсвэл null. existing — гэрээнд байгаа файлын тоо. */
+/** «{name}» — гэрээ зөвхөн PDF (зураг сонгосон, эсвэл PDF толгойгүй файл). */
+export function contractPdfOnlyText(name: string): string {
+  return `«${name}» — гэрээг зөвхөн PDF хэлбэрээр оруулна. Зураг гэрээ гэж тооцогдохгүй — камераар скан хийвэл PDF болно.`;
+}
+
+/** Скан хийсэн гэрээ хязгаараас том (нэг PDF-д багтсангүй). */
+export function contractPdfTooLargeText(bytes: number): string {
+  const mb = Math.max(0.1, Math.round((bytes / MB) * 10) / 10);
+  return `Гэрээ хэт том (${mb} МБ) — хуудсын тоог багасгана уу.`;
+}
+
+/**
+ * Гэрээний PDF-ийн шалгалт → алдааны текст эсвэл null. Төрөл нь application/pdf (хөтөч хоосон өгвөл
+ * .pdf өргөтгөлөөр) байх ба хэмжээ docs.max_file_mb-аас ихгүй. Байтын шалгалтыг isPdfHeader хийнэ.
+ */
+export function validateContractPdf(file: FileLike, limits: Pick<Crm2FileLimits, "maxDocMb">): string | null {
+  if (fileMime(file) !== "application/pdf") return contractPdfOnlyText(file.name);
+  if (file.size <= 0) return `«${file.name}» — файл хоосон байна.`;
+  if (file.size > limits.maxDocMb * MB) return `«${file.name}» — файл ${fmtMb(limits.maxDocMb)}-аас ихгүй байна.`;
+  return null;
+}
+
+/** PDF-ийн эхний 5 байт «%PDF-» эсэх (нэрийг нь .pdf болгосон зургийг танина). */
+export function isPdfHeader(bytes: ArrayLike<number> | null | undefined): boolean {
+  if (!bytes || bytes.length < 5) return false;
+  const sig = [0x25, 0x50, 0x44, 0x46, 0x2d];
+  for (let i = 0; i < 5; i++) if (bytes[i] !== sig[i]) return false;
+  return true;
+}
+
+/** Өмчлөлийн/бусад баримтын шалгалт → алдааны текст эсвэл null. existing — гэрээнд байгаа файлын тоо. */
 export function validateDocFile(
   file: FileLike,
   limits: Pick<Crm2FileLimits, "maxDocMb" | "maxDocsPerContract">,

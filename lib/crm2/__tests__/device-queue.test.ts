@@ -4,12 +4,14 @@ import { discardDraft, draftKey, getBlob, getBlobRecord, newDraft, putBlob, save
 import {
   BACKOFF_MS,
   MAX_AUTO_ATTEMPTS,
+  NOT_PDF_ERROR,
   afterFailure,
   backoffDelay,
   bindProperty,
   configureQueueForTests,
   dropWaitingFor,
   enqueue,
+  isPermanentUploadFailure,
   listQueue,
   pickNext,
   remove,
@@ -28,18 +30,22 @@ const PROP = "44444444-4444-4444-8444-444444444444";
 const mediaLimits = { maxImageMb: 15, maxVideoMb: 200, maxImages: 40, maxVideos: 3 };
 const docLimits = { maxDocMb: 20, maxDocsPerContract: 10 };
 
-let calls: { kind: string; name: string; target: unknown; size: number }[] = [];
+let calls: { kind: string; name: string; target: unknown; size: number; type: string }[] = [];
 let fail = false;
+/** Дахин оролдоход засрахгүй алдаа (storage.ts / addBrokerageFileRow field 'file'). */
+let failField: string | undefined;
 let clock = 1_000_000;
+
+const failure = () => ({ ok: false as const, error: "x", ...(failField ? { field: failField } : {}) });
 
 const uploaders: Uploaders = {
   media: async (file, target) => {
-    calls.push({ kind: "media", name: file.name, target, size: file.size });
-    return fail ? { ok: false, error: "x" } : { ok: true, data: null };
+    calls.push({ kind: "media", name: file.name, target, size: file.size, type: file.type });
+    return fail ? failure() : { ok: true, data: null };
   },
   brokerage: async (file, target) => {
-    calls.push({ kind: "brokerage", name: file.name, target, size: file.size });
-    return fail ? { ok: false, error: "x" } : { ok: true, data: null };
+    calls.push({ kind: "brokerage", name: file.name, target, size: file.size, type: file.type });
+    return fail ? failure() : { ok: true, data: null };
   },
 };
 
@@ -47,6 +53,7 @@ beforeEach(() => {
   setCrm2KvFactoryForTests(() => memoryKv());
   calls = [];
   fail = false;
+  failField = undefined;
   clock = 1_000_000;
   configureQueueForTests({
     uploaders,
@@ -86,7 +93,23 @@ describe("pure", () => {
     }
     it = afterFailure(it, "e", 100);
     expect(it.status).toBe("failed");
+    expect(it.permanent).toBe(false); // автомат оролдлого дууссан — хэрэглэгч «Дахин оролдох» дарж болно
     expect(summarize([it])).toEqual({ pending: 0, failed: 1 });
+  });
+
+  it("permanent failure (not PDF, too large, already has a PDF) → failed at once, flagged permanent", () => {
+    const it0 = { id: "a", attempts: 0, status: "uploading", nextAt: 0 } as QueueItem;
+    expect(afterFailure(it0, "Гэрээ зөвхөн PDF", 100, true)).toMatchObject({
+      status: "failed",
+      attempts: 1,
+      error: "Гэрээ зөвхөн PDF",
+      permanent: true,
+    });
+    expect(afterFailure(it0, "e", 100, false).status).toBe("queued");
+    expect(isPermanentUploadFailure({ ok: false, error: "x", field: "file" })).toBe(true);
+    expect(isPermanentUploadFailure({ ok: false, error: "x" })).toBe(false);
+    expect(isPermanentUploadFailure({ ok: false, error: "x", field: "end_date" })).toBe(false);
+    expect(isPermanentUploadFailure({ ok: true, data: null })).toBe(false);
   });
 
   it("videos wait for Wi-Fi unless allowed", () => {
@@ -187,6 +210,72 @@ describe("queue", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({ kind: "brokerage", name: "contract.pdf", size: 6 });
     expect(await getBlobRecord(item.blobKey)).toBeNull();
+  });
+
+  it("contract (fileKind 'contract') must be a PDF: images are rejected at enqueue, nothing stored", async () => {
+    const contract = { kind: "brokerage" as const, contractId: "k1", fileKind: "contract" as const, officeId: OFFICE, limits: docLimits };
+    for (const [blob, name] of [
+      [new Blob(["jpeg"], { type: "image/jpeg" }), "geree.jpg"],
+      [new Blob(["png"], { type: "image/png" }), "geree.pdf"],
+      [new Blob(["x"], { type: "" }), "geree.jpg"],
+    ] as const) {
+      await expect(enqueue({ profileId: P1, target: contract, blob, name })).rejects.toThrow(NOT_PDF_ERROR);
+    }
+    expect(await listQueue(P1)).toHaveLength(0);
+    // Ноорогт хадгалсан зургийг гэрээ болгож дараалалд оруулахгүй.
+    const blobKey = await putBlob(P1, new File(["jpegdata"], "a.jpg", { type: "image/jpeg" }), "a.jpg");
+    await expect(enqueue({ profileId: P1, target: contract, blobKey })).rejects.toThrow(NOT_PDF_ERROR);
+    expect(await getBlob(blobKey)).not.toBeNull();
+    expect(await listQueue(P1)).toHaveLength(0);
+  });
+
+  it("contract PDF with an empty browser type is accepted by extension and uploaded as application/pdf", async () => {
+    await startQueue(P1);
+    const item = await enqueue({
+      profileId: P1,
+      target: { kind: "brokerage", contractId: "k1", fileKind: "contract", officeId: OFFICE, limits: docLimits },
+      blob: new Blob([new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d])], { type: "" }),
+      name: "scan.PDF",
+    });
+    expect(item.type).toBe("application/pdf");
+    await whenIdle();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ kind: "brokerage", name: "scan.PDF", type: "application/pdf" });
+  });
+
+  it("ownership images are still allowed", async () => {
+    await startQueue(P1);
+    await enqueue({
+      profileId: P1,
+      target: { kind: "brokerage", contractId: "k1", fileKind: "ownership", officeId: OFFICE, limits: docLimits },
+      blob: new Blob(["jpeg"], { type: "image/jpeg" }),
+      name: "gerchilgee.jpg",
+    });
+    await whenIdle();
+    expect(calls).toHaveLength(1);
+    expect((await listQueue(P1))[0].status).toBe("done");
+  });
+
+  it("a validation failure (field 'file') is not retried: failed after one attempt, blob kept", async () => {
+    fail = true;
+    failField = "file";
+    await startQueue(P1);
+    const item = await enqueue({
+      profileId: P1,
+      target: { kind: "brokerage", contractId: "k1", fileKind: "contract", officeId: OFFICE, limits: docLimits },
+      blob: new Blob([new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d])], { type: "application/pdf" }),
+      name: "geree.pdf",
+    });
+    for (let k = 0; k < 3; k++) {
+      await whenIdle();
+      clock += 120_000;
+      await startQueue();
+    }
+    await whenIdle();
+    expect(calls).toHaveLength(1);
+    const rows = await listQueue(P1);
+    expect(rows[0]).toMatchObject({ status: "failed", attempts: 1, error: "x" });
+    expect(await getBlobRecord(item.blobKey)).not.toBeNull();
   });
 
   it("sealed record holds no plaintext blob", async () => {

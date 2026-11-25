@@ -171,23 +171,3 @@ export async function getOfferContext(
     origin,
   };
 }
-
-/**
- * Илгээсэн гэрээ бүрд хэрэглэгч батлагч эсэх (crm2_brokerage_approver). Батлагч
- * боловч өөрийн оролцсон гэрээ (өөрийгөө батлах дүрэм) бол UI тайлбар харуулна.
- */
-export async function brokerageApproverMap(
-  contracts: { id: string; status: string; responsible_agent_id: string }[]
-): Promise<Record<string, boolean>> {
-  const pending = contracts.filter((c) => c.status === "pending").slice(0, 20);
-  if (pending.length === 0) return {};
-  const supabase = await crm2Client();
-  const results = await Promise.all(
-    pending.map(async (c) => {
-      const { data, error } = await supabase.rpc("crm2_brokerage_approver", { p_responsible: c.responsible_agent_id });
-      if (error) console.error("crm2 brokerage_approver:", error.message);
-      return [c.id, !!data] as const;
-    })
-  );
-  return Object.fromEntries(results);
-}

@@ -1,20 +1,16 @@
 import Link from "next/link";
-import { ArrowRight, CheckCheck, FileSignature, Inbox, Send } from "lucide-react";
+import { ArrowRight, CheckCheck, Inbox, Send } from "lucide-react";
 
 import { fmtDateTime } from "@/lib/format";
-import { getCrm2Context, getCrm2Settings } from "@/lib/crm2/context";
-import { fmtIsoDate } from "@/lib/crm2/datetime";
+import { getCrm2Context } from "@/lib/crm2/context";
 import { HIDDEN_PROPERTY_LABEL, REQUEST_KIND_LABEL, TASK_KIND_LABEL } from "@/lib/crm2/labels";
-import { formatCommission } from "@/lib/crm2/money";
 import { crm2Paths, type Crm2Panel, type Crm2Paths } from "@/lib/crm2/paths";
-import { listPendingApprovals, type PendingBrokerage, type PendingRequest } from "@/lib/crm2/queries/approvals";
+import { listPendingApprovals, type PendingRequest } from "@/lib/crm2/queries/approvals";
 import { listMyDecidedRequests, type MyDecidedRequest } from "@/lib/crm2/approvals-queries";
 import { requestCallCounts, requestTargetHref, splitPending, type RequestCallView } from "@/lib/crm2/approvals-view";
-import type { Crm2Settings } from "@/lib/crm2/settings";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody } from "@/components/ui/card";
 import {
-  CategoryBadge,
   CodeChip,
   Crm2Empty,
   LoadErrorState,
@@ -23,14 +19,13 @@ import {
   RequestStatusBadge,
 } from "@/components/crm2/ui";
 
-import { BrokerageDecision, CancelRequestButton, RequestDecision } from "./ApprovalActions";
-import type { ApproveFile } from "./ApproveBrokerageDialog";
-import { pendingContractFiles } from "./approval-files";
+import { CancelRequestButton, RequestDecision } from "./ApprovalActions";
 
 /**
- * Батлах (/…/crm/approvals): илгээсэн зуучлалын гэрээ, агентын хүсэлт (хөрөнгийн
- * төлөв, хэлцэл/харилцагч шилжүүлэх) ба «Миний хүсэлтүүд». Хэн юуг батлахыг DB-ийн
- * эрхийн функц шийднэ (canDecide); энд зөвхөн харуулж, товч өгнө.
+ * Батлах (/…/crm/approvals): агентын хүсэлт (хөрөнгийн төлөв, хэлцэл/харилцагч шилжүүлэх) ба
+ * «Миний хүсэлтүүд». Хэн юуг батлахыг DB-ийн эрхийн функц шийднэ (canDecide); энд зөвхөн харуулж,
+ * товч өгнө. Зуучлалын гэрээг батлахгүй (агент PMC тамгатай PDF-ээр бүртгэнэ; батлагч, ахлагч
+ * мэдэгдэл аваад буруу бол картаас «Гэрээ буруу» гэж буцаана).
  */
 
 function SectionTitle({ icon: Icon, title, count, hint }: { icon: typeof Inbox; title: string; count?: number; hint?: string }) {
@@ -43,86 +38,6 @@ function SectionTitle({ icon: Icon, title, count, hint }: { icon: typeof Inbox; 
       </h2>
       {hint ? <p className="mt-0.5 text-sm text-muted">{hint}</p> : null}
     </div>
-  );
-}
-
-function BrokerageItem({
-  c,
-  paths,
-  settings,
-  decide,
-  files,
-}: {
-  c: PendingBrokerage;
-  paths: Crm2Paths;
-  settings: Crm2Settings;
-  decide: boolean;
-  /** Батлагчид харагдах файлууд (RLS); батлах эрхгүй бол undefined. */
-  files?: ApproveFile[];
-}) {
-  const p = c.property;
-  const href = paths.property(c.property_id, "agreement");
-  const place = p ? [p.district, p.location_text].filter(Boolean).join(", ") : "";
-  return (
-    <li className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-3 sm:p-4 lg:flex-row lg:items-center">
-      <div className="min-w-0 flex-1 space-y-1.5">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <CodeChip code={c.number} href={href} />
-          {p ? <CodeChip code={p.code} href={paths.property(p.id)} /> : null}
-          {p ? <CategoryBadge category={p.category} labels={settings["property.category_labels"]} /> : null}
-          {p ? <PropertyStatusBadge status={p.status} /> : null}
-          {c.version > 1 ? <Badge tone="blue">Сунгалт · {c.version}-р хувилбар</Badge> : null}
-        </div>
-        {place ? <p className="truncate text-sm text-ink">{place}</p> : null}
-        <dl className="grid grid-cols-1 gap-x-4 gap-y-0.5 text-sm sm:grid-cols-2">
-          <div className="flex gap-1.5">
-            <dt className="text-muted">Хариуцагч:</dt>
-            <dd className="truncate text-ink">{c.responsible?.full_name ?? "—"}</dd>
-          </div>
-          <div className="flex gap-1.5">
-            <dt className="text-muted">Илгээсэн:</dt>
-            <dd className="truncate tabular-nums text-ink">
-              {c.submitted_at ? fmtDateTime(c.submitted_at) : "—"}
-              {c.submittedByName ? ` · ${c.submittedByName}` : ""}
-            </dd>
-          </div>
-          <div className="flex gap-1.5">
-            <dt className="text-muted">Хугацаа:</dt>
-            <dd className="tabular-nums text-ink">
-              {c.start_date ? fmtIsoDate(c.start_date) : "—"} – {c.end_date ? fmtIsoDate(c.end_date) : "—"}
-            </dd>
-          </div>
-          <div className="flex gap-1.5">
-            <dt className="text-muted">Шимтгэл:</dt>
-            <dd className="text-ink">
-              {formatCommission(c.commission_type, c.commission_value, c.commission_currency) || "—"}
-            </dd>
-          </div>
-        </dl>
-        {!decide ? (
-          <p className="text-xs text-muted">Энэ гэрээг та батлах боломжгүй (өөрийн гэрээ эсвэл таны хүрээнд биш).</p>
-        ) : null}
-      </div>
-      <div className="flex flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end">
-        <Link
-          href={href}
-          className="inline-flex min-h-11 items-center gap-1 rounded-xl px-3 text-sm font-semibold text-brand-700 hover:bg-brand-50 sm:min-h-9"
-        >
-          Гэрээ нээх
-          <ArrowRight className="size-4" aria-hidden />
-        </Link>
-        {decide ? (
-          <BrokerageDecision
-            contractId={c.id}
-            number={c.number}
-            propertyCode={p?.code ?? null}
-            updatedAt={c.updated_at}
-            requireFile={settings["brokerage.require_file"]}
-            files={files ?? []}
-          />
-        ) : null}
-      </div>
-    </li>
   );
 }
 
@@ -317,20 +232,14 @@ export async function ApprovalsView({ panel }: { panel: Crm2Panel }) {
     );
   }
   const paths = crm2Paths(panel);
-  const [pending, decidedRes, settings] = await Promise.all([listPendingApprovals(), listMyDecidedRequests(), getCrm2Settings()]);
+  const [pending, decidedRes] = await Promise.all([listPendingApprovals(), listMyDecidedRequests()]);
   const decided = decidedRes.rows;
   const retryHref = paths.approvals();
 
-  const me = ctx.profileId;
-  const contracts = splitPending(
-    pending.brokerage.map((c) => ({ ...c, mine: c.submitted_by === me || c.responsible_agent_id === me || c.created_by === me }))
-  );
   const requests = splitPending(pending.requests);
-  const showDecide = ctx.canApprove || contracts.toDecide.length + requests.toDecide.length > 0;
-  const brokerageList = [...contracts.toDecide, ...(ctx.isManager ? contracts.others : [])];
+  const showDecide = ctx.canApprove || requests.toDecide.length > 0;
   const requestList = [...requests.toDecide, ...(ctx.isManager ? requests.others : [])];
-  const myCount = requests.mine.length + contracts.mine.length;
-  const filesByContract = await pendingContractFiles(brokerageList.filter((c) => c.canDecide).map((c) => c.id));
+  const myCount = requests.mine.length;
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:py-6 md:px-6">
@@ -338,17 +247,13 @@ export async function ApprovalsView({ panel }: { panel: Crm2Panel }) {
         <h1 className="text-xl font-extrabold text-ink sm:text-2xl">{showDecide ? "Батлах" : "Миний хүсэлт"}</h1>
         <p className="text-sm text-muted">
           {showDecide
-            ? "Илгээсэн зуучлалын гэрээ, агентуудын хүсэлтийг шийдвэрлэнэ. Шийдвэр бүр хэн, хэзээ гэдэгтэйгээ хадгалагдана."
-            : "Таны гаргасан хүсэлт, батлуулахаар илгээсэн гэрээний явц."}
+            ? "Агентуудын хүсэлтийг шийдвэрлэнэ. Шийдвэр бүр хэн, хэзээ гэдэгтэйгээ хадгалагдана. Зуучлалын гэрээ батлуулахгүй — бүртгэгдсэн гэрээний мэдэгдэл ирнэ, буруу бол картаас «Гэрээ буруу» гэж буцаана."
+            : "Таны гаргасан хүсэлтийн явц."}
         </p>
       </div>
 
       {showDecide ? (
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:max-w-md">
-          <div className="rounded-xl border border-line bg-surface px-3 py-2">
-            <span className="block text-xs text-muted">Батлах гэрээ</span>
-            <span className="text-lg font-bold tabular-nums text-ink">{pending.error ? "—" : contracts.toDecide.length}</span>
-          </div>
+        <div className="mt-4 sm:max-w-[14rem]">
           <div className="rounded-xl border border-line bg-surface px-3 py-2">
             <span className="block text-xs text-muted">Шийдвэрлэх хүсэлт</span>
             <span className="text-lg font-bold tabular-nums text-ink">{pending.error ? "—" : requests.toDecide.length}</span>
@@ -357,28 +262,6 @@ export async function ApprovalsView({ panel }: { panel: Crm2Panel }) {
       ) : null}
 
       <div className="mt-6 space-y-8">
-        {showDecide ? (
-          <section aria-label="Зуучлалын гэрээ">
-            <SectionTitle
-              icon={FileSignature}
-              title="Батлуулахаар илгээсэн гэрээ"
-              count={pending.error ? undefined : brokerageList.length}
-              hint="Гэрээг нээж файл, нөхцөлийг шалгаад батална. Батлагдсан гэрээг засахгүй — өөрчлөлт нь шинэ хувилбар болно."
-            />
-            {pending.error ? (
-              <LoadErrorState compact retryHref={retryHref} />
-            ) : brokerageList.length === 0 ? (
-              <Crm2Empty icon={CheckCheck} title="Батлах гэрээ алга" compact />
-            ) : (
-              <ul className="space-y-2">
-                {brokerageList.map((c) => (
-                  <BrokerageItem key={c.id} c={c} paths={paths} settings={settings} decide={c.canDecide} files={filesByContract[c.id]} />
-                ))}
-              </ul>
-            )}
-          </section>
-        ) : null}
-
         {showDecide ? (
           <section aria-label="Хүсэлт">
             <SectionTitle
@@ -416,30 +299,6 @@ export async function ApprovalsView({ panel }: { panel: Crm2Panel }) {
             <ul className="space-y-2">
               {requests.mine.map((r) => (
                 <RequestItem key={r.id} r={r} paths={paths} decide={false} />
-              ))}
-              {contracts.mine.map((c) => (
-                <li
-                  key={c.id}
-                  className="flex flex-col gap-2 rounded-xl border border-line bg-surface p-3 sm:flex-row sm:items-center sm:p-4"
-                >
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <Badge tone="amber">Гэрээ батлуулахаар</Badge>
-                      <CodeChip code={c.number} href={paths.property(c.property_id, "agreement")} />
-                      {c.property ? <CodeChip code={c.property.code} href={paths.property(c.property.id)} /> : null}
-                    </div>
-                    <p className="text-xs text-muted">
-                      Илгээсэн {c.submitted_at ? fmtDateTime(c.submitted_at) : "—"} · батлагчийн шийдвэр хүлээж байна
-                    </p>
-                  </div>
-                  <Link
-                    href={paths.property(c.property_id, "agreement")}
-                    className="inline-flex min-h-11 items-center gap-1 self-start rounded-xl px-3 text-sm font-semibold text-brand-700 hover:bg-brand-50 sm:min-h-9 sm:self-auto"
-                  >
-                    Нээх
-                    <ArrowRight className="size-4" aria-hidden />
-                  </Link>
-                </li>
               ))}
             </ul>
           )}

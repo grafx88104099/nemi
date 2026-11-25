@@ -7,6 +7,7 @@ import {
   ACTIVATION_FIELD_VALUES,
   CRM_ROLES,
   DEFAULT_DECISIONS,
+  FIXED_RULES,
   SETTING_DESCRIPTION,
   SETTING_GROUPS,
   canEditSetting,
@@ -59,7 +60,6 @@ describe("тохиргооны дэлгэцийн бүтэц", () => {
         stringList: "array",
         codeLabel: "object",
         staffPicker: "array",
-        commissionDefaults: "object",
         categoryHints: "object",
       }[ed.kind];
       expect(shape, key).toBe(want);
@@ -109,7 +109,6 @@ describe("тохиргооны дэлгэцийн бүтэц", () => {
       "contact.foreign_deal",
       "staff.quick_add",
       "digest.scope",
-      "brokerage.activation_mode",
     ] as const) {
       const ed = settingEditor(k);
       const m = new RegExp(`when '${k.replace(".", "\\.")}' then array\\[([^\\]]*)\\]`).exec(body);
@@ -205,25 +204,22 @@ describe("засах эрх", () => {
 });
 
 describe("Staff шуурхай бүртгэлийн тохиргоо (20261124000200)", () => {
+  // 20261125000100: brokerage.default_commission, activation_mode, require_special_terms, digest.pending_days хасагдсан.
   const NEW_KEYS: Crm2SettingKey[] = [
     "property.category_hints",
     "property.duplicate_check",
     "property.min_images",
     "brokerage.default_term_months",
-    "brokerage.default_commission",
-    "brokerage.activation_mode",
-    "brokerage.require_special_terms",
     "brokerage.require_ownership_doc",
     "contact.sources",
     "staff.quick_add",
     "staff.quick_add_pilot",
     "digest.scope",
     "digest.owner_days",
-    "digest.pending_days",
     "ai.listing_parse",
   ];
 
-  it("15 шинэ түлхүүр бүгд бүлэгтэй, тайлбартай", () => {
+  it("үлдсэн 11 шинэ түлхүүр бүгд бүлэгтэй, тайлбартай", () => {
     const groups = new Map(SETTING_GROUPS.flatMap((g) => g.keys.map((k) => [k, g.id] as const)));
     for (const k of NEW_KEYS) {
       expect(CRM2_SETTING_KEYS, k).toContain(k);
@@ -237,13 +233,12 @@ describe("Staff шуурхай бүртгэлийн тохиргоо (2026112400
         "staff.quick_add_pilot",
         "digest.scope",
         "digest.owner_days",
-        "digest.pending_days",
         "ai.listing_parse",
         "property.duplicate_check",
       ].sort()
     );
     expect(groups.get("contact.sources")).toBe("deals");
-    for (const k of ["brokerage.default_commission", "brokerage.default_term_months", "brokerage.require_ownership_doc", "property.min_images"] as const) {
+    for (const k of ["brokerage.default_term_months", "brokerage.require_ownership_doc", "property.min_images"] as const) {
       expect(groups.get(k), k).toBe("staff");
     }
   });
@@ -274,23 +269,33 @@ describe("Staff шуурхай бүртгэлийн тохиргоо (2026112400
     expect(settingValueText("staff.quick_add_pilot", [PILOT_A])).toBe("1 агент");
   });
 
-  it("шимтгэлийн анхдагч: SQL-ийн regex ба хязгаар", () => {
-    expect(settingEditor("brokerage.default_commission")).toEqual({ kind: "commissionDefaults" });
-    expect(validateSettingValue("brokerage.default_commission", {})).toBeNull();
-    expect(validateSettingValue("brokerage.default_commission", { sale: "percent:3.2", lease: "rent_x:1", rent: "fixed:500000" })).toBeNull();
-    expect(validateSettingValue("brokerage.default_commission", { sale: "percent:101" })).toMatch(/100/);
-    expect(validateSettingValue("brokerage.default_commission", { rent: "rent_x:13" })).toMatch(/0.1–12/);
-    expect(validateSettingValue("brokerage.default_commission", { rent: "rent_x:0.05" })).toMatch(/0.1–12/);
-    expect(validateSettingValue("brokerage.default_commission", { rent: "3%" })).toMatch(/буруу/);
-    expect(validateSettingValue("brokerage.default_commission", { rent: "percent:3.333" })).toMatch(/буруу/);
-    expect(validateSettingValue("brokerage.default_commission", { house: "percent:3" })).toMatch(/4 ангилл/);
-    expect(normalizeSettingValue("brokerage.default_commission", { sale: " percent:3 ", rent: "" })).toEqual({ sale: "percent:3" });
-    expect(settingValueText("brokerage.default_commission", {})).toBe("Урьдчилан бөглөхгүй");
-    expect(settingValueText("brokerage.default_commission", { sale: "percent:3", lease: "rent_x:1", rent: "fixed:500000" })).toBe(
-      "Зарах: 3%; Хөлслөх: сарын түрээсийн 1 дахин; Түрээслэх: 500 000 ₮"
-    );
-    // SQL-ийн regex ижил.
-    expect(SET_SETTING).toContain("'^(percent|rent_x|fixed):[0-9]{1,10}(\\.[0-9]{1,2})?$'");
+  it("гэрээний хасагдсан тохиргоо (20261125000100): засварлагч, SQL шалгалт алга", () => {
+    const removed = [
+      "brokerage.require_file",
+      "brokerage.default_commission",
+      "brokerage.activation_mode",
+      "brokerage.require_special_terms",
+      "digest.pending_days",
+    ];
+    const grouped = new Set<string>(groupedSettingKeys());
+    for (const k of removed) {
+      expect(grouped.has(k), k).toBe(false);
+      expect(Object.keys(SETTING_DESCRIPTION), k).not.toContain(k);
+      expect(DEFAULT_DECISIONS.flatMap((d) => d.keys) as string[], k).not.toContain(k);
+      expect(SET_SETTING, k).not.toContain(`'${k}'`);
+    }
+    // Шимтгэлийн анхдагчийн regex SQL-ээс хасагдсан; ангиллын тайлбарын шалгалт үлдсэн.
+    expect(SET_SETTING).not.toContain("percent|rent_x|fixed");
+    expect(SET_SETTING).toContain("p_key = 'property.category_hints'");
+    // Тогтсон дүрэм: гэрээ = PMC тамгатай нэг PDF, батлах алхамгүй.
+    expect(FIXED_RULES.some((r) => r.includes("PMC-ийн тамга, гарын үсэгтэй нэг PDF") && r.includes("батлах алхамгүй"))).toBe(true);
+  });
+
+  it("эрх ба батлалтын тайлбар: гэрээ батлахгүй, «Гэрээ буруу»", () => {
+    expect(SETTING_DESCRIPTION["roles.approve"]).toContain("«Гэрээ буруу»");
+    expect(SETTING_DESCRIPTION["approvals.team_lead"]).not.toMatch(/гэрээ, хүсэлтийг батлах/);
+    expect(SETTING_DESCRIPTION["brokerage.default_term_months"]).toContain("бүртгэсэн өдрөөс");
+    expect(SETTING_DESCRIPTION["docs.max_file_mb"]).toContain("Гэрээ зөвхөн PDF");
   });
 
   it("ангиллын тайлбар: 4 ангиллын дурын дэд олонлог, 80 тэмдэгт", () => {
@@ -328,9 +333,7 @@ describe("Staff шуурхай бүртгэлийн тохиргоо (2026112400
     const keys = new Set(DEFAULT_DECISIONS.flatMap((d) => d.keys));
     for (const k of [
       "staff.quick_add_pilot",
-      "brokerage.default_commission",
       "brokerage.default_term_months",
-      "brokerage.activation_mode",
       "ai.listing_parse",
       "property.min_images",
       "brokerage.require_ownership_doc",

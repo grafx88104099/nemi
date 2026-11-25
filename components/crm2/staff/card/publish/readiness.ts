@@ -1,6 +1,6 @@
 /**
  * «Нийтлэхэд бэлэн» бүлгийн өгөгдөл (P3) — картын шалгах жагсаалтаас (lib/crm2/checklist) цэвэр байдлаар.
- * Ноорог шатнаас харагдана: нийтлэхийн өмнөх 2 нөхцөл (батлагдсан гэрээ, идэвхтэй хөрөнгө), бүлгийн мөрүүд,
+ * Ноорог шатнаас харагдана: нийтлэхийн өмнөх 2 нөхцөл (бүртгэгдсэн гэрээ, идэвхтэй хөрөнгө), бүлгийн мөрүүд,
  * «Зөв» товчтой баталгаажаагүй нийтийн утга, нийтийн бичвэрийн эрсдэл.
  */
 import { hasValidContract, type ChecklistGroupView, type ChecklistInput, type ChecklistTarget, type Checklist } from "@/lib/crm2/checklist";
@@ -40,13 +40,13 @@ export function buildPublishReadiness(args: {
   const gates: PublishGate[] = [
     {
       key: "contract",
-      label: "Батлагдсан, хүчинтэй зуучлалын гэрээ",
+      label: "Бүртгэгдсэн, хүчинтэй гэрээ (PMC тамгатай PDF)",
       done: hasValidContract(input),
       target: { sheet: "contract", field: null },
     },
     {
       key: "active",
-      label: "Хөрөнгө идэвхтэй (гэрээ батлагдсаны дараа)",
+      label: "Хөрөнгө идэвхтэй (гэрээ бүртгэгдсэний дараа)",
       done: input.property.status === "active",
       target: { sheet: "checklist", field: null },
     },

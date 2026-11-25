@@ -103,7 +103,10 @@ export const UI_EVENTS = [
   "sheet_saved",
   "contract_draft_saved",
   "contract_pages_captured",
+  // Хуучин (батлах урсгал) — түүхэн мөрт үлдэнэ; 20261125000100-аас contract_registered.
   "contract_submitted",
+  "contract_registered",
+  "contract_invalidated",
   "import_listing",
   "upload_failed",
   "upload_retry_ok",

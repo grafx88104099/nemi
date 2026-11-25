@@ -290,11 +290,47 @@ describe("Staff бүртгэлийн шошго (P1)", () => {
     for (const k of PROPERTY_SOURCES) expect(nonEmpty(PROPERTY_SOURCE_LABEL[k]), k).toBe(true);
     for (const k of CONTACT_CONSENTS) expect(nonEmpty(CONTACT_CONSENT_LABEL[k]), k).toBe(true);
     expect(BROKERAGE_FILE_KIND_LABEL).toEqual({
-      contract: "Гэрээ",
+      contract: "Гэрээ (PDF)",
       ownership: "Өмчлөлийн баримт",
       id: "Иргэний үнэмлэх",
       other: "Бусад баримт",
     });
+  });
+
+  it("гэрээний төлөв (20261125000100): active = бүртгэгдсэн, pending enum-д үлдсэн (хуучин)", () => {
+    expect(BROKERAGE_STATUS_LABEL.active).toBe("Бүртгэгдсэн");
+    expect(BROKERAGE_STATUS_LABEL.pending).toBe("Батлуулахаар илгээсэн (хуучин)");
+    expect(BROKERAGE_STATUSES).toContain("pending");
+    // Шинэ 'pending' үүсэхгүй (crm2_brokerage_no_pending).
+    const last = fs.readFileSync(path.join(MIGRATIONS, MIGRATION_FILES.filter((f) => /crm2_contract_register/.test(f)).pop()!), "utf8");
+    expect(last).toMatch(/add constraint crm2_brokerage_no_pending check \(status <> 'pending'\)/);
+  });
+
+  it("гэрээ бүртгэлийн дутуу кодын нэр (хамгийн сүүлийн crm2_missing_text)", () => {
+    expect(MISSING_ITEM_LABEL.brokerage_contract).toBe("бүртгэгдсэн, хүчинтэй зуучлалын гэрээ (PMC тамгатай PDF)");
+    expect(MISSING_ITEM_LABEL.file).toBe("гэрээний PDF (PMC-ийн тамга, гарын үсэгтэй)");
+    expect(MISSING_ITEM_LABEL.file_not_pdf).toBe("гэрээний зураг/бусад файл — гэрээг зөвхөн PDF-ээр оруулна (устгана уу)");
+    expect(MISSING_ITEM_LABEL.stamp_unconfirmed).toBe("PMC-ийн тамга, гарын үсэгтэйг баталгаажуулаагүй");
+    // Хуучин код (хуучин мессеж) нэртэй хэвээр.
+    for (const k of ["start_date", "commission", "special_terms", "signer_authority", "defaults_unconfirmed", "role_unconfirmed"]) {
+      expect(nonEmpty(MISSING_ITEM_LABEL[k]), k).toBe(true);
+    }
+  });
+
+  it("хасагдсан тохиргооны түлхүүр (20261125000100) TS ба SQL-д алга", () => {
+    const removed = [
+      "brokerage.require_file",
+      "brokerage.default_commission",
+      "brokerage.activation_mode",
+      "brokerage.require_special_terms",
+      "digest.pending_days",
+    ];
+    for (const k of removed) {
+      expect(settingKeysFromSql(), k).not.toContain(k);
+      expect(CRM2_SETTING_KEYS as readonly string[], k).not.toContain(k);
+      expect(latestFn("crm2_setting_default"), k).not.toContain(`'${k}'`);
+      expect(latestFn("crm2_set_setting"), k).not.toContain(`'${k}'`);
+    }
   });
 
   it("шат ба бүлгийн шошго", () => {

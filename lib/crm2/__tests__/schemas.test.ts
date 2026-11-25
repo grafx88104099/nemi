@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  brokerageApproveSchema,
+  CONTRACT_PDF_ONLY_ERROR,
   brokerageFileSchema,
+  brokerageInvalidateSchema,
+  brokerageRegisterSchema,
   confirmFieldsSchema,
   contactUpdateSchema,
   duplicateFlagSchema,
@@ -13,7 +15,6 @@ import {
   quickCreateSchema,
   resolveDuplicateSchema,
   uiEventSchema,
-  brokerageUpdateSchema,
   brokerageCreateSchema,
   brokerageFileRowSchema,
   cancelDealSchema,
@@ -160,15 +161,67 @@ describe("медиа, файлын зам", () => {
   });
 });
 
-describe("brokerageCreateSchema", () => {
-  it("огноо, шимтгэлийн хувь", () => {
-    expect(
-      brokerageCreateSchema.safeParse({ property_id: ID, start_date: "2026-11-01", end_date: "2027-10-31", commission_type: "percent", commission_value: "3" })
-        .success
-    ).toBe(true);
-    expect(brokerageCreateSchema.safeParse({ property_id: ID, start_date: "2026-11-01", end_date: "2026-10-01" }).success).toBe(false);
-    expect(brokerageCreateSchema.safeParse({ property_id: ID, commission_type: "percent", commission_value: 150 }).success).toBe(false);
-    expect(brokerageCreateSchema.safeParse({ property_id: ID, start_date: "2026-02-30" }).success).toBe(false);
+describe("brokerageCreateSchema (20261125000100: хөрөнгө + дуусах огноо)", () => {
+  it("зөвхөн property_id ба (сонголттой) end_date", () => {
+    expect(brokerageCreateSchema.safeParse({ property_id: ID }).success).toBe(true);
+    expect(brokerageCreateSchema.safeParse({ property_id: ID, end_date: "2027-11-24" }).data).toEqual({
+      property_id: ID,
+      end_date: "2027-11-24",
+    });
+    expect(brokerageCreateSchema.safeParse({ property_id: ID, end_date: "" }).data?.end_date ?? null).toBeNull();
+    expect(brokerageCreateSchema.safeParse({ property_id: ID, end_date: "2026-02-30" }).success).toBe(false);
+    expect(brokerageCreateSchema.safeParse({ end_date: "2027-11-24" }).success).toBe(false);
+  });
+  it("дугаар, эхлэх огноо, шимтгэл, нөхцөл, гарын үсэг зурагч, prefilled-ийг хаяна (DB тавина)", () => {
+    const r = brokerageCreateSchema.safeParse({
+      property_id: ID,
+      end_date: "2027-11-24",
+      number: "260500",
+      start_date: "2026-11-01",
+      commission_type: "percent",
+      commission_value: 3,
+      terms: "x",
+      signer_differs: true,
+      signer_note: "x",
+      prefilled: ["commission"],
+      file_at_office: true,
+      responsible_agent_id: ID2,
+    });
+    expect(r.success).toBe(true);
+    expect(r.data).toEqual({ property_id: ID, end_date: "2027-11-24" });
+  });
+});
+
+describe("brokerageRegisterSchema (crm2_brokerage_register)", () => {
+  const ok = { contract_id: ID, end_date: "2027-11-24", stamp_confirmed: true };
+  it("дуусах огноо (ISO) ба «PMC-ийн тамга, гарын үсэгтэй» заавал", () => {
+    expect(brokerageRegisterSchema.safeParse(ok).data).toEqual(ok);
+    expect(brokerageRegisterSchema.safeParse({ ...ok, end_date: " 2027-11-24 " }).data?.end_date).toBe("2027-11-24");
+    for (const end_date of [undefined, null, "", "2027-02-30", "24/11/2027"]) {
+      const r = brokerageRegisterSchema.safeParse({ ...ok, end_date });
+      expect(r.success, String(end_date)).toBe(false);
+      expect(r.error?.issues[0]?.path).toEqual(["end_date"]);
+    }
+  });
+  it("stamp_confirmed нь яг true (false, «true», дутуу → алдаа)", () => {
+    for (const stamp_confirmed of [false, "true", undefined, 1]) {
+      const r = brokerageRegisterSchema.safeParse({ ...ok, stamp_confirmed });
+      expect(r.success, String(stamp_confirmed)).toBe(false);
+      expect(r.error?.issues[0]?.path).toEqual(["stamp_confirmed"]);
+      expect(firstError(r)).toContain("PMC-ийн тамга, гарын үсэгтэй");
+    }
+  });
+  it("contract_id uuid", () => {
+    expect(brokerageRegisterSchema.safeParse({ ...ok, contract_id: "x" }).success).toBe(false);
+  });
+});
+
+describe("brokerageInvalidateSchema («Гэрээ буруу»)", () => {
+  it("шалтгаан заавал, 1900 тэмдэгтээс ихгүй", () => {
+    expect(brokerageInvalidateSchema.safeParse({ contract_id: ID, reason: "Тамга алга" }).success).toBe(true);
+    expect(brokerageInvalidateSchema.safeParse({ contract_id: ID, reason: "  " }).success).toBe(false);
+    expect(brokerageInvalidateSchema.safeParse({ contract_id: ID, reason: "x".repeat(1900) }).success).toBe(true);
+    expect(brokerageInvalidateSchema.safeParse({ contract_id: ID, reason: "x".repeat(1901) }).success).toBe(false);
   });
 });
 
@@ -369,19 +422,21 @@ describe("propertyCreate/Update: эх сурвалж, unconfirmed", () => {
 });
 
 describe("гэрээ (P7)", () => {
-  it("шинэ талбарууд", () => {
-    const r = brokerageUpdateSchema.safeParse({
-      contract_id: ID,
-      no_special_terms: true,
-      signer_differs: true,
-      signer_note: "Эхнэр нь, итгэмжлэлтэй",
-      file_at_office: true,
-      prefilled: ["commission", "end_date"],
-    });
-    expect(r.success).toBe(true);
-    expect(brokerageUpdateSchema.safeParse({ contract_id: ID, signer_note: "x".repeat(501) }).success).toBe(false);
-    expect(brokerageUpdateSchema.safeParse({ contract_id: ID, prefilled: ["terms"] }).success).toBe(false);
-    expect(brokerageApproveSchema.safeParse({ contract_id: ID, file_checked: true }).data?.file_checked).toBe(true);
+  it("гэрээ (kind='contract') зөвхөн .pdf зам; өмчлөлийн баримт зураг байж болно", () => {
+    const base = `${ID2}/brokerage/${ID}`;
+    expect(brokerageFileRowSchema.safeParse({ contract_id: ID, storage_path: `${base}/f.pdf` }).success).toBe(true);
+    expect(brokerageFileRowSchema.safeParse({ contract_id: ID, kind: "contract", storage_path: `${base}/f.PDF` }).success).toBe(true);
+    for (const ext of ["jpg", "jpeg", "png", "webp", "heic", "docx"]) {
+      const r = brokerageFileRowSchema.safeParse({ contract_id: ID, kind: "contract", storage_path: `${base}/f.${ext}` });
+      expect(r.success, ext).toBe(false);
+      expect(firstError(r), ext).toBe(CONTRACT_PDF_ONLY_ERROR);
+    }
+    // Анхдагч kind = 'contract' — зураг ч мөн татгалзагдана.
+    expect(brokerageFileRowSchema.safeParse({ contract_id: ID, storage_path: `${base}/f.jpg` }).success).toBe(false);
+    expect(
+      brokerageFileRowSchema.safeParse({ contract_id: ID, kind: "ownership", storage_path: `${base}/restricted/${ID2}.jpg` }).success
+    ).toBe(true);
+    expect(brokerageFileRowSchema.safeParse({ contract_id: ID, kind: "other", storage_path: `${base}/f.jpg` }).success).toBe(true);
   });
   it("файлын төрөл ба хязгаарлагдсан зам", () => {
     const uuidName = `${ID2}.pdf`;

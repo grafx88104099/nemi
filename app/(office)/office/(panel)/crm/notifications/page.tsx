@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCrmStaffContext } from "@/lib/queries-crm-core";
 import { markNotificationsRead } from "@/lib/actions/notifications";
 import { panelLink } from "@/lib/crm/notify";
+import { notificationEventLabel } from "@/lib/crm2/notification-labels";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,9 +17,9 @@ import { fmtDayWithWeekday, fmtTime, ubParts } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /**
- * Оффисын мэдэгдлийн хуудас: Staff-ийн гэрээ батлах, хүсэлт, шилжүүлэг,
- * багийн ахлагчийн санал г.м. бүх мэдэгдэл нэг дор — уншаагүй/бүгд шүүлт,
- * хуудаслалттай.
+ * Оффисын мэдэгдлийн хуудас: Staff-ийн бүртгэгдсэн гэрээ, «Гэрээ буруу», хүсэлт, шилжүүлэг,
+ * багийн ахлагчийн санал г.м. бүх мэдэгдэл нэг дор — уншаагүй/бүгд шүүлт, хуудаслалттай.
+ * Төрлийн нэр: lib/crm2/notification-labels.ts.
  */
 
 export const metadata = { title: "Мэдэгдэл — CRM" };
@@ -36,37 +37,6 @@ type NoteRow = {
   read_at: string | null;
   created_at: string;
 };
-
-/** CRM-ийн мэдэгдлийн төрөл → монгол ангилал (хуучин crm_* төрөл бүгд «CRM»). */
-const EVENT_LABEL: Record<string, string> = {
-  crm2_brokerage_pending: "Зуучлалын гэрээ батлах",
-  crm2_brokerage_decided: "Зуучлалын гэрээний шийдвэр",
-  crm2_brokerage_expiring: "Зуучлалын гэрээ дуусах гэж буй",
-  crm2_property_ended: "Хөрөнгийн гэрээ дууссан",
-  crm2_request: "Хүсэлт",
-  crm2_request_decided: "Хүсэлтийн шийдвэр",
-  crm2_request_call: "Дуудлагатай шилжүүлэх хүсэлт",
-  crm2_request_call_unrecorded: "Харилцагч өөр агенттай холбогдсон",
-  crm2_request_call_skipped: "Хадгалсан дуудлага бүртгэгдсэнгүй",
-  crm2_waitlist_match: "Хүлээлгийн жагсаалт: хөрөнгө олдлоо",
-  crm2_activation_blocked: "Хөрөнгө идэвхжсэнгүй — дутуу зүйлтэй",
-  crm2_activation_ready: "Хөрөнгийг идэвхжүүлэхэд бэлэн",
-  crm2_duplicate: "Давхардсан байж болзошгүй хөрөнгө",
-  crm2_duplicate_resolved: "Давхардлын шийдвэр",
-  crm2_incomplete_digest: "Өнөөдрийн дутуу бүртгэл",
-  crm2_contact_transferred: "Харилцагч шилжсэн",
-  crm2_deal_transferred: "Хэлцэл шилжсэн",
-  crm_team_lead: "Багийн ахлагч",
-  crm_team_lead_proposal: "Ахлагчийн санал",
-  crm_team_lead_approved: "Ахлагч батлагдсан",
-  crm_team_lead_rejected: "Ахлагчийн санал татгалзсан",
-  crm_offboarding: "Гарах ажилтан",
-};
-
-function eventLabel(type: string | null): string | null {
-  if (!type || !type.startsWith("crm")) return null;
-  return EVENT_LABEL[type] ?? "CRM";
-}
 
 /** Улаанбаатарын өдрийн түлхүүр (бүлэглэлд). */
 function ubDayKey(iso: string): string {
@@ -181,7 +151,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
             <EmptyState
               icon={Bell}
               title={unreadOnly ? "Уншаагүй мэдэгдэл алга" : "Мэдэгдэл алга"}
-              description="Гэрээ батлах, хүсэлт, шилжүүлэг, багийн ахлагчийн санал зэрэг мэдэгдэл энд ирнэ."
+              description="Гэрээ бүртгэгдсэн, хүсэлт, шилжүүлэг, багийн ахлагчийн санал зэрэг мэдэгдэл энд ирнэ."
               action={unreadOnly ? { label: "Бүх мэдэгдлийг харах", href: href({ filter: undefined }) } : undefined}
             />
           </CardBody>
@@ -194,7 +164,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
               <CardBody className="p-0">
                 <ul>
                   {g.rows.map((n) => {
-                    const ev = eventLabel(n.type);
+                    const ev = notificationEventLabel(n.type);
                     const link = n.link ? panelLink(n.link, "office_admin") : null;
                     const inner = (
                       <div className="flex gap-3 px-4 py-3">

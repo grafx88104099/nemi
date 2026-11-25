@@ -62,12 +62,18 @@ const DB_ERROR_FIELDS: readonly (readonly [RegExp, string, string?])[] = [
   // Харилцагч (эзэн)
   [/эх сурвалж жагсаалтад алга|crm2_contacts_source_chk/i, "owner.source"],
   [/crm2_contacts_source_note_chk/, "owner.source_note"],
-  // Зуучлалын гэрээ
+  // Зуучлалын гэрээ (20261125000100: зөвхөн PDF + дуусах огноо)
+  [/зөвхөн PDF|нэг PDF|PDF-ийг солихгүй/i, "file"],
+  // crm2_brokerage_files_guard: хэмжээ, тоо (дахин оролдоход засрахгүй — upload-queue шууд «failed»).
+  [/файл хэт том|хүртэл файл хадгална/i, "file"],
+  [/crm2_brokerage_files_contract_pdf/, "file", "Гэрээг зөвхөн PDF хэлбэрээр оруулна."],
+  [/crm2_brokerage_files_one_pdf/, "file", "Гэрээнд нэг PDF хавсаргана — хуучнаа устгаад солино уу."],
+  [/5 жилээс хол/i, "end_date"],
   [/дугаартай гэрээ аль хэдийн бүртгэлтэй|гэрээний дугаар хоосон/i, "number"],
   [/crm2_brokerage_dates/, "end_date", "Дуусах огноо эхлэх огнооноос өмнө байж болохгүй."],
+  // Хуучин баганын constraint (агентын урсгалд байхгүй ч хуучин бичлэгт хэвээр).
   [/crm2_brokerage_commission/, "commission_value", "Шимтгэлийн утга буруу байна."],
   [/crm2_brokerage_signer_note_chk|гарын үсэг зурах эрх/i, "signer_note"],
-  [/гэрээний файлыг шалгаснаа/i, "file_checked"],
   // Нийтлэх (утасны дугаар гарчиг/тайлбарт эсвэл нийтлэх бичвэрт)
   [/утасны дугаар байна/i, "description"],
 ];
@@ -75,7 +81,7 @@ const DB_ERROR_FIELDS: readonly (readonly [RegExp, string, string?])[] = [
 /** DB алдааны талбар (мэдэгдэхгүй бол null) ба хэрэглэгчид харуулах текст. */
 export function dbErrorField(error: DbErrorLike): { field: string | null; text: string } {
   const hay = `${error?.message ?? ""} ${error?.details ?? ""}`;
-  // «… дутуу: эхлэх огноо, шимтгэл» — эхний дутуу зүйлийн талбар.
+  // «… дутуу: дуусах огноо, гэрээний PDF (…)» — эхний дутуу зүйлийн талбар.
   const missing = missingListField(error?.message);
   const hit = missing ? null : DB_ERROR_FIELDS.find(([re]) => re.test(hay));
   // «CRM: …» мессеж өөрөө тодорхой; constraint-ийн англи мессежийн оронд талбарын текст.
@@ -94,23 +100,34 @@ const MISSING_ITEM_FIELD: Record<string, string> = {
   images: "images",
   unconfirmed: "unconfirmed",
   brokerage_contract: "contract",
+  // Гэрээ бүртгэх (crm2_brokerage_missing 20261125000100 + RPC-ийн stamp_unconfirmed)
+  end_date: "end_date",
   end_date_past: "end_date",
-  commission: "commission_value",
   file: "file",
-  special_terms: "terms",
-  signer_authority: "signer_note",
-  defaults_unconfirmed: "prefilled",
+  file_not_pdf: "file",
+  stamp_unconfirmed: "stamp_confirmed",
   ownership_doc: "ownership_doc",
   role_unconfirmed: "contract_agent_id",
 };
 
-const LABEL_TO_ITEM = new Map(Object.entries(MISSING_ITEM_LABEL).map(([k, v]) => [v, k] as const));
+/** Нэр → код, урт нэр эхэнд (нэр өөрөө таслал агуулж болно: «гэрээний PDF (PMC-ийн тамга, гарын үсэгтэй)»). */
+const LABELS_LONGEST_FIRST = Object.entries(MISSING_ITEM_LABEL)
+  .map(([k, v]) => [v, k] as const)
+  .sort((a, b) => b[0].length - a[0].length);
+
+/** crm2_missing_text-ийн «, »-ээр нийлүүлсэн жагсаалтын ЭХНИЙ зүйлийн код (нэрэн доторх таслалыг тооцно). */
+export function firstMissingItem(list: string): string | null {
+  const s = list.trim();
+  for (const [label, key] of LABELS_LONGEST_FIRST) {
+    if (s === label || s.startsWith(`${label}, `)) return key;
+  }
+  return null;
+}
 
 function missingListField(message: string | null | undefined): string | null {
   const m = /дутуу:\s*(.+)$/.exec(message ?? "");
   if (!m) return null;
-  const first = m[1].split(", ")[0]?.trim() ?? "";
-  const item = LABEL_TO_ITEM.get(first);
+  const item = firstMissingItem(m[1]);
   return item ? (MISSING_ITEM_FIELD[item] ?? item) : null;
 }
 

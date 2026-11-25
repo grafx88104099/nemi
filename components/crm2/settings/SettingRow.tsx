@@ -24,11 +24,8 @@ import { toast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/crm2/ui";
 
 import { CategoryHintsEditor } from "./CategoryHintsEditor";
-import { CommissionDefaultsEditor } from "./CommissionDefaultsEditor";
 import { StaffPickerEditor } from "./StaffPickerEditor";
 import {
-  commissionRowError,
-  readCommissionRow,
   staffPickerView,
   staffRowText,
   type SettingNote,
@@ -88,12 +85,6 @@ export function SettingRow({
   const dirty = !sameSettingValue(settingKey, normalized, value);
   const error = dirty ? validateSettingValue(settingKey, normalized) : null;
   const isDefault = isDefaultSetting(settingKey, value);
-  // Шимтгэлийн мөр бүр алдаагаа доороо харуулна — давхар (кодтой) текст гаргахгүй.
-  const inlineErrors =
-    ed.kind === "commissionDefaults" &&
-    !!normalized &&
-    typeof normalized === "object" &&
-    Object.values(normalized as Record<string, unknown>).some((v) => !!commissionRowError(readCommissionRow(v)));
 
   function save() {
     if (!dirty || error) return;
@@ -157,7 +148,7 @@ export function SettingRow({
         </ul>
       ) : null}
 
-      {error && !inlineErrors ? (
+      {error ? (
         <p role="alert" className="mt-2 text-sm text-danger">
           {error}
         </p>
@@ -251,15 +242,6 @@ function Editor(props: EditorProps) {
           staff={props.context?.staff ?? []}
           maxItems={props.ed.maxItems}
           label={CRM2_SETTING_LABEL[props.settingKey]}
-          disabled={props.disabled}
-        />
-      );
-    case "commissionDefaults":
-      return (
-        <CommissionDefaultsEditor
-          value={props.value}
-          onChange={props.onChange}
-          categoryLabels={props.context?.categoryLabels}
           disabled={props.disabled}
         />
       );

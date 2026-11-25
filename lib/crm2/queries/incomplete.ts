@@ -104,10 +104,10 @@ const PRIVATE_SELECT =
   "owner:crm2_contacts!crm2_property_private_owner_contact_id_office_id_fkey(id, source, name_unverified)";
 
 const CONTRACT_SELECT =
-  "id, property_id, status, version, created_at, start_date, end_date, approved_at, commission_type, commission_value, " +
-  "owner_contact_id, terms, no_special_terms, signer_differs, signer_note, prefilled, file_at_office, " +
+  "id, property_id, status, version, created_at, start_date, end_date, approved_at, registered_at, stamp_confirmed, " +
+  "owner_contact_id, " +
   "owner:crm2_contacts!crm2_brokerage_contracts_owner_contact_id_office_id_fkey(source, name_unverified), " +
-  "files:crm2_brokerage_files!crm2_brokerage_files_contract_id_office_id_fkey(kind)";
+  "files:crm2_brokerage_files!crm2_brokerage_files_contract_id_office_id_fkey(kind, mime_type)";
 
 function titleOf(p: PropertyRow): string {
   return [p.project?.name, p.district, p.location_text].filter((x) => x && x.trim()).join(" · ") || p.code;
@@ -189,7 +189,7 @@ export async function listMyIncomplete(opts: { scope?: IncompleteScope; limit?: 
       .from("crm2_brokerage_contracts")
       .select(CONTRACT_SELECT)
       .in("property_id", ids)
-      .in("status", ["draft", "pending", "active"])
+      .in("status", ["draft", "active"])
       .order("version", { ascending: false })
       .order("created_at", { ascending: false }),
     agentIds.length
@@ -293,32 +293,21 @@ export function digestPushBody(counts: unknown): string {
     const v = Number(c[k]);
     return Number.isFinite(v) && v > 0 ? Math.floor(v) : 0;
   };
+  // contract — гэрээгүй; contract_file — ноорог гэрээ бүртгэгдээгүй (20261125000100: «approve» байхгүй).
   const parts = [
     n("owner") ? `${n("owner")} эзэн` : null,
     n("contract") ? `${n("contract")} гэрээ` : null,
-    n("contract_file") ? `${n("contract_file")} гэрээний файл` : null,
+    n("contract_file") ? `${n("contract_file")} гэрээ бүртгэгдээгүй` : null,
   ].filter(Boolean);
-  const lines = [
-    n("properties") ? `${n("properties")} хөрөнгө дутуу${parts.length ? `: ${parts.join(", ")}` : ""}` : null,
-    n("approve") ? `${n("approve")} гэрээ батлахыг хүлээж байна` : null,
-  ].filter(Boolean);
-  return lines.length ? lines.join(". ") : "Дутуу бүртгэлээ шалгана уу";
-}
-
-function digestCount(counts: unknown, k: string): number {
-  const c = (counts && typeof counts === "object" ? counts : {}) as Record<string, unknown>;
-  const v = Number(c[k]);
-  return Number.isFinite(v) && v > 0 ? Math.floor(v) : 0;
+  return n("properties") ? `${n("properties")} хөрөнгө дутуу${parts.length ? `: ${parts.join(", ")}` : ""}` : "Дутуу бүртгэлээ шалгана уу";
 }
 
 /**
- * Push-ийн гарчиг ба холбоос — апп доторх мэдэгдэлтэй ижил: дутуу хөрөнгө байвал дутуугийн жагсаалт,
- * зөвхөн батлах гэрээ бол батлах жагсаалт. Цэвэр.
+ * Push-ийн гарчиг ба холбоос — апп доторх мэдэгдэлтэй ижил: үргэлж өнөөдрийн дутуу бүртгэл (гэрээ батлах
+ * алхам байхгүй тул хуучин counts.approve-ийг үл тооно). Цэвэр.
  */
 export function digestPushTarget(counts: unknown): { title: string; url: string } {
-  if (digestCount(counts, "properties") === 0 && digestCount(counts, "approve") > 0) {
-    return { title: "Батлахыг хүлээж буй гэрээ", url: "/agent/crm/approvals" };
-  }
+  void counts;
   return { title: "Өнөөдрийн дутуу бүртгэл", url: "/agent/crm/staff/incomplete" };
 }
 

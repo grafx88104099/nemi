@@ -27,7 +27,7 @@ import { StaffPropertyCard } from "./StaffPropertyCard";
 const EMPTY_TEXT: Record<StaffView, { title: string; description: string }> = {
   active: {
     title: "Одоогийн Staff хөрөнгө алга",
-    description: "Шинэ хөрөнгө бүртгээд зуучлалын гэрээг нь батлуулахад энд харагдана.",
+    description: "Шинэ хөрөнгө бүртгээд PMC тамгатай гэрээг нь PDF-ээр бүртгэмэгц, мэдээлэл нь бүрэн бол энд харагдана.",
   },
   archive: {
     title: "Архивт хөрөнгө алга",
@@ -35,7 +35,7 @@ const EMPTY_TEXT: Record<StaffView, { title: string; description: string }> = {
   },
   draft: {
     title: "Ноорог алга",
-    description: "Зуучлалын гэрээ нь батлагдаагүй, таны харах эрхтэй ноорог энд харагдана.",
+    description: "Гэрээ нь бүртгэгдээгүй эсвэл мэдээлэл дутуу, таны харах эрхтэй ноорог энд харагдана.",
   },
 };
 

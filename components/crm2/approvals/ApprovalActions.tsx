@@ -7,15 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast";
 import { ConfirmDialog, ReasonDialog } from "@/components/crm2/ui";
-import { rejectBrokerage } from "@/lib/crm2/actions/brokerage";
 import { cancelRequest, decideRequest } from "@/lib/crm2/actions/requests";
 import { approvedToast, storedCallsNotice } from "@/lib/crm2/approvals-view";
 
-import { ApproveBrokerageDialog, type ApproveFile } from "./ApproveBrokerageDialog";
-
 /**
- * Батлах дэлгэцийн товчнууд: зуучлалын гэрээ батлах/татгалзах, хүсэлт шийдвэрлэх,
- * өөрийн хүсэлтийг цуцлах. Эрхийг сервер (RPC) эцэслэн шалгана.
+ * Батлах дэлгэцийн товчнууд: агентын хүсэлт шийдвэрлэх, өөрийн хүсэлтийг цуцлах. Эрхийг сервер (RPC)
+ * эцэслэн шалгана. Зуучлалын гэрээг батлахгүй — агент PMC тамгатай PDF-ээр бүртгэнэ.
  */
 
 const TEXTAREA =
@@ -33,67 +30,6 @@ function NoteField({ id, value, onChange }: { id: string; value: string; onChang
         className={TEXTAREA}
       />
     </Field>
-  );
-}
-
-/** Илгээсэн зуучлалын гэрээг батлах / татгалзах. require_file үед файлыг тулгасныг заавал тэмдэглэнэ. */
-export function BrokerageDecision({
-  contractId,
-  number,
-  propertyCode,
-  updatedAt,
-  requireFile = false,
-  files,
-}: {
-  contractId: string;
-  number: string;
-  propertyCode: string | null;
-  updatedAt: string;
-  requireFile?: boolean;
-  /** RLS-ээр харагдсан файлууд (хязгаарлагдсан баримт эрхгүй хүнд ирэхгүй). */
-  files?: readonly ApproveFile[];
-}) {
-  const [approveOpen, setApproveOpen] = React.useState(false);
-  const [rejectOpen, setRejectOpen] = React.useState(false);
-  const what = [number, propertyCode].filter(Boolean).join(" · ");
-
-  return (
-    <>
-      <Button type="button" size="touch" onClick={() => setApproveOpen(true)}>
-        <Check className="size-4" aria-hidden />
-        Батлах
-      </Button>
-      <Button type="button" variant="outline" size="touch" onClick={() => setRejectOpen(true)}>
-        <X className="size-4" aria-hidden />
-        Татгалзах
-      </Button>
-
-      <ApproveBrokerageDialog
-        open={approveOpen}
-        onClose={() => setApproveOpen(false)}
-        contractId={contractId}
-        title={`Гэрээ батлах — ${what}`}
-        updatedAt={updatedAt}
-        requireFile={requireFile}
-        files={files}
-      />
-
-      <ReasonDialog
-        open={rejectOpen}
-        onClose={() => setRejectOpen(false)}
-        title={`Гэрээнээс татгалзах — ${what}`}
-        description="Гэрээ ноорог руу буцаж, агент засаад дахин илгээнэ."
-        label="Татгалзсан шалтгаан"
-        confirmLabel="Татгалзах"
-        tone="danger"
-        onSubmit={async ({ text }) => {
-          const r = await rejectBrokerage(contractId, text);
-          if (!r.ok) return r.error;
-          toast.success("Гэрээнээс татгалзаж, агентад буцаалаа");
-          return null;
-        }}
-      />
-    </>
   );
 }
 

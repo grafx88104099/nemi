@@ -105,22 +105,25 @@ describe("хэлцлийн шат", () => {
 });
 
 describe("зуучлалын гэрээний үйлдэл", () => {
-  const flags = { canEditDraft: true, canAttach: true, canDecide: true, canTerminate: true, canRenew: true };
-  it("ноорог: засах, файл, илгээх, хаях", () => {
+  const flags = { canEditDraft: true, canAttach: true, canInvalidate: true, canTerminate: true, canRenew: true };
+  it("ноорог: бүртгэх, хаях, файл", () => {
     const a = brokerageActions({ status: "draft", ...flags });
-    expect(a).toMatchObject({ edit: true, submit: true, discard: true, upload: true, deleteFile: true });
-    expect(a.approve || a.withdraw || a.terminate || a.renew).toBe(false);
+    expect(a).toEqual({ register: true, discard: true, upload: true, deleteFile: true, invalidate: false, terminate: false, renew: false });
+    const noEdit = brokerageActions({ status: "draft", ...flags, canEditDraft: false });
+    expect(noEdit.register || noEdit.discard || noEdit.deleteFile).toBe(false);
   });
-  it("илгээсэн: буцааж авах, батлах/татгалзах (эрхтэй бол)", () => {
-    const a = brokerageActions({ status: "pending", ...flags });
-    expect(a).toMatchObject({ withdraw: true, approve: true, reject: true, edit: false, deleteFile: false });
-    const noDecide = brokerageActions({ status: "pending", ...flags, canDecide: false });
-    expect(noDecide.approve || noDecide.reject).toBe(false);
+  it("батлах/илгээх/буцааж авах үйлдэл байхгүй (хуучин 'pending' ч)", () => {
+    for (const status of ["draft", "pending", "active", "expired", "terminated"] as const) {
+      const a = brokerageActions({ status, ...flags }) as Record<string, boolean>;
+      for (const gone of ["submit", "withdraw", "approve", "reject", "edit"]) expect(a[gone]).toBeUndefined();
+    }
+    expect(Object.values(brokerageActions({ status: "pending", ...flags })).some(Boolean)).toBe(false);
   });
-  it("батлагдсан: цуцлах, сунгах; дууссан: зөвхөн сунгах", () => {
-    expect(brokerageActions({ status: "active", ...flags })).toMatchObject({ terminate: true, renew: true, edit: false });
-    expect(brokerageActions({ status: "expired", ...flags })).toMatchObject({ terminate: false, renew: true, upload: false });
-    expect(brokerageActions({ status: "terminated", ...flags })).toMatchObject({ renew: false, upload: false });
+  it("бүртгэгдсэн: «Гэрээ буруу» (эрхтэй бол), цуцлах, сунгах; дууссан: зөвхөн сунгах", () => {
+    expect(brokerageActions({ status: "active", ...flags })).toMatchObject({ invalidate: true, terminate: true, renew: true, register: false, upload: false });
+    expect(brokerageActions({ status: "active", ...flags, canInvalidate: false }).invalidate).toBe(false);
+    expect(brokerageActions({ status: "expired", ...flags })).toMatchObject({ invalidate: false, terminate: false, renew: true, upload: false });
+    expect(brokerageActions({ status: "terminated", ...flags })).toMatchObject({ invalidate: false, renew: false, upload: false });
   });
   it("файлын дээд тоонд хүрвэл нэмэхгүй", () => {
     expect(brokerageActions({ status: "draft", ...flags }, { fileCount: 20, maxFiles: 20 }).upload).toBe(false);

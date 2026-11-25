@@ -5,7 +5,7 @@ import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-import { dialogOpener, focusDialogStart, trapTab } from "./dialog-focus";
+import { dialogOpener, focusDialogStart, ownsKeyboard, trapTab } from "./dialog-focus";
 
 /**
  * Баруун талын drawer — Modal-ын хүртээмжийн хэв маягаар (Escape, focus trap,
@@ -41,6 +41,8 @@ export function Drawer({
     focusDialogStart(panelRef.current);
 
     function onKey(e: KeyboardEvent) {
+      // Дээр нь давхарласан диалог (жишээ нь баталгаажуулах цонх) фокустай бол тэр нь шийднэ.
+      if (!ownsKeyboard(panelRef.current)) return;
       if (e.key === "Escape") {
         e.preventDefault();
         onCloseRef.current();

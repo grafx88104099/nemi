@@ -2,18 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { validateSettingValue } from "@/lib/crm2/settings-policies";
 
+import * as editorModel from "../editor-model";
 import {
-  commissionKindsFor,
-  commissionRowError,
-  commissionRowPreview,
-  commissionRowWarning,
-  readCommissionRow,
   settingNotes,
   staffPickerView,
   staffRowText,
   toggleStaffId,
   writeCategoryHint,
-  writeCommissionRow,
 } from "../editor-model";
 
 const A = "11111111-1111-4111-8111-111111111111";
@@ -59,66 +54,11 @@ describe("staff picker", () => {
   });
 });
 
-describe("commission defaults", () => {
-  it("reads stored and in-progress values", () => {
-    expect(readCommissionRow("percent:3")).toEqual({ kind: "percent", text: "3" });
-    expect(readCommissionRow("rent_x:")).toEqual({ kind: "rent_x", text: "" });
-    expect(readCommissionRow("bogus:3")).toEqual({ kind: "", text: "" });
-    expect(readCommissionRow(undefined)).toEqual({ kind: "", text: "" });
-  });
-
-  it("writes rows; empty kind removes the category (no prefill)", () => {
-    const m = writeCommissionRow({ sale: "percent:3" }, "rent", { kind: "rent_x", text: "1" });
-    expect(m).toEqual({ sale: "percent:3", rent: "rent_x:1" });
-    expect(writeCommissionRow(m, "sale", { kind: "", text: "3" })).toEqual({ rent: "rent_x:1" });
-    expect(writeCommissionRow({}, "sale", { kind: "percent", text: "3,2" })).toEqual({ sale: "percent:3.2" });
-    expect(writeCommissionRow({}, "lease", { kind: "fixed", text: "500 000" })).toEqual({ lease: "fixed:500000" });
-  });
-
-  it("row errors mirror the DB rule", () => {
-    expect(commissionRowError({ kind: "", text: "" })).toBeNull();
-    expect(commissionRowError({ kind: "percent", text: "" })).toBe("Утгаа оруулна уу.");
-    expect(commissionRowError({ kind: "percent", text: "abc" })).toBe("Зөвхөн тоо оруулна уу.");
-    expect(commissionRowError({ kind: "percent", text: "3.123" })).not.toBeNull();
-    expect(commissionRowError({ kind: "percent", text: "101" })).not.toBeNull();
-    expect(commissionRowError({ kind: "percent", text: "100" })).toBeNull();
-    expect(commissionRowError({ kind: "rent_x", text: "0.05" })).not.toBeNull();
-    expect(commissionRowError({ kind: "rent_x", text: "13" })).not.toBeNull();
-    expect(commissionRowError({ kind: "rent_x", text: "0,5" })).toBeNull();
-    expect(commissionRowError({ kind: "fixed", text: "500 000" })).toBeNull();
-  });
-
-  it("valid rows always pass validateSettingValue; invalid ones never do", () => {
-    const cases: [string, "percent" | "rent_x" | "fixed", string][] = [
-      ["sale", "percent", "3.2"],
-      ["rent", "rent_x", "1"],
-      ["managed_rent", "percent", "12"],
-      ["lease", "fixed", "250000"],
-      ["sale", "percent", "101"],
-      ["rent", "rent_x", "20"],
-      ["sale", "percent", "1.234"],
-    ];
-    for (const [cat, kind, text] of cases) {
-      const row = { kind, text };
-      const value = writeCommissionRow({}, cat, row);
-      expect(validateSettingValue("brokerage.default_commission", value) === null).toBe(commissionRowError(row) === null);
+describe("commission defaults (retired 20261125000100)", () => {
+  it("the editor helpers are gone — agents no longer fill commission", () => {
+    for (const name of ["readCommissionRow", "writeCommissionRow", "commissionRowError", "commissionRowPreview", "commissionKindsFor"]) {
+      expect(name in editorModel).toBe(false);
     }
-  });
-
-  it("previews and warnings", () => {
-    expect(commissionRowPreview({ kind: "percent", text: "3.2" })).toContain("3.2%");
-    expect(commissionRowPreview({ kind: "fixed", text: "500000" })).toContain("500 000 ₮");
-    expect(commissionRowPreview({ kind: "rent_x", text: "1" })).toContain("сарын нийт түрээс");
-    expect(commissionRowPreview({ kind: "percent", text: "" })).toBeNull();
-    expect(commissionRowWarning({ kind: "percent", text: "100" }, "rent")).not.toBeNull();
-    expect(commissionRowWarning({ kind: "percent", text: "3" }, "sale")).toBeNull();
-    expect(commissionRowWarning({ kind: "fixed", text: "100" }, "rent")).toBeNull();
-  });
-
-  it("does not offer rent_x for sale unless already chosen", () => {
-    expect(commissionKindsFor("sale", "")).toEqual(["percent", "fixed"]);
-    expect(commissionKindsFor("sale", "rent_x")).toContain("rent_x");
-    expect(commissionKindsFor("rent", "")).toEqual(["percent", "rent_x", "fixed"]);
   });
 });
 
@@ -163,8 +103,8 @@ describe("setting notes", () => {
     expect(withKey[1].text).toBe("Сервер дээр AI-ийн түлхүүр тохируулсан.");
   });
 
-  it("commission defaults warn that the agent confirms every prefilled value", () => {
-    expect(settingNotes("brokerage.default_commission", base, { aiKeyConfigured: false })[0].tone).toBe("warn");
+  it("no note for the retired commission key or plain settings", () => {
+    expect(settingNotes("brokerage.default_commission", base, { aiKeyConfigured: false })).toEqual([]);
     expect(settingNotes("property.visibility", base, { aiKeyConfigured: false })).toEqual([]);
   });
 });

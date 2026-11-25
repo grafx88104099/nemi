@@ -1,29 +1,39 @@
 "use server";
 
+import type { z } from "zod";
+
 import { crm2Session, revalidateCrm2 } from "@/lib/crm2/server";
 import { expirePublicListings } from "@/lib/listings-cache";
-import { AUTH_ERROR, NOT_FOUND_ERROR, dbErrorField, definedOnly, fail, ok, zodErrorText } from "@/lib/crm2/result";
+import { brokerageEndDateError } from "@/lib/crm2/checklist";
+import { ubToday } from "@/lib/crm2/datetime";
+import { AUTH_ERROR, dbErrorField, definedOnly, fail, ok, zodErrorText } from "@/lib/crm2/result";
 import {
-  brokerageApproveSchema,
   brokerageCreateSchema,
-  brokerageUpdateSchema,
+  brokerageInvalidateSchema,
+  brokerageRegisterSchema,
   contractOptReasonSchema,
   contractReasonSchema,
   idSchema,
   type BrokerageCreateInput,
-  type BrokerageUpdateInput,
+  type BrokerageRegisterInput,
 } from "@/lib/crm2/schemas";
-import type { Crm2BrokerageApproveResult, Crm2PropertyStatus, Crm2Result } from "@/lib/crm2/types";
-import type { Database } from "@/types/database";
-
-type BrokeragePatch = Database["public"]["Tables"]["crm2_brokerage_contracts"]["Update"];
+import type {
+  Crm2BrokerageInvalidateResult,
+  Crm2BrokerageRegisterResult,
+  Crm2PropertyStatus,
+  Crm2Result,
+} from "@/lib/crm2/types";
 
 /**
- * Зуучлалын гэрээ (T05): ноорог үүсгэх/засах шууд REST (зөвхөн ноорог); урсгал
- * (илгээх → батлах/татгалзах, буцааж авах, цуцлах, хаях, сунгах) зөвхөн RPC.
- * Батлагдахад хөрөнгө ноорог бол DB өөрөө идэвхжүүлнэ (brokerage.activation_mode='manual' бол агент идэвхжүүлнэ).
- * Шинэ талбарууд (no_special_terms, signer_differs, signer_note, file_at_office, prefilled) нь
- * brokerageShape-ээр шууд дамжина; prefilled-ийг засахад DB зөвхөн багасгахыг зөвшөөрнө.
+ * Зуучлалын гэрээ (20261125000100 — батлах алхамгүй):
+ *   1) ноорог (createBrokerageDraft) — зөвхөн хөрөнгө ба дуусах огноо; дугаарыг DB B###-аар олгоно;
+ *   2) PMC-ийн тамга, гарын үсэгтэй НЭГ PDF-ийг ноорогт хавсаргана (lib/crm2/storage.ts);
+ *   3) «Гэрээ бүртгэх» (registerBrokerage → crm2_brokerage_register): ноорог → active, эхлэх = өнөөдөр.
+ *      Хөрөнгийн мэдээлэл бүрэн бол хөрөнгө шууд идэвхжинэ; дутууг нөхмөгц DB өөрөө идэвхжүүлнэ.
+ *      Батлагч ба агентын багийн ахлагчид мэдэгдэл (FYI) очно;
+ *   4) буруу бол батлагч/ахлагч «Гэрээ буруу» (invalidateBrokerage) — гэрээ цуцлагдаж, хүчинтэй гэрээ
+ *      үлдээгүй бол хөрөнгө ноорог руу буцна, агентад мэдэгдэнэ; агент шинэ ноорог үүсгэж дахин бүртгэнэ.
+ * Цуцлах, хаях, сунгах нь өмнөх шигээ RPC. Бүртгэгдсэн гэрээг засахгүй (DB guard).
  * DB-ийн алдааг dbErrorField-ээр маягтын талбартай (field) буцаана.
  */
 
@@ -36,22 +46,23 @@ function dbFieldFail<T = never>(where: string, error: DbErrorLike): Crm2Result<T
   return { ok: false, error: text, field };
 }
 
-/** Шинэ ноорог гэрээ. Дугаар хоосон бол B### олгоно; хариуцагч анхдагч = гэрээ хийсэн агент. */
+/** Zod алдаа → {error, field} (эхний алдааны замын эхний түлхүүр). */
+function zodFieldFail<T = never>(err: z.ZodError): Crm2Result<T> {
+  const key = err.issues[0]?.path[0];
+  return { ok: false, error: zodErrorText(err), field: typeof key === "string" ? key : null };
+}
+
+/** Шинэ ноорог гэрээ (дугаарыг DB B###-аар олгоно; хариуцагч = гэрээ байгуулсан агент → листлэгч → өөрөө). */
 export async function createBrokerageDraft(input: BrokerageCreateInput): Promise<Crm2Result<{ id: string; number: string }>> {
   const parsed = brokerageCreateSchema.safeParse(input);
-  if (!parsed.success) return fail(zodErrorText(parsed.error));
+  if (!parsed.success) return zodFieldFail(parsed.error);
   const session = await crm2Session();
   if (!session) return fail(AUTH_ERROR);
-  const { property_id, responsible_agent_id, ...fields } = parsed.data;
+  const { property_id, end_date } = parsed.data;
   const { data, error } = await session.supabase
     .from("crm2_brokerage_contracts")
-    .insert({
-      ...definedOnly(fields),
-      property_id,
-      number: fields.number ?? "",
-      // Өгөөгүй бол DB (trigger): гэрээ хийсэн агент → листлэгч → өөрөө.
-      ...(responsible_agent_id ? { responsible_agent_id } : {}),
-    })
+    // Дугаар, эхлэх огноо, шимтгэл, нөхцөл, гарын үсэг зурагч илгээхгүй — DB тавина/хуучин багана.
+    .insert({ property_id, ...definedOnly({ end_date: end_date ?? undefined }) })
     .select("id, number")
     .single();
   if (error || !data) return dbFieldFail("createBrokerageDraft", error);
@@ -59,100 +70,57 @@ export async function createBrokerageDraft(input: BrokerageCreateInput): Promise
   return ok({ id: data.id, number: data.number });
 }
 
-/** Ноорог гэрээ засах (илгээсэн/батлагдсаныг DB хориглоно). */
-export async function updateBrokerageDraft(input: BrokerageUpdateInput): Promise<Crm2Result<null>> {
-  const parsed = brokerageUpdateSchema.safeParse(input);
-  if (!parsed.success) return fail(zodErrorText(parsed.error));
-  const { contract_id, number, responsible_agent_id, ...fields } = parsed.data;
-  // Дугаар, хариуцагчийг хоосолж болохгүй (DB not null) — хоосон бол өөрчлөхгүй.
-  const patch: BrokeragePatch = {
-    ...definedOnly(fields),
-    ...(number ? { number } : {}),
-    ...(responsible_agent_id ? { responsible_agent_id } : {}),
-  };
-  if (Object.keys(patch).length === 0) return ok(null);
-  const session = await crm2Session();
-  if (!session) return fail(AUTH_ERROR);
-  const { data, error } = await session.supabase
-    .from("crm2_brokerage_contracts")
-    .update(patch)
-    .eq("id", contract_id)
-    .select("id");
-  if (error) return dbFieldFail("updateBrokerageDraft", error);
-  if (!data?.length) return fail(NOT_FOUND_ERROR);
-  revalidateCrm2();
-  return ok(null);
-}
-
-/** Батлуулахаар илгээх (draft → pending). Дутуу бол DB жагсааж буцаана. */
-export async function submitBrokerage(contractId: string): Promise<Crm2Result<null>> {
-  const id = idSchema.safeParse(contractId);
-  if (!id.success) return fail(zodErrorText(id.error));
-  const session = await crm2Session();
-  if (!session) return fail(AUTH_ERROR);
-  const { error } = await session.supabase.rpc("crm2_brokerage_submit", { p_contract: id.data });
-  if (error) return dbFieldFail("submitBrokerage", error);
-  revalidateCrm2();
-  return ok(null);
-}
-
-/** Илгээснээ буцааж авах (pending → draft). */
-export async function withdrawBrokerage(contractId: string): Promise<Crm2Result<null>> {
-  const id = idSchema.safeParse(contractId);
-  if (!id.success) return fail(zodErrorText(id.error));
-  const session = await crm2Session();
-  if (!session) return fail(AUTH_ERROR);
-  const { error } = await session.supabase.rpc("crm2_brokerage_withdraw", { p_contract: id.data });
-  if (error) return dbFieldFail("withdrawBrokerage", error);
-  revalidateCrm2();
-  return ok(null);
-}
-
 /**
- * Батлах (зөвхөн pending). expected_updated_at — батлагчийн харсан хувилбар
- * (хооронд нь өөрчлөгдсөн бол DB татгалзана). file_checked — «Гэрээний файлтай тулгаж шалгасан»
- * (brokerage.require_file үед UI заавал асууна; асуугаагүй хуучин клиент null илгээнэ).
+ * Гэрээ бүртгэх (зөвхөн ноорог): дуусах огноо (өнөөдрөөс 5 жилийн дотор) ба «PMC-ийн тамга, гарын
+ * үсэгтэй» заавал. DB нэг PDF, эзэн г.м.-ийг шалгаж, дутуу бол «гэрээнд дутуу: …» буцаана (field-тэй).
+ * Давхар дарвал DB already: true буцаана. stamp_confirmed-ийг UI-ийн checkbox-оос шууд (boolean) дамжуулна —
+ * true биш бол field 'stamp_confirmed'-тэй алдаа.
  */
-export async function approveBrokerage(input: {
-  contract_id: string;
-  note?: string | null;
-  expected_updated_at?: string | null;
-  file_checked?: boolean;
-}): Promise<Crm2Result<Crm2BrokerageApproveResult>> {
-  const parsed = brokerageApproveSchema.safeParse(input);
-  if (!parsed.success) return fail(zodErrorText(parsed.error));
+export async function registerBrokerage(
+  input: Omit<BrokerageRegisterInput, "stamp_confirmed"> & { stamp_confirmed: boolean }
+): Promise<Crm2Result<Crm2BrokerageRegisterResult>> {
+  const parsed = brokerageRegisterSchema.safeParse(input);
+  if (!parsed.success) return zodFieldFail(parsed.error);
+  const endError = brokerageEndDateError(parsed.data.end_date, ubToday());
+  if (endError) return { ok: false, error: endError, field: "end_date" };
   const session = await crm2Session();
   if (!session) return fail(AUTH_ERROR);
-  const { data, error } = await session.supabase.rpc("crm2_brokerage_approve", {
+  const { data, error } = await session.supabase.rpc("crm2_brokerage_register", {
     p_contract: parsed.data.contract_id,
-    p_note: parsed.data.note ?? null,
-    p_expected_updated_at: parsed.data.expected_updated_at ?? null,
-    // Зөвхөн асуусан үед (20261124000500-аас өмнөх 3 аргументтай функцтэй ч таарна).
-    ...(parsed.data.file_checked !== undefined ? { p_file_checked: parsed.data.file_checked } : {}),
+    p_end_date: parsed.data.end_date,
+    p_stamp_confirmed: parsed.data.stamp_confirmed,
   });
-  if (error) return dbFieldFail("approveBrokerage", error);
+  if (error || !data) return dbFieldFail("registerBrokerage", error);
   revalidateCrm2();
-  expirePublicListings(); // гэрээний төлөв нийтэлсэн зарыг (DB триггерээр) нээж/буцааж болно
-  return ok(data as unknown as Crm2BrokerageApproveResult);
-}
-
-/** Татгалзах (pending → draft), шалтгаан заавал. */
-export async function rejectBrokerage(contractId: string, reason: string): Promise<Crm2Result<null>> {
-  const parsed = contractReasonSchema.safeParse({ contract_id: contractId, reason });
-  if (!parsed.success) return fail(zodErrorText(parsed.error));
-  const session = await crm2Session();
-  if (!session) return fail(AUTH_ERROR);
-  const { error } = await session.supabase.rpc("crm2_brokerage_reject", {
-    p_contract: parsed.data.contract_id,
-    p_note: parsed.data.reason,
-  });
-  if (error) return dbFieldFail("rejectBrokerage", error);
-  revalidateCrm2();
-  return ok(null);
+  expirePublicListings(); // хөрөнгө идэвхжвэл нийтэлсэн зар (DB триггерээр) дахин нээгдэнэ
+  return ok(data as unknown as Crm2BrokerageRegisterResult);
 }
 
 /**
- * Батлагдсан гэрээг хугацаанаас өмнө цуцлах (батлагч), шалтгаан заавал.
+ * «Гэрээ буруу» (батлагч эсвэл агентын багийн ахлагч; approvals.office_admin үед оффисын админ):
+ * гэрээ цуцлагдаж «буруу» гэж тэмдэглэгдэнэ, хүчинтэй гэрээ үлдээгүй идэвхтэй/түр зогссон/гэрээ дууссан
+ * хөрөнгө ноорог руу буцна (зар нийтлэлээс буцна), агентад мэдэгдэнэ. Шалтгаан заавал.
+ */
+export async function invalidateBrokerage(
+  contractId: string,
+  reason: string
+): Promise<Crm2Result<{ propertyStatus: Crm2PropertyStatus }>> {
+  const parsed = brokerageInvalidateSchema.safeParse({ contract_id: contractId, reason });
+  if (!parsed.success) return zodFieldFail(parsed.error);
+  const session = await crm2Session();
+  if (!session) return fail(AUTH_ERROR);
+  const { data, error } = await session.supabase.rpc("crm2_brokerage_invalidate", {
+    p_contract: parsed.data.contract_id,
+    p_reason: parsed.data.reason,
+  });
+  if (error || !data) return dbFieldFail("invalidateBrokerage", error);
+  revalidateCrm2();
+  expirePublicListings(); // хөрөнгө ноорог болбол нийтэлсэн зар (DB триггерээр) буцна
+  return ok({ propertyStatus: (data as unknown as Crm2BrokerageInvalidateResult).property_status });
+}
+
+/**
+ * Хүчинтэй гэрээг хугацаанаас өмнө цуцлах (батлагч), шалтгаан заавал.
  * Хариу: хөрөнгийн одоогийн төлөв (хүчинтэй гэрээ үлдээгүй бол «Гэрээ дууссан»).
  */
 export async function terminateBrokerage(
@@ -188,7 +156,10 @@ export async function discardBrokerage(contractId: string, reason?: string | nul
   return ok(null);
 }
 
-/** Сунгалт: өмнөх гэрээтэй холбоотой шинэ ноорог хувилбар (файлыг шинээр хавсаргана). */
+/**
+ * Сунгалт: өмнөх гэрээтэй холбоотой шинэ ноорог хувилбар. Дуусах огноо, PMC тамгатай PDF-ээ шинээр
+ * оруулж «Гэрээ бүртгэх»-ээр бүртгэнэ.
+ */
 export async function renewBrokerage(contractId: string): Promise<Crm2Result<{ id: string }>> {
   const id = idSchema.safeParse(contractId);
   if (!id.success) return fail(zodErrorText(id.error));

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { brokerageCreateSchema, propertyCreateSchema, propertyUpdateSchema } from "@/lib/crm2/schemas";
-import type { Crm2BrokerageRow, Crm2PropertyRow } from "@/lib/crm2/types";
+import { propertyCreateSchema, propertyUpdateSchema } from "@/lib/crm2/schemas";
+import type { Crm2PropertyRow } from "@/lib/crm2/types";
 
+import * as formModel from "../form-model";
 import {
-  brokerageHasInput,
   confirmFields,
   DEFAULT_PROPERTY_TYPE,
   fieldsFilled,
@@ -20,14 +20,9 @@ import {
   toCreateDraft,
   unconfirmedKeyOf,
   validationInput,
-  brokeragePayload,
-  brokerageSubmitMissing,
-  brokerageToForm,
   cleanFieldNotes,
   diffPayload,
-  emptyBrokerageForm,
   emptyPropertyForm,
-  fieldErrors,
   missingSentence,
   omitKey,
   ownerPhones,
@@ -286,60 +281,14 @@ describe("хувийн талбар", () => {
   });
 });
 
-describe("зуучлалын гэрээ", () => {
-  it("бөглөсөн эсэх", () => {
-    expect(brokerageHasInput(emptyBrokerageForm())).toBe(false);
-    expect(brokerageHasInput(emptyBrokerageForm(), 1)).toBe(true);
-    expect(brokerageHasInput({ ...emptyBrokerageForm(), end_date: "2027-01-01" })).toBe(true);
-  });
-
-  it("оролт ба схем", () => {
-    const f = { ...emptyBrokerageForm(), start_date: "2026-11-13", end_date: "2027-11-12", commission_type: "percent" as const, commission_value: "3" };
-    const p = brokeragePayload(f, OTHER);
-    expect(p).toMatchObject({ number: null, owner_contact_id: OTHER, commission_type: "percent", commission_value: 3, responsible_agent_id: null });
-    expect(brokerageCreateSchema.safeParse({ property_id: OTHER, ...p }).success).toBe(true);
-    const bad = brokerageCreateSchema.safeParse({ property_id: OTHER, ...p, end_date: "2026-01-01", commission_value: 150 });
-    expect(bad.success).toBe(false);
-    if (!bad.success) {
-      const errs = fieldErrors(bad.error);
-      expect(errs.end_date).toMatch(/Дуусах огноо/);
-      expect(errs.commission_value).toMatch(/100/);
+describe("зуучлалын гэрээ (20261125000100: картаас PDF-ээр бүртгэнэ)", () => {
+  it("бүрэн формд гэрээний туслах үлдээгүй", () => {
+    for (const name of ["emptyBrokerageForm", "brokerageToForm", "brokerageHasInput", "brokeragePayload", "brokerageSubmitMissing"]) {
+      expect(name in formModel).toBe(false);
     }
   });
-
-  it("илгээхэд дутуу зүйлс (DB-ийн түлхүүртэй ижил)", () => {
-    const opts = { ownerId: null, fileCount: 0, requireOwner: true, requireFile: true, today: "2026-11-13" };
-    expect(brokerageSubmitMissing(emptyBrokerageForm(), opts)).toEqual(["start_date", "end_date", "commission", "owner", "file"]);
-    const f = { ...emptyBrokerageForm(), start_date: "2026-01-01", end_date: "2026-11-12", commission_type: "fixed" as const, commission_value: "2000000" };
-    expect(brokerageSubmitMissing(f, { ...opts, ownerId: OTHER, fileCount: 1 })).toEqual(["end_date_past"]);
-    expect(brokerageSubmitMissing({ ...f, end_date: "2026-11-13" }, { ...opts, ownerId: OTHER, fileCount: 1 })).toEqual([]);
-    expect(brokerageSubmitMissing({ ...f, end_date: "2026-12-01" }, { ...opts, requireOwner: false, requireFile: false })).toEqual([]);
-    expect(missingSentence(["owner", "file"])).toBe("эзэн, гэрээний файл");
-  });
-
-  it("DB мөрийг маягт болгоно", () => {
-    const c = {
-      number: "B007",
-      start_date: "2026-11-01",
-      end_date: null,
-      terms: null,
-      commission_type: "percent",
-      commission_value: 2.5,
-      commission_currency: "USD",
-      commission_note: null,
-      responsible_agent_id: ME,
-    } as unknown as Crm2BrokerageRow;
-    expect(brokerageToForm(c)).toEqual({
-      number: "B007",
-      start_date: "2026-11-01",
-      end_date: "",
-      terms: "",
-      commission_type: "percent",
-      commission_value: "2.5",
-      commission_currency: "USD",
-      commission_note: "",
-      responsible_agent_id: ME,
-    });
+  it("дутуу зүйлсийн өгүүлбэр", () => {
+    expect(missingSentence(["owner", "end_date"])).toBe("эзэн, дуусах огноо");
   });
 });
 
@@ -498,9 +447,6 @@ describe("утсан дээрх ноорог (P5)", () => {
   const parts = () => ({
     form: { ...withCategory(emptyPropertyForm(ME), "sale"), price: "350000000", address_detail: "3-р байр, 45 тоот", district: "Хан-Уул" },
     priv: { owner, owner_note: "Оройн 6-аас хойш", showing_instructions: "Түлхүүр жижүүрт" },
-    brokerage: { ...emptyBrokerageForm(), number: "B010", commission_type: "percent" as const, commission_value: "3" },
-    brokerageOwner: null,
-    brokerageOwnerTouched: false,
     links: [{ id: "l1", url: "https://youtu.be/x" }],
   });
 
@@ -511,7 +457,7 @@ describe("утсан дээрх ноорог (P5)", () => {
     expect(JSON.stringify(d.form)).not.toContain("99112233");
     expect(d.private.address_detail).toBe("3-р байр, 45 тоот");
     expect(d.private.owner).toEqual(owner);
-    expect(d.form.brokerage.number).toBe("B010");
+    expect("brokerage" in d.form).toBe(false);
   });
 
   it("ноорог ↔ маягт буцаж ижил (бүрэн ↔ шуурхай нэг бичлэг)", () => {
@@ -520,7 +466,6 @@ describe("утсан дээрх ноорог (P5)", () => {
     const back = fromCreateDraft(JSON.parse(JSON.stringify(d.form)), JSON.parse(JSON.stringify(d.private)), ME);
     expect(back.form).toEqual(p.form);
     expect(back.priv).toEqual(p.priv);
-    expect(back.brokerage).toEqual(p.brokerage);
     expect(back.links).toEqual(p.links);
     expect(back.quickPhone).toBeNull();
   });
@@ -553,11 +498,22 @@ describe("утсан дээрх ноорог (P5)", () => {
     expect(toCreateDraft(p, back.quickPhone).private.owner_phone).toBeUndefined();
   });
 
-  it("гэрээний эзнийг гараар сольсон эсэх", () => {
+  it("утсан дээрх хуучин ноорогт үлдсэн гэрээний хэсгийг гэмтэлгүй хаяна", () => {
     const p = parts();
-    const d = toCreateDraft({ ...p, brokerageOwner: owner, brokerageOwnerTouched: true });
-    const back = fromCreateDraft(d.form, d.private, ME);
-    expect(back.brokerageOwnerTouched).toBe(true);
-    expect(back.brokerageOwner).toEqual(owner);
+    const d = toCreateDraft(p);
+    const oldForm = {
+      ...JSON.parse(JSON.stringify(d.form)),
+      brokerage: { number: "B010", commission_type: "percent", commission_value: "3", start_date: "2026-11-01" },
+    };
+    const oldPrivate = { ...JSON.parse(JSON.stringify(d.private)), brokerage_owner: owner, brokerage_owner_touched: true };
+    const back = fromCreateDraft(oldForm, oldPrivate, ME);
+    expect(back.form).toEqual(p.form);
+    expect(back.priv).toEqual(p.priv);
+    expect("brokerage" in back.form).toBe(false);
+    expect(Object.keys(back).sort()).toEqual(["form", "links", "priv", "quickPhone"]);
+    // Дахин хадгалахад хуучин түлхүүр үлдэхгүй.
+    const again = toCreateDraft(back);
+    expect(JSON.stringify(again)).not.toContain("brokerage");
+    expect(JSON.stringify(again)).not.toContain("commission");
   });
 });

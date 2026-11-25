@@ -14,7 +14,7 @@ import { Modal } from "@/components/ui/modal";
  *     open={open} onClose={() => setOpen(false)}
  *     title="Илгээх үү?" description="Илгээсний дараа агуулгыг засахгүй."
  *     confirmLabel="Илгээх"
- *     onConfirm={async () => { const r = await submitBrokerage(id); return r.ok ? null : r.error; }}
+ *     onConfirm={async () => { const r = await discardBrokerage(id); return r.ok ? null : r.error; }}
  *   />
  */
 export type ConfirmResult = void | null | undefined | string;

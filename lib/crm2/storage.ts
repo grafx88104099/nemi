@@ -5,11 +5,14 @@ import { addBrokerageFileRow, addPropertyMediaRow } from "@/lib/crm2/actions/med
 import {
   CRM2_DOCS_BUCKET,
   CRM2_MEDIA_BUCKET,
+  contractPdfOnlyText,
   docPath,
   fileExt,
   fileMime,
+  isPdfHeader,
   isRestrictedDocKind,
   mediaPath,
+  validateContractPdf,
   validateDocFile,
   validateMediaFile,
 } from "@/lib/crm2/files";
@@ -18,7 +21,7 @@ import type { Crm2BrokerageFileKind, Crm2Result } from "@/lib/crm2/types";
 
 /**
  * Клиент талын хуулалт (хөтчийн client — storage policy, RLS хэрэгжинэ):
- * 1) төрөл/хэмжээг тохиргооны хязгаараар шалгана (HEIC татгалзана);
+ * 1) төрөл/хэмжээг тохиргооны хязгаараар шалгана (HEIC татгалзана; гэрээ зөвхөн PDF — «%PDF-» толгойгоор ч);
  * 2) Storage руу ЭХЛЭЭД хуулна (зам: office/property/uuid.ext эсвэл
  *    office/brokerage/contract/uuid.ext);
  * 3) server action-оор мөрөө оруулна (trigger storage.objects-оос хэмжээ/төрлийг шалгана);
@@ -37,6 +40,16 @@ function uploadErrorText(message: string | undefined): string {
   if (m.includes("exceeded") || m.includes("too large") || m.includes("413")) return "Файл хэт том байна.";
   if (m.includes("already exists") || m.includes("duplicate")) return "Ийм нэртэй файл аль хэдийн байна. Дахин оролдоно уу.";
   return UPLOAD_ERROR;
+}
+
+/**
+ * Storage-ийн алдаа → хариу. Төрөл, хэмжээний алдаа дахин оролдоход засрахгүй тул field 'file'
+ * (upload-queue үүнийг шууд «failed» болгоно); эрх, сүлжээ г.м. нь дахин оролдох боломжтой.
+ */
+function uploadFailure<T>(message: string | undefined): Crm2Result<T> {
+  const m = (message ?? "").toLowerCase();
+  const permanent = m.includes("mime") || m.includes("exceeded") || m.includes("too large") || m.includes("413");
+  return { ok: false, error: uploadErrorText(message), ...(permanent ? { field: "file" } : {}) };
 }
 
 function newId(): string {
@@ -70,7 +83,7 @@ export async function uploadPropertyMedia(opts: MediaUploadOptions): Promise<Crm
   });
   if (up.error) {
     console.error("crm2 uploadPropertyMedia:", up.error.message);
-    return { ok: false, error: uploadErrorText(up.error.message) };
+    return uploadFailure(up.error.message);
   }
   const res = await addPropertyMediaRow({
     property_id: opts.propertyId,
@@ -96,24 +109,39 @@ export type DocUploadOptions = {
   kind?: Crm2BrokerageFileKind;
 };
 
+/** Файлын эхний 5 байт «%PDF-» эсэх (уншиж чадаагүй бол false). */
+async function hasPdfHeader(file: Blob): Promise<boolean> {
+  try {
+    return isPdfHeader(new Uint8Array(await file.slice(0, 5).arrayBuffer()));
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Зуучлалын гэрээний скан/PDF хуулах → { id, storagePath }. Ноорогт засварлагч,
- * илгээсэн/батлагдсанд зөвхөн батлагч (storage policy).
+ * Зуучлалын гэрээний баримт хуулах → { id, storagePath }.
+ * kind='contract' (анхдагч): зөвхөн НЭГ PDF (PMC-ийн тамга, гарын үсэгтэй), зөвхөн НООРОГ гэрээнд —
+ * бүртгэгдсэн гэрээний PDF-ийг солихгүй (crm2_brokerage_files_guard). Зам үргэлж .pdf, contentType application/pdf.
+ * Өмчлөлийн баримт / иргэний үнэмлэх / бусад нь PDF эсвэл зураг (validateDocFile).
  */
 export async function uploadBrokerageFile(opts: DocUploadOptions): Promise<Crm2Result<{ id: string; storagePath: string }>> {
-  const invalid = validateDocFile(opts.file, opts.limits, opts.existing);
-  if (invalid) return { ok: false, error: invalid };
-  const supabase = createClient();
   const kind = opts.kind ?? "contract";
-  const path = docPath(opts.officeId, opts.contractId, newId(), fileExt(opts.file), isRestrictedDocKind(kind));
+  const isContract = kind === "contract";
+  const invalid = isContract ? validateContractPdf(opts.file, opts.limits) : validateDocFile(opts.file, opts.limits, opts.existing);
+  if (invalid) return { ok: false, error: invalid, field: "file" };
+  if (isContract && !(await hasPdfHeader(opts.file))) return { ok: false, error: contractPdfOnlyText(opts.file.name), field: "file" };
+  const supabase = createClient();
+  const contentType = isContract ? "application/pdf" : fileMime(opts.file);
+  const ext = isContract ? "pdf" : fileExt(opts.file);
+  const path = docPath(opts.officeId, opts.contractId, newId(), ext, isRestrictedDocKind(kind));
   const up = await supabase.storage.from(CRM2_DOCS_BUCKET).upload(path, opts.file, {
-    contentType: fileMime(opts.file),
+    contentType,
     cacheControl: "3600",
     upsert: false,
   });
   if (up.error) {
     console.error("crm2 uploadBrokerageFile:", up.error.message);
-    return { ok: false, error: uploadErrorText(up.error.message) };
+    return uploadFailure(up.error.message);
   }
   const res = await addBrokerageFileRow({
     contract_id: opts.contractId,
@@ -123,7 +151,7 @@ export async function uploadBrokerageFile(opts: DocUploadOptions): Promise<Crm2R
     kind,
   });
   if (!res.ok) {
-    // Илгээсэн гэрээнд батлагч устгах эрхгүй тул файл үлдэж болно (мөргүй файл харагдахгүй).
+    // Мөр орсонгүй — хуулсан файлыг устгана (устгах эрхгүй бол үлдэж болно; мөргүй файл харагдахгүй).
     await supabase.storage.from(CRM2_DOCS_BUCKET).remove([path]);
     return res;
   }

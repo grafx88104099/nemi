@@ -12,27 +12,20 @@ import type { ActivationPanelState } from "./contract-model";
 import { MissingList } from "./parts";
 
 /**
- * Гэрээ батлагдсаны дараах хөрөнгийн идэвхжүүлэлт: manual горимд «Идэвхжүүлэх» (setPropertyStatus active),
- * дутуу бол жагсаалт (чимээгүй бүтэлгүйтэхгүй), эхлэх өдөр нь автоматаар бол мэдэгдэл.
+ * Гэрээ бүртгэгдсэний дараах хөрөнгийн төлөв: дутуу бол жагсаалт (нөхмөгц DB автоматаар идэвхжүүлнэ).
+ * Мэдээлэл бүрэн боловч идэвхжээгүй (ховор — автомат идэвхжүүлэлт гацсан) бол «Идэвхжүүлэх» товч.
  */
 export function ActivationReadiness({ propertyId, state }: { propertyId: string; state: ActivationPanelState }) {
   const router = useRouter();
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  if (state.kind === "hidden" || state.kind === "auto") return null;
-  if (state.kind === "scheduled") {
-    return (
-      <p role="status" className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
-        Гэрээ батлагдсан. Эхлэх өдөр нь хөрөнгө автоматаар идэвхжинэ.
-      </p>
-    );
-  }
+  if (state.kind === "hidden") return null;
   if (state.kind === "blocked") {
     return (
       <MissingList
         items={state.missing}
-        title="Гэрээ батлагдсан ч хөрөнгийг идэвхжүүлэхэд дутуу:"
+        title="Гэрээ бүртгэгдсэн ч хөрөнгө идэвхжихэд дутуу (нөхмөгц автоматаар идэвхжинэ):"
         className="border-amber-300"
       />
     );
@@ -53,7 +46,9 @@ export function ActivationReadiness({ propertyId, state }: { propertyId: string;
 
   return (
     <div className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3">
-      <p className="text-sm text-emerald-900">Гэрээ батлагдсан, нөхцөл бүрэн. Хөрөнгийг идэвхжүүлж Staff санд оруулна уу.</p>
+      <p className="text-sm text-emerald-900">
+        Гэрээ бүртгэгдсэн, мэдээлэл бүрэн боловч хөрөнгө автоматаар идэвхжсэнгүй. Идэвхжүүлж Staff санд оруулна уу.
+      </p>
       {error ? (
         <p role="alert" className="text-sm text-rose-700">
           {error}

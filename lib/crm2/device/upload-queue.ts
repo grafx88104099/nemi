@@ -20,6 +20,7 @@ import {
   putSealedBlob,
   type BlobRecord,
 } from "@/lib/crm2/device/draft-store";
+import { fileMime } from "@/lib/crm2/files";
 import type { Crm2FileLimits } from "@/lib/crm2/settings";
 import type { Crm2Result } from "@/lib/crm2/types";
 
@@ -65,6 +66,11 @@ export type QueueItem = {
   nextAt: number;
   /** Хэрэглэгч мобайл дата дээр ч бичлэг илгээхийг зөвшөөрсөн. */
   allowCellular?: boolean;
+  /**
+   * «failed» нь дахин оролдоход засрахгүй (PDF биш, хэт том, нэг PDF, файл утсан дээр алга) — UI «Дахин
+   * оролдох»-ыг нуугаад зөвхөн «хасах»-ыг үлдээнэ.
+   */
+  permanent?: boolean;
 };
 
 export const BACKOFF_MS = [2000, 5000, 15000, 60000] as const;
@@ -106,14 +112,32 @@ export function pickNext(
   return ready[0] ?? null;
 }
 
-/** Хуулах оролдлого бүтэлгүйтсэний дараах төлөв. */
-export function afterFailure(item: QueueItem, error: string, now: number): QueueItem {
+/**
+ * Хуулах оролдлого бүтэлгүйтсэний дараах төлөв. permanent — дахин оролдоход засрахгүй (PDF биш, хэт том,
+ * гэрээнд PDF аль хэдийн байна, бүртгэгдсэн гэрээ) тул шууд «failed» + permanent (хаяхгүй; хэрэглэгч хасна).
+ * Автомат оролдлого дууссан (permanent биш) «failed»-ийг хэрэглэгч дахин оролдож болно.
+ */
+export function afterFailure(item: QueueItem, error: string, now: number, permanent = false): QueueItem {
   const attempts = item.attempts + 1;
+  if (permanent) {
+    return { ...item, attempts, status: "failed", error, permanent: true, updatedAt: now };
+  }
   if (attempts >= MAX_AUTO_ATTEMPTS) {
-    return { ...item, attempts, status: "failed", error, updatedAt: now };
+    return { ...item, attempts, status: "failed", error, permanent: false, updatedAt: now };
   }
   return { ...item, attempts, status: "queued", error, nextAt: now + backoffDelay(attempts), updatedAt: now };
 }
+
+/**
+ * Uploader-ийн хариу дахин оролдоход засрахгүй эсэх: storage.ts / addBrokerageFileRow файлын шалгалтын
+ * алдааг field 'file'-тэй буцаана (төрөл, хэмжээ, «зөвхөн PDF», «нэг PDF», «PDF-ийг солихгүй»).
+ */
+export function isPermanentUploadFailure(res: Crm2Result<unknown>): boolean {
+  return !res.ok && res.field === "file";
+}
+
+/** Дараалалд нэмэхэд гэрээ PDF биш (enqueue → Error('not_pdf')). */
+export const NOT_PDF_ERROR = "not_pdf";
 
 export function bindItems(items: QueueItem[], clientKey: string, propertyId: string, wifi: boolean, now: number): QueueItem[] {
   return items.map((i) => {
@@ -312,6 +336,13 @@ export async function enqueue(input: EnqueueInput): Promise<QueueItem> {
         type = rec.type;
       }
     }
+    // Гэрээ (kind='contract') зөвхөн PDF — зураг дараалалд орохгүй (битүүмжлэх, хадгалахаас өмнө).
+    // Хөтөч төрлийг хоосон өгсөн .pdf файлыг application/pdf болгоно.
+    if (input.target.fileKind === "contract") {
+      const mime = fileMime({ name, type: source ? source.type : type, size: source?.size ?? 0 });
+      if (mime !== "application/pdf") throw new Error(NOT_PDF_ERROR);
+      if (source && source.type !== "application/pdf") source = new Blob([source], { type: "application/pdf" });
+    }
     if (source) {
       const sb = await sealBytes(new Uint8Array(await source.arrayBuffer()), {
         profileId: input.profileId,
@@ -389,7 +420,7 @@ export async function retry(id: string): Promise<void> {
   await ensureLoaded();
   const it = items.find((i) => i.id === id);
   if (!it || it.status === "done" || it.status === "uploading" || it.status === "waiting_property") return;
-  await replace({ ...it, status: "queued", attempts: 0, error: null, nextAt: env.now(), allowCellular: true, updatedAt: env.now() });
+  await replace({ ...it, status: "queued", attempts: 0, error: null, permanent: false, nextAt: env.now(), allowCellular: true, updatedAt: env.now() });
   kick();
 }
 
@@ -423,7 +454,14 @@ async function uploadOne(item: QueueItem): Promise<void> {
     const file = await fileOf(item);
     if (!file) {
       // Файл төхөөрөмжөөс алга (цэвэрлэгдсэн/түлхүүр солигдсон) — дахин оролдох утгагүй.
-      await replace({ ...start, status: "failed", attempts: item.attempts + 1, error: "Файл утсан дээрээс олдсонгүй.", updatedAt: env.now() });
+      await replace({
+        ...start,
+        status: "failed",
+        attempts: item.attempts + 1,
+        error: "Файл утсан дээрээс олдсонгүй.",
+        permanent: true,
+        updatedAt: env.now(),
+      });
       return;
     }
     const t = item.target;
@@ -450,7 +488,7 @@ async function uploadOne(item: QueueItem): Promise<void> {
     await replace({ ...start, status: "queued", nextAt: env.now(), updatedAt: env.now() });
     return;
   }
-  await replace(afterFailure(start, res.error || UPLOAD_FAILED_TEXT, env.now()));
+  await replace(afterFailure(start, res.error || UPLOAD_FAILED_TEXT, env.now(), isPermanentUploadFailure(res)));
 }
 
 function schedule() {

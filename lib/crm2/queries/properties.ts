@@ -263,16 +263,21 @@ export type BrokerageItem = Crm2BrokerageRow & {
   owner: { id: string; code: string; full_name: string; source: string | null; name_unverified: boolean } | null;
   responsible: { id: string; full_name: string | null } | null;
   files: BrokerageFileItem[];
-  /** Ноорог засах/илгээх/хаях (ба буцааж авах). */
+  /** Ноорог: PDF хавсаргах, бүртгэх, хаях (crm2_can_edit_brokerage_draft). */
   canEditDraft: boolean;
-  /** Файл нэмэх (ноорогт засварлагч, илгээсэн/батлагдсанд батлагч). */
+  /** Файл нэмэх (crm2_can_attach_brokerage). Гэрээний PDF-ийг DB зөвхөн ноорогт зөвшөөрнө. */
   canAttach: boolean;
-  /** Батлах/татгалзах (pending) — батлагч ба өөрийгөө батлах дүрэм. */
-  canDecide: boolean;
-  /** Цуцлах (active). */
+  /** «Гэрээ буруу» (active) — батлагч эсвэл агентын багийн ахлагч (crm2_can_invalidate_brokerage). */
+  canInvalidate: boolean;
+  /** Цуцлах (active) — батлагч ба өөрийгөө батлах дүрэм. */
   canTerminate: boolean;
   /** Сунгах (active/expired, сунгалтын хувилбаргүй). */
   canRenew: boolean;
+  /**
+   * Өмчлөлийн баримт / иргэний үнэмлэх (restricted) харах эрх (crm2_can_view_restricted_brokerage; зөвхөн
+   * ноорогт уншина, бусадт true). false бол RLS тэдгээр файлыг нуудаг — тоо нь мэдэгдэхгүй.
+   */
+  canViewRestricted: boolean;
 };
 
 export type PropertyRequestItem = Crm2RequestRow & {
@@ -354,7 +359,6 @@ export const getProperty = cache(async (id: string): Promise<PropertyDetail | nu
       canEditProperty: canEdit,
       me: ctx?.profileId ?? null,
       canWork: !!ctx?.canWork,
-      propAgents: [property.listing_agent_id, property.contract_agent_id, property.photo_agent_id],
     }),
     loadActivation(supabase, id),
     loadPropertyRequests(supabase, id, names),
@@ -432,14 +436,17 @@ export async function loadMedia(supabase: Crm2Supabase, propertyId: string): Pro
   return rows.map((m) => ({ ...m, url: m.storage_path ? (urls[m.storage_path] ?? null) : m.external_url }));
 }
 
-type BrokerageRaw = Omit<BrokerageItem, "files" | "canEditDraft" | "canAttach" | "canDecide" | "canTerminate" | "canRenew"> & {
+type BrokerageRaw = Omit<
+  BrokerageItem,
+  "files" | "canEditDraft" | "canAttach" | "canInvalidate" | "canTerminate" | "canRenew" | "canViewRestricted"
+> & {
   files: Crm2BrokerageFileRow[] | null;
 };
 
 async function loadBrokerage(
   supabase: Crm2Supabase,
   propertyId: string,
-  opts: { canEditProperty: boolean; me: string | null; canWork: boolean; propAgents: (string | null)[] }
+  opts: { canEditProperty: boolean; me: string | null; canWork: boolean }
 ): Promise<BrokerageItem[]> {
   const { data, error } = await supabase
     .from("crm2_brokerage_contracts")
@@ -451,7 +458,7 @@ async function loadBrokerage(
   const rows = (data ?? []) as unknown as BrokerageRaw[];
   if (rows.length === 0) return [];
 
-  const { canEditProperty, me, canWork, propAgents } = opts;
+  const { canEditProperty, me, canWork } = opts;
   const successors = new Set(rows.filter((r) => r.previous_id && r.status !== "terminated").map((r) => r.previous_id));
 
   const urls = await signedUrlMap(
@@ -462,29 +469,29 @@ async function loadBrokerage(
 
   return Promise.all(
     rows.map(async (r) => {
-      const live = r.status === "draft" || r.status === "pending" || r.status === "active";
-      const [canEditDraft, canAttach, approver] = await Promise.all([
-        r.status === "draft" || r.status === "pending"
+      const draft = r.status === "draft";
+      const active = r.status === "active";
+      const [canEditDraft, canAttach, canInvalidate, approver, canViewRestricted] = await Promise.all([
+        draft
           ? rpcBool(supabase.rpc("crm2_can_edit_brokerage_draft", { p_contract: r.id }), "can_edit_brokerage_draft")
           : Promise.resolve(false),
-        live ? rpcBool(supabase.rpc("crm2_can_attach_brokerage", { p_contract: r.id }), "can_attach_brokerage") : Promise.resolve(false),
-        r.status === "pending" || r.status === "active"
+        draft || active
+          ? rpcBool(supabase.rpc("crm2_can_attach_brokerage", { p_contract: r.id }), "can_attach_brokerage")
+          : Promise.resolve(false),
+        active
+          ? rpcBool(supabase.rpc("crm2_can_invalidate_brokerage", { p_contract: r.id }), "can_invalidate_brokerage")
+          : Promise.resolve(false),
+        active
           ? rpcBool(supabase.rpc("crm2_brokerage_approver", { p_responsible: r.responsible_agent_id }), "brokerage_approver")
           : Promise.resolve(false),
+        // Бүртгэхэд өмчлөлийн баримтыг тоолоход (RLS нуудаг) — зөвхөн ноорогт.
+        draft
+          ? rpcBool(supabase.rpc("crm2_can_view_restricted_brokerage", { p_contract: r.id }), "can_view_restricted_brokerage")
+          : Promise.resolve(true),
       ]);
-      let canDecide = false;
-      let canTerminate = false;
-      if (approver && r.status === "pending") {
-        canDecide = await rpcBool(
-          supabase.rpc("crm2_self_ok", {
-            p_involved: [r.responsible_agent_id, r.submitted_by, r.created_by, ...propAgents].filter((x): x is string => !!x),
-          }),
-          "self_ok"
-        );
-      }
-      if (approver && r.status === "active") {
-        canTerminate = await rpcBool(supabase.rpc("crm2_self_ok", { p_involved: [r.responsible_agent_id] }), "self_ok");
-      }
+      const canTerminate = approver
+        ? await rpcBool(supabase.rpc("crm2_self_ok", { p_involved: [r.responsible_agent_id] }), "self_ok")
+        : false;
       const canRenew =
         (r.status === "active" || r.status === "expired") &&
         !successors.has(r.id) &&
@@ -495,11 +502,12 @@ async function loadBrokerage(
       return {
         ...r,
         files,
-        canEditDraft: canEditDraft || (r.status === "pending" && r.submitted_by === me),
+        canEditDraft,
         canAttach,
-        canDecide,
+        canInvalidate,
         canTerminate,
         canRenew,
+        canViewRestricted,
       };
     })
   );

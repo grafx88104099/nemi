@@ -59,7 +59,7 @@ export async function PoliciesView() {
   const contextFor = (k: string): SettingRowContext | undefined =>
     k === "staff.quick_add_pilot"
       ? { staff }
-      : k === "brokerage.default_commission" || k === "property.category_hints"
+      : k === "property.category_hints"
         ? { categoryLabels: settings["property.category_labels"] }
         : undefined;
 

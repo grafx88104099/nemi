@@ -2,73 +2,57 @@
 
 import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Loader2, Send } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileText, Loader2, WifiOff } from "lucide-react";
 
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { BottomSheet } from "@/components/crm2/ui/bottom-sheet";
-import type { OwnerDraft } from "@/components/crm2/staff/owner/owner-model";
+import { ConfirmDialog } from "@/components/crm2/ui/confirm-dialog";
 import { logUiEvent } from "@/lib/crm2/actions/events";
-import {
-  canViewRestrictedBrokerage,
-  createBrokerageDraft,
-  submitBrokerage,
-  updateBrokerageDraft,
-} from "@/lib/crm2/actions/brokerage";
+import { canViewRestrictedBrokerage, createBrokerageDraft, registerBrokerage } from "@/lib/crm2/actions/brokerage";
+import { deleteBrokerageFile } from "@/lib/crm2/actions/media";
 import { updateProperty } from "@/lib/crm2/actions/properties";
-import {
-  draftKey,
-  hardDeleteDraft,
-  loadDraft,
-  sheetScope,
-  shouldAutoRestore,
-  useDraftAutosave,
-  type LoadedDraft,
-} from "@/lib/crm2/device/draft-store";
-import { enqueue, startQueue } from "@/lib/crm2/device/upload-queue";
-import { validateDocFile } from "@/lib/crm2/files";
-import type { Crm2BrokerageFileKindKey } from "@/lib/crm2/labels";
-import { panelFromPathname, type Crm2Panel } from "@/lib/crm2/paths";
+import { autoActivates, brokerageEndDateError, brokerageMaxEndDate, type ChecklistSheet } from "@/lib/crm2/checklist";
+import { fmtIsoDate } from "@/lib/crm2/datetime";
+import { useOnline } from "@/lib/crm2/device/network";
+import { NOT_PDF_ERROR, enqueue, startQueue } from "@/lib/crm2/device/upload-queue";
+import { contractPdfOnlyText, fmtFileSize, isPdfHeader, validateContractPdf, validateDocFile } from "@/lib/crm2/files";
+import { BROKERAGE_STATUS_LABEL, PROPERTY_STATUS_LABEL, missingItemLabel } from "@/lib/crm2/labels";
+import { crm2Paths, panelFromPathname, type Crm2Panel } from "@/lib/crm2/paths";
+import type { BrokerageFileItem } from "@/lib/crm2/queries/properties";
 import { fileLimits, type Crm2Settings } from "@/lib/crm2/settings";
 import { uploadBrokerageFile } from "@/lib/crm2/storage";
 import type { Crm2BrokerageRow, Crm2StaffMember } from "@/lib/crm2/types";
-import { fmtTime } from "@/lib/format";
 
 import { loadContractContext } from "./actions";
+import { ActivationReadiness } from "./ActivationReadiness";
+import { ContractAgentRow } from "./ContractAgentRow";
 import {
-  STEP1_MISSING,
-  applyCommission,
-  commissionRecalc,
-  commissionWarning,
-  composeSignerNote,
-  confirmPrefilled,
   contractAgentPatch,
-  contractDirty,
-  contractDraftFields,
-  contractFormErrors,
   contractMissing,
-  editContractField,
+  contractPdf,
+  effectiveContractOwner,
+  endDateChips,
+  extraDocs,
   fileCounts,
   initialContractForm,
-  initialStep,
-  parseSignerNote,
-  setAutoNumber,
+  legacyContractImages,
+  propertyGaps,
+  registrantFillsContractAgent,
   termEndDate,
-  type ContractFieldErrors,
   type ContractForm,
-  type SignerContact,
+  type PropertyGap,
 } from "./contract-model";
 import type { ContractContext } from "./contract-types";
-import { ContractDraftStep } from "./ContractDraftStep";
-import { ContractFilesStep } from "./ContractFilesStep";
+import { ContractPdfSection } from "./ContractPdfSection";
 import { DocPagesSheet, useContractUploads } from "./DocPagesSheet";
-import { MissingList } from "./parts";
+import { OwnerBlock, OwnerLine, ownerComplete } from "./OwnerBlock";
+import { Chip, INPUT_CLASS, MissingList, SectionTitle } from "./parts";
 
 export type ContractSheetProps = {
   propertyId: string;
   officeId: string;
-  /** Засах ноорог; null бол шинэ ноорог үүсгэнэ. */
+  /** Бүртгэх ноорог (эсвэл харах бүртгэгдсэн гэрээ); null бол эхний PDF дээр шинэ ноорог үүсгэнэ. */
   contract: Crm2BrokerageRow | null;
   settings: Crm2Settings;
   staff: Crm2StaffMember[];
@@ -78,17 +62,22 @@ export type ContractSheetProps = {
   /** Өгөхгүй бол URL-аас. */
   panel?: Crm2Panel;
   open?: boolean;
-  initialStep?: 1 | 2;
+  /**
+   * Хөрөнгө идэвхжихэд дутуу мөрийг дарахад нөхөх цонх нээх (картын CardSheetHost). Өгөхгүй бол энэ
+   * цонхыг хааж картын ?sheet= холбоос руу шилжинэ.
+   */
+  onOpenSheet?: (sheet: ChecklistSheet, field: string | null) => void;
 };
 
-type DraftPublic = Omit<ContractForm, "signer_relation"> & { forContract: string | null };
-type DraftPrivate = { signer_relation: string; signer: OwnerDraft | null };
+const TITLE = "Гэрээ бүртгэх";
 
 /**
- * Зуучлалын гэрээний доод цонх (P7) — урьдчилан бөглөсөн, 2 алхамтай:
- *   1 «Гэрээний ноорог үүсгэх»: эзэн (хөрөнгөөс), гарын үсэг зурагч, дугаар, хугацаа, шимтгэл, онцгой нөхцөл, агент.
- *   2 «Батлуулахаар илгээх»: камераар хуудас → нэг PDF, файл/галерей, өмчлөлийн баримт, илгээх.
- * Маягт утсан дээр автоматаар хадгалагдана (зурагчийн утас vault-д), апп солиход алдагдахгүй.
+ * «Гэрээ бүртгэх» доод цонх (20261125000100 — батлах алхамгүй), нэг дэлгэц, утсанд зориулсан:
+ *   1) PMC-ийн тамга, гарын үсэгтэй гэрээг скан хийж НЭГ PDF болгох эсвэл PDF файл сонгох;
+ *   2) «PMC-ийн тамга, гарын үсэгтэй»-г тэмдэглэх (PDF солигдвол дахин);
+ *   3) дуусах огноо (анхдагч +brokerage.default_term_months), эхлэх = өнөөдөр;
+ *   4) «Бүртгэх» → гэрээ шууд хүчинтэй, хөрөнгийн мэдээлэл бүрэн бол хөрөнгө идэвхтэй болно.
+ * Ноорог (B### дугаартай) эхний PDF-ийг сонгох/скан хийх үед үүснэ (интернэт хэрэгтэй).
  */
 export function ContractSheet(props: ContractSheetProps) {
   const { propertyId, onClose } = props;
@@ -99,11 +88,11 @@ export function ContractSheet(props: ContractSheetProps) {
   const [loaded, setLoaded] = React.useState<ContractContext | null>(null);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [savedId, setSavedId] = React.useState<string | null>(null);
-  const [stepHint, setStepHint] = React.useState<1 | 2 | undefined>(props.initialStep);
   const ctx = loaded ?? props.context ?? null;
 
   const reload = React.useCallback(async () => {
-    const res = await loadContractContext(propertyId);
+    const res = await loadContractContext(propertyId).catch(() => null);
+    if (!res) return;
     if (res.ok) {
       setLoaded(res.data);
       setLoadError(null);
@@ -134,14 +123,18 @@ export function ContractSheet(props: ContractSheetProps) {
     await reload();
   }, [router, reload]);
 
-  const currentId = savedId ?? props.contract?.id ?? null;
+  // «Гэрээ олдсонгүй»-оос «Шинээр бүртгэх» дарсан: зорилтот id-г орхиж (байгаа ноорог, эс бөгөөс шинэ).
+  const [restart, setRestart] = React.useState(false);
+  const draftInCtx = ctx?.contracts.find((c) => c.status === "draft")?.id ?? null;
+  const currentId = savedId ?? (restart ? draftInCtx : (props.contract?.id ?? null));
   const item = ctx && currentId ? (ctx.contracts.find((c) => c.id === currentId) ?? null) : null;
-  const waiting = !ctx || (currentId !== null && !item);
+  // Шинээр үүсгэсэн ноорог дахин ачаалтал засварлагч нээлттэй үлдэнэ (сонгосон PDF, огноо алдагдахгүй).
+  const lost = !!ctx && currentId !== null && !item && savedId === null;
 
-  if (waiting) {
+  if (!ctx || lost) {
     return (
-      <BottomSheet open={open} onClose={onClose} title="Зуучлалын гэрээ">
-        {loadError ? (
+      <BottomSheet open={open} onClose={onClose} title={TITLE}>
+        {loadError && !lost ? (
           <div className="space-y-3">
             <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
               {loadError}
@@ -158,6 +151,23 @@ export function ContractSheet(props: ContractSheetProps) {
               Дахин оролдох
             </Button>
           </div>
+        ) : lost ? (
+          // Дахин ачаалах нь тус болохгүй (id хэвээр) — шинээр бүртгэх эсвэл хаах.
+          <div className="space-y-3">
+            <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              Энэ гэрээ олдсонгүй — өөр төхөөрөмжөөс хаагдсан эсвэл харах эрхгүй байж магадгүй.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {ctx?.canEditProperty ? (
+                <Button type="button" size="touch" onClick={() => setRestart(true)}>
+                  <FileText className="size-4" aria-hidden /> Гэрээ шинээр бүртгэх
+                </Button>
+              ) : null}
+              <Button type="button" size="touch" variant="outline" onClick={onClose}>
+                Хаах
+              </Button>
+            </div>
+          </div>
         ) : (
           <p role="status" className="flex items-center gap-2 py-6 text-sm text-muted">
             <Loader2 className="size-4 animate-spin" aria-hidden /> Ачаалж байна…
@@ -169,22 +179,22 @@ export function ContractSheet(props: ContractSheetProps) {
 
   return (
     <ContractEditor
-      key={item?.id ?? "new"}
       {...props}
       open={open}
       panel={panel}
       ctx={ctx}
       item={item}
-      stepHint={stepHint}
+      draftId={item?.id ?? savedId}
       onCreated={(id) => {
         setSavedId(id);
-        setStepHint(2);
+        void refresh();
       }}
-      onStep={setStepHint}
       refresh={refresh}
     />
   );
 }
+
+type Item = ContractContext["contracts"][number];
 
 function ContractEditor({
   propertyId,
@@ -192,457 +202,619 @@ function ContractEditor({
   settings,
   staff,
   onClose,
+  onOpenSheet,
   open,
   panel,
   ctx,
   item,
-  stepHint,
+  draftId,
   onCreated,
-  onStep,
   refresh,
 }: ContractSheetProps & {
   open: boolean;
   panel: Crm2Panel;
   ctx: ContractContext;
-  item: ContractContext["contracts"][number] | null;
-  stepHint: 1 | 2 | undefined;
+  item: Item | null;
+  /** Ноорог гэрээний id (шинээр үүсгэсэн ч ctx дахин ачаалагдаагүй байж болно). */
+  draftId: string | null;
   onCreated: (id: string) => void;
-  onStep: (s: 1 | 2) => void;
   refresh: () => Promise<void>;
 }) {
   const router = useRouter();
   const meId = ctx.meId;
+  const today = ctx.today;
   const limits = React.useMemo(() => {
     const l = fileLimits(settings);
     return { maxDocMb: l.maxDocMb, maxDocsPerContract: l.maxDocsPerContract };
   }, [settings]);
-  const termMonths = settings["brokerage.default_term_months"];
+  const termMonths = ctx.termMonths;
   const sources = settings["contact.sources"];
+  const ids = React.useId();
 
-  const baseline = React.useMemo(
-    () => initialContractForm({ contract: item, property: ctx.property, settings, today: ctx.today, meId }),
-    [item, ctx.property, settings, ctx.today, meId]
-  );
-  const baselineSigner = React.useMemo<OwnerDraft | null>(() => {
-    const s = parseSignerNote(item?.signer_note).signer;
-    return s ? { phone: s.phone, name: s.name, source: null, sourceGuessed: false, sourceNote: "", chosenContactId: null, allowDuplicate: false } : null;
-  }, [item?.signer_note]);
+  const isDraft = !item || item.status === "draft";
+  const editable = item ? item.status === "draft" && item.canEditDraft : ctx.canEditProperty;
 
-  const [form, setForm] = React.useState<ContractForm>(baseline);
-  const [signer, setSigner] = React.useState<OwnerDraft | null>(baselineSigner);
-  const [signerKey, setSignerKey] = React.useState(0);
-  const [errors, setErrors] = React.useState<ContractFieldErrors>({});
+  const [endDate, setEndDate] = React.useState(() => initialContractForm({ contract: item, today, termMonths }).end_date);
+  /** Тамга тэмдэглэсэн PDF-ийн id — PDF солигдвол тэмдэглэгээ өөрөө арилна. */
+  const [stampFor, setStampFor] = React.useState<string | null>(null);
+  /** Гараар сонгосон гэрээ байгуулсан агент (null — RPC бөглөнө/баталгаажуулна). */
+  const [agentChoice, setAgentChoice] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
-  const [saveError, setSaveError] = React.useState<string | null>(null);
-  const [restoredAt, setRestoredAt] = React.useState<number | null>(null);
-  const [restoreChecked, setRestoreChecked] = React.useState(false);
+  const [busyText, setBusyText] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  /** Бүртгэх RPC-ийн алдааны талбар (aria-invalid, тухайн хэсэг рүү гүйлгэх). */
+  const [serverField, setServerField] = React.useState<string | null>(null);
   const [pagesOpen, setPagesOpen] = React.useState(false);
   const [canRestricted, setCanRestricted] = React.useState<boolean | null>(null);
-  const [fileAtOffice, setFileAtOffice] = React.useState(!!item?.file_at_office);
-  const [submitting, setSubmitting] = React.useState(false);
-  const bodyRef = React.useRef<HTMLDivElement>(null);
+  const [confirm, setConfirm] = React.useState<null | { kind: "replace"; file: BrokerageFileItem } | { kind: "delete"; file: BrokerageFileItem }>(null);
+  const creating = React.useRef<Promise<string | null> | null>(null);
+  /** PDF сонгосноос дараалалд орох хүртэл (толгой шалгах, IDB-д битүүмжлэх) давхар сонголтыг хаана. */
+  const picking = React.useRef(false);
+  const dateRef = React.useRef<HTMLInputElement>(null);
+  const online = useOnline();
 
-  const editable = !item || (item.status === "draft" && item.canEditDraft);
-  const scope = sheetScope(propertyId, "contract");
-
-  // 12 цагаас хуучин (гэхдээ энэ гэрээнийх, серверээс шинэ) ноорог — асууна, асуухгүйгээр устгахгүй.
-  const [offer, setOffer] = React.useState<LoadedDraft<DraftPublic, DraftPrivate> | null>(null);
-
-  function applyDraft(d: LoadedDraft<DraftPublic, DraftPrivate>) {
-    const { forContract: _ignored, ...rest } = d.form;
-    void _ignored;
-    setForm({ ...baseline, ...rest, prefilled: rest.prefilled.filter((k) => baseline.prefilled.includes(k) || !item), signer_relation: d.private?.signer_relation ?? baseline.signer_relation });
-    if (d.private?.signer) {
-      setSigner(d.private.signer);
-      setSignerKey((k) => k + 1);
-    }
-    setRestoredAt(d.record.savedAt);
-  }
-
-  // ── Утсан дээрх ноорог ──
+  // Сервер дуусах огноог татгалзвал талбарт фокуслана — бүртгэж дууссаны дараа (тэр үед input идэвхтэй).
   React.useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const d = await loadDraft<DraftPublic, DraftPrivate>(meId, scope);
-        if (cancelled || !d) return;
-        const fresh = d.record.savedAt > (item ? Date.parse(item.updated_at) || 0 : 0);
-        const mine = d.form.forContract === (item?.id ?? null);
-        if (mine && fresh && shouldAutoRestore(d.record.savedAt)) {
-          applyDraft(d);
-          logUiEvent({ event: "draft_restored_auto", flow: "card", property_id: propertyId, meta: { contract: true } });
-        } else if (mine && fresh) {
-          setOffer(d);
-          logUiEvent({ event: "draft_restore_offer", flow: "card", property_id: propertyId, meta: { contract: true } });
-        } else {
-          // Өөр гэрээнийх эсвэл серверийн хувилбар нь шинэ — утсан дээрх хуучин ноорог хэрэггүй.
-          await hardDeleteDraft(draftKey(meId, scope));
-        }
-      } catch {
-        /* IndexedDB боломжгүй — зөвхөн санах ойд */
-      } finally {
-        if (!cancelled) setRestoreChecked(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // зөвхөн нээхэд
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (serverField === "end_date" && !saving) dateRef.current?.focus();
+  }, [serverField, saving]);
 
-  const { signer_relation, ...publicRest } = form;
-  const autosave = useDraftAutosave<DraftPublic, DraftPrivate>(
-    { form: { ...publicRest, forContract: item?.id ?? null }, private: { signer_relation, signer } },
-    { profileId: meId, scope, enabled: restoreChecked && editable && !offer }
-  );
-
-  async function resolveOffer(keep: boolean) {
-    const d = offer;
-    if (!d) return;
-    if (keep) {
-      applyDraft(d);
-      logUiEvent({ event: "draft_restored", flow: "card", property_id: propertyId, meta: { contract: true } });
-    } else {
-      await hardDeleteDraft(draftKey(meId, scope)).catch(() => {});
-      logUiEvent({ event: "draft_discarded", flow: "card", property_id: propertyId, meta: { contract: true } });
-    }
-    setOffer(null);
-  }
+  const files = React.useMemo(() => item?.files ?? [], [item]);
+  const pdf = contractPdf(files);
+  const legacy = legacyContractImages(files);
+  const extras = extraDocs(files);
+  const stampConfirmed = !!pdf && stampFor === pdf.id;
+  const form: ContractForm = { end_date: endDate, stamp_confirmed: stampConfirmed };
 
   // ── Өмчлөлийн баримт хавсаргах эрх ──
   React.useEffect(() => {
-    if (!item) return;
+    if (!draftId) return;
     let cancelled = false;
-    void canViewRestrictedBrokerage(item.id).then((r) => {
-      if (!cancelled) setCanRestricted(r.ok ? r.data : false);
-    });
+    void canViewRestrictedBrokerage(draftId).then(
+      (r) => {
+        if (!cancelled) setCanRestricted(r.ok ? r.data : false);
+      },
+      () => {
+        if (!cancelled) setCanRestricted(false);
+      }
+    );
     return () => {
       cancelled = true;
     };
-  }, [item]);
+  }, [draftId]);
 
-  const uploads = useContractUploads(meId, propertyId, item?.id ?? null);
+  const onUploaded = React.useCallback(() => void refresh(), [refresh]);
+  const uploads = useContractUploads(meId, propertyId, draftId, onUploaded);
 
-  const signerContact: SignerContact | null = signer ? { name: signer.name, phone: signer.phone } : null;
-  const owner = ctx.owner === "hidden" ? "hidden" : ctx.owner ? { id: ctx.owner.id, nameUnverified: ctx.owner.name_unverified, source: ctx.owner.source } : null;
+  // Гэрээний бодит эзэн (DB: coalesce(гэрээний эзэн, хөрөнгийн эзэн)) — сунгалтын ноорог өмнөх гэрээний
+  // эзнийг өвлөж, хөрөнгийн одоогийн эзнээс өөр байж болно. Эзний хэсэг ч тэр харилцагчийг засна.
+  const eff = effectiveContractOwner(ctx.owner, isDraft ? item : null);
+  const ownerCtx: ContractContext = eff.fromContract ? { ...ctx, owner: eff.owner } : ctx;
+  const ownerDiffers = eff.fromContract && ctx.owner !== "hidden" && eff.owner !== "hidden" && ctx.owner?.id !== eff.owner?.id;
+  const o = eff.owner;
+  const owner = o === "hidden" ? "hidden" : o ? { id: o.id, nameUnverified: o.name_unverified, source: o.source } : null;
   const missing = contractMissing(ctx.checklist, form, {
     status: "draft",
     owner,
-    files: fileCounts(item?.files),
-    fileAtOffice,
-    signerNote: composeSignerNote(form.signer_relation, signerContact),
-    confirmsAgent: ctx.canEditProperty,
+    files: fileCounts(files),
+    ownershipKnown: canRestricted !== false,
   });
-  const step1Missing = missing.filter((m) => STEP1_MISSING.has(m));
-  const step: 1 | 2 = !item ? 1 : (stepHint ?? initialStep(true, missing));
-  const dirty = contractDirty(
-    form,
-    baseline,
-    signerContact,
-    baselineSigner ? { name: baselineSigner.name, phone: baselineSigner.phone } : null,
-    { property: ctx.property, canEdit: ctx.canEditProperty }
-  );
+  const dateError = brokerageEndDateError(endDate, today);
+  const agentId = agentChoice ?? ctx.property.contract_agent_id;
+  // RPC хоосон «гэрээ байгуулсан агент»-ыг бүртгэгчээр бөглөх эсэх (registrantFillsContractAgent).
+  const fillsMe =
+    editable && isDraft && registrantFillsContractAgent(ctx.property, { id: meId, isStaff: ctx.meIsStaff }, ctx.sameAgentMultiRole);
+  const gaps = isDraft
+    ? propertyGaps(ctx.checklist, agentId ?? (fillsMe ? meId : null))
+    : propertyGaps(ctx.checklist, null, { registering: false });
+  const busy = saving || !!busyText;
+  // Хуулалтын төлөв: гэрээний PDF ба нэмэлт баримтыг ялгаж, сүлжээгүй үед «холбогдмогц» гэж хэлнэ.
+  const isContractUpload = (i: (typeof uploads.items)[number]) => i.target.kind === "brokerage" && i.target.fileKind === "contract";
+  const contractUploading = uploads.items.some((i) => isContractUpload(i) && i.status !== "failed");
+  const extraUploading = uploads.items.some((i) => !isContractUpload(i) && i.status !== "failed");
+  const uploadText = contractUploading
+    ? online
+      ? "Гэрээ хуулагдаж байна…"
+      : "Интернэт холбогдмогц гэрээ хуулагдана"
+    : extraUploading
+      ? online
+        ? "Баримт хуулагдаж байна…"
+        : "Интернэт холбогдмогц баримт хуулагдана"
+      : null;
+  const canRegister = editable && isDraft && !!draftId && !!pdf && stampConfirmed && !dateError && missing.length === 0 && !busy && !uploads.uploading;
 
-  const recalc = editable ? commissionRecalc(form, ctx.property, settings) : null;
-  const warning = commissionWarning(form, ctx.property.category);
+  // Сүүлд «Гэрээ буруу» гэж буцаагдсан гэрээ — дараа нь өөр гэрээ бүртгэгдээгүй бол шинэ ноорогт
+  // агентад шалтгааныг харуулна.
+  const lastInvalid =
+    [...ctx.contracts].filter((c) => c.invalidated_at).sort((a, b) => (b.invalidated_at ?? "").localeCompare(a.invalidated_at ?? ""))[0] ?? null;
+  const invalidated =
+    isDraft &&
+    lastInvalid &&
+    !ctx.contracts.some((c) => c.id !== lastInvalid.id && (c.registered_at ?? c.approved_at ?? "") > (lastInvalid.invalidated_at ?? ""))
+      ? lastInvalid
+      : null;
 
-  function edit<K extends keyof ContractForm>(key: K, value: ContractForm[K]) {
-    setForm((f) => editContractField(f, key, value));
-    const errKey = key === "signer_relation" ? "signer_note" : key;
-    if (errKey in errors) setErrors((e) => ({ ...e, [errKey]: undefined }));
-  }
-
-  function focusField(field: string | null | undefined) {
-    if (!field) return;
-    const map: Record<string, string> = { number: "Гэрээний дугаар", end_date: "Гэрээний хугацаа", commission_value: "Шимтгэл", signer_note: "Гарын үсэг зурагч" };
-    const label = map[field];
-    const el = label ? bodyRef.current?.querySelector<HTMLElement>(`[aria-label="${label}"] input, [aria-label="${label}"] textarea`) : null;
-    el?.focus();
-  }
-
-  async function saveStep1(): Promise<boolean> {
-    // Хуучин ноорогийн асуултад хариулаагүй бол хадгалахгүй (хадгалалт ноорогийг устгадаг).
-    if (saving || offer) return false;
-    const errs = contractFormErrors(form, { isNew: !item });
-    setErrors(errs);
-    const first = Object.keys(errs)[0];
-    if (first) {
-      onStep(1);
-      requestAnimationFrame(() => focusField(first));
-      return false;
+  function openGap(key: string) {
+    const g = gaps.find((x) => x.key === key);
+    if (!g) return;
+    if (onOpenSheet) {
+      onOpenSheet(g.target.sheet, g.target.field);
+      return;
     }
-    setSaving(true);
-    setSaveError(null);
+    onClose();
+    router.push(crm2Paths(panel).property(propertyId, undefined, { sheet: g.target.sheet, field: g.target.field ?? undefined }), { scroll: false });
+  }
+
+  /** Бүртгэх RPC-ийн алдааны талбарын хэсгийг харагдуулна (PDF, тамга, эзэн, өмчлөлийн баримт). */
+  function revealSection(field: string | null | undefined) {
+    const section =
+      field === "file" || field === "stamp_confirmed" || field === "ownership_doc"
+        ? "pdf"
+        : field === "owner" || field === "owner.full_name" || field === "owner.source"
+          ? "owner"
+          : null;
+    if (!section) return;
+    document.getElementById(`${ids}-${section}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
+
+  /** Ноорог (B###) — эхний PDF/скан дээр нэг удаа үүсгэнэ. */
+  async function ensureDraft(): Promise<string | null> {
+    if (draftId) return draftId;
+    if (creating.current) return creating.current;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      setError("Гэрээний ноорог үүсгэхэд интернэт хэрэгтэй. Сүлжээнд холбогдоод дахин оролдоно уу.");
+      return null;
+    }
+    const run = (async () => {
+      setBusyText("Гэрээний ноорог үүсгэж байна…");
+      setError(null);
+      try {
+        const res = await createBrokerageDraft({ property_id: propertyId, end_date: dateError ? undefined : endDate });
+        if (!res.ok) {
+          setError(res.error);
+          return null;
+        }
+        logUiEvent({ event: "contract_draft_saved", flow: "card", property_id: propertyId, meta: { created: true } });
+        onCreated(res.data.id);
+        return res.data.id;
+      } catch {
+        setError("Сүлжээ тасарлаа. Дахин оролдоно уу.");
+        return null;
+      } finally {
+        setBusyText(null);
+        creating.current = null;
+      }
+    })();
+    creating.current = run;
+    return run;
+  }
+
+  async function scan() {
+    if (busy) return;
+    const id = await ensureDraft();
+    if (id) setPagesOpen(true);
+  }
+
+  async function pickPdf(file: File) {
+    if (busy || picking.current) return;
+    setError(null);
+    const invalid = validateContractPdf(file, limits);
+    if (invalid) {
+      toast.error(invalid);
+      return;
+    }
+    // Сонгосноос дараалалд орох хүртэл (том PDF-ийг утсан дээр битүүмжлэхэд секунд болно) сонгогчийг хаана —
+    // дахин дарж хоёр PDF дараалалд оруулахгүй.
+    picking.current = true;
+    setBusyText("PDF бэлдэж байна…");
     try {
-      const ownerId = ctx.owner && ctx.owner !== "hidden" ? ctx.owner.id : null;
-      const fields = contractDraftFields(form, { ownerContactId: ownerId, signer: signerContact });
-      const payload = { ...fields, owner_contact_id: ctx.owner === "hidden" ? undefined : fields.owner_contact_id };
-      let id = item?.id ?? null;
-      if (item) {
-        const res = await updateBrokerageDraft({ contract_id: item.id, ...payload });
-        if (!res.ok) {
-          setSaveError(res.error);
-          focusField(res.field);
-          return false;
-        }
-      } else {
-        const res = await createBrokerageDraft({ property_id: propertyId, ...payload });
-        if (!res.ok) {
-          setSaveError(res.error);
-          focusField(res.field);
-          return false;
-        }
-        id = res.data.id;
+      let header = false;
+      try {
+        header = isPdfHeader(new Uint8Array(await file.slice(0, 5).arrayBuffer()));
+      } catch {
+        header = false;
       }
-      if (ctx.canEditProperty) {
-        const patch = contractAgentPatch(form, ctx.property);
-        if (patch) {
-          const r = await updateProperty(propertyId, patch);
-          if (!r.ok) toast.error("Гэрээ хадгалагдсан ч гэрээ байгуулсан агентыг бичиж чадсангүй", { description: r.error });
-        }
+      if (!header) {
+        toast.error(contractPdfOnlyText(file.name));
+        return;
       }
-      autosave.cancel();
-      await hardDeleteDraft(draftKey(meId, scope)).catch(() => {});
-      logUiEvent({ event: "contract_draft_saved", flow: "card", property_id: propertyId, meta: { created: !item, prefilled: form.prefilled.length } });
-      toast.success(item ? "Гэрээ хадгалагдлаа" : "Гэрээний ноорог үүслээ");
-      await refresh();
-      if (!item && id) onCreated(id);
-      else onStep(2);
-      return true;
-    } catch (e) {
-      console.error("ContractSheet save:", e);
-      setSaveError("Алдаа гарлаа. Дахин оролдоно уу.");
-      return false;
+      const id = await ensureDraft();
+      if (!id) return;
+      setStampFor(null);
+      setBusyText("PDF бэлдэж байна…");
+      try {
+        await enqueue({ profileId: meId, target: { kind: "brokerage", contractId: id, fileKind: "contract", officeId, limits }, blob: file, name: file.name });
+        void startQueue(meId);
+        if (typeof navigator !== "undefined" && navigator.onLine === false) {
+          toast.info("Гэрээний PDF утсан дээр хадгалагдлаа", { description: "Интернэт холбогдмогц өөрөө хуулагдана." });
+        } else {
+          toast.success("Гэрээний PDF хуулагдаж байна");
+        }
+      } catch (e) {
+        if (e instanceof Error && e.message === NOT_PDF_ERROR) {
+          toast.error(contractPdfOnlyText(file.name));
+          return;
+        }
+        // Утсан дээр хадгалах боломжгүй — шууд хуулна.
+        setBusyText("Гэрээ хуулагдаж байна…");
+        const r = await uploadBrokerageFile({ file, officeId, contractId: id, limits, existing: files.length, kind: "contract" });
+        if (!r.ok) toast.error(r.error);
+        else await refresh();
+      }
     } finally {
-      setSaving(false);
+      picking.current = false;
+      setBusyText(null);
     }
   }
 
-  async function pickFiles(kind: Crm2BrokerageFileKindKey, files: File[]) {
-    if (!item) return;
-    let existing = item.files.length + uploads.items.length;
+  async function pickExtras(list: File[]) {
+    if (!draftId || busy) return;
+    let existing = files.length + uploads.items.length;
     let queued = 0;
-    for (const file of files) {
+    for (const file of list) {
       const invalid = validateDocFile(file, limits, existing);
       if (invalid) {
         toast.error(invalid);
         continue;
       }
       try {
-        await enqueue({ profileId: meId, target: { kind: "brokerage", contractId: item.id, fileKind: kind, officeId, limits }, blob: file, name: file.name });
+        await enqueue({ profileId: meId, target: { kind: "brokerage", contractId: draftId, fileKind: "ownership", officeId, limits }, blob: file, name: file.name });
         queued++;
       } catch {
-        // Утсан дээр хадгалах боломжгүй — шууд хуулна.
-        const r = await uploadBrokerageFile({ file, officeId, contractId: item.id, limits, existing, kind });
+        const r = await uploadBrokerageFile({ file, officeId, contractId: draftId, limits, existing, kind: "ownership" });
         if (!r.ok) toast.error(r.error);
-        else router.refresh();
+        else void refresh();
       }
       existing++;
     }
     if (queued) void startQueue(meId);
   }
 
-  async function toggleFileAtOffice(v: boolean) {
-    if (!item) return;
-    setFileAtOffice(v);
-    const r = await updateBrokerageDraft({ contract_id: item.id, file_at_office: v });
-    if (!r.ok) {
-      setFileAtOffice(!v);
-      toast.error(r.error);
-      return;
+  async function register() {
+    if (!draftId || !canRegister) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const patch = ctx.canEditProperty ? contractAgentPatch(agentChoice, ctx.property) : null;
+      if (patch) {
+        const a = await updateProperty(propertyId, patch);
+        if (!a.ok) {
+          setError(`Гэрээ байгуулсан агентыг хадгалж чадсангүй: ${a.error}`);
+          return;
+        }
+      }
+      setServerField(null);
+      const r = await registerBrokerage({ contract_id: draftId, end_date: endDate, stamp_confirmed: stampConfirmed });
+      if (!r.ok) {
+        setError(r.error);
+        setServerField(r.field ?? null);
+        if (r.field === "stamp_confirmed") setStampFor(null);
+        // end_date — бүртгэж дууссаны дараа (талбар идэвхжмэгц) доорх effect фокуслана.
+        if (r.field !== "end_date") revealSection(r.field);
+        return;
+      }
+      const d = r.data;
+      logUiEvent({
+        event: "contract_registered",
+        flow: "card",
+        property_id: propertyId,
+        meta: { active: d.property_status === "active", missing: d.property_missing.length, already: !!d.already, agent_changed: !!patch },
+      });
+      if (d.property_status === "active") {
+        toast.success(`${ctx.propertyCode} идэвхтэй боллоо · Гэрээ ${d.number} бүртгэгдлээ`);
+      } else if (d.property_missing.length && (d.property_status === "draft" || d.property_status === "contract_ended")) {
+        // DB (crm2_property_try_activate) ноорог болон энэ бүртгэлээр сунгагдсан «гэрээ дууссан» хөрөнгийг
+        // мэдээлэл нөхөгдөхөд өөрөө идэвхжүүлнэ.
+        toast.info(`Гэрээ ${d.number} бүртгэгдлээ — хөрөнгө идэвхжихэд дутуу`, {
+          description: `${d.property_missing.map(missingItemLabel).join(", ")}. Нөхмөгц автоматаар идэвхжинэ.`,
+        });
+      } else {
+        toast.success(`Гэрээ ${d.number} бүртгэгдлээ`, {
+          description: `Хөрөнгийн төлөв: ${PROPERTY_STATUS_LABEL[d.property_status] ?? d.property_status}.`,
+        });
+      }
+      router.refresh();
+      onClose();
+    } catch (e) {
+      console.error("ContractSheet register:", e);
+      setError("Алдаа гарлаа. Дахин оролдоно уу.");
+    } finally {
+      setSaving(false);
     }
-    router.refresh();
   }
 
-  async function submit() {
-    if (!item || submitting) return;
-    if (dirty) {
-      const saved = await saveStep1();
-      if (!saved) return;
-    }
-    setSubmitting(true);
-    setSaveError(null);
-    const r = await submitBrokerage(item.id);
-    setSubmitting(false);
-    if (!r.ok) {
-      setSaveError(r.error);
-      return;
-    }
-    logUiEvent({ event: "contract_submitted", flow: "card", property_id: propertyId, meta: { files: item.files.length } });
-    toast.success("Батлуулахаар илгээлээ", { description: "Батлагч шалгаж батална." });
-    router.refresh();
-    onClose();
-  }
+  const gapRows = gaps.map((g: PropertyGap) => ({ key: g.key, label: g.label, openable: g.target.sheet !== "contract" }));
+  const title = item ? (isDraft ? `${TITLE} · ${item.number}` : `Гэрээ · ${item.number}`) : TITLE;
 
-  const busy = saving || submitting;
-  const savedLine = restoredAt
-    ? `Ноорог сэргээгдлээ ${fmtTime(restoredAt)}`
-    : autosave.savedAt
-      ? `Утсан дээр хадгалагдсан ${fmtTime(autosave.savedAt)}`
-      : null;
-
-  const footer = !editable ? null : step === 1 ? (
-    <div className="space-y-1.5">
-      {saveError ? (
-        <p role="alert" className="text-sm text-rose-700">
-          {saveError}
-        </p>
-      ) : null}
-      <Button type="button" size="lg" className="w-full" disabled={busy || !restoreChecked || !!offer} onClick={() => void saveStep1()}>
-        {saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-        {item ? (dirty ? "Хадгалаад үргэлжлүүлэх" : "Үргэлжлүүлэх") : "Ноорог үүсгээд үргэлжлүүлэх"}
-      </Button>
-      {savedLine ? (
-        <p role="status" aria-live="polite" className="text-center text-xs text-muted">
-          {savedLine}
-        </p>
-      ) : null}
-    </div>
-  ) : (
-    <div className="space-y-1.5">
-      {saveError ? (
-        <p role="alert" className="text-sm text-rose-700">
-          {saveError}
-        </p>
-      ) : null}
-      <Button
-        type="button"
-        size="lg"
-        className="w-full"
-        disabled={busy || missing.length > 0 || uploads.uploading}
-        aria-describedby={missing.length ? "contract-missing" : undefined}
-        onClick={() => void submit()}
-      >
-        {submitting ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Send className="size-4" aria-hidden />}
-        {uploads.uploading ? "Гэрээ илгээгдэж байна" : "Батлуулахаар илгээх"}
-      </Button>
-      {missing.length ? (
-        <p id="contract-missing" className="text-center text-xs text-muted">
-          {missing.length} зүйл дутуу
-        </p>
-      ) : null}
-    </div>
-  );
-
-  const title = item ? `Гэрээ · ${item.number}` : "Зуучлалын гэрээ";
+  const footer =
+    editable && isDraft ? (
+      <div className="space-y-1.5">
+        {error ? (
+          <p id={`${ids}-err`} role="alert" className="break-words text-sm text-rose-700">
+            {error}
+          </p>
+        ) : null}
+        <Button
+          type="button"
+          size="lg"
+          className="w-full"
+          disabled={!canRegister}
+          aria-describedby={missing.length ? `${ids}-missing` : undefined}
+          onClick={() => void register()}
+        >
+          {uploadText && !online ? (
+            <WifiOff className="size-4" aria-hidden />
+          ) : saving || uploadText ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+          ) : (
+            <CheckCircle2 className="size-4" aria-hidden />
+          )}
+          <span className="min-w-0 truncate">{uploadText ?? (saving ? "Бүртгэж байна…" : "Бүртгэх")}</span>
+        </Button>
+        {!uploadText && missing.length ? (
+          <p className="text-center text-xs text-muted">{missing.length} зүйл дутуу</p>
+        ) : null}
+      </div>
+    ) : null;
 
   return (
     <>
       <BottomSheet open={open && !pagesOpen} onClose={() => !busy && onClose()} title={title} footer={footer}>
-        <div ref={bodyRef} className="space-y-5">
-          {offer && editable ? (
-            <div role="group" aria-label="Утсан дээрх ноорог" className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-              <p className="text-sm text-amber-950">
-                Энэ гэрээний ноорог {fmtTime(offer.record.savedAt)}-д утсан дээр хадгалагдсан (12 цагаас өмнө). Үргэлжлүүлэх үү?
-              </p>
-              {offer.privateLost ? <p className="text-xs text-amber-900">Гарын үсэг зурагчийн утас сэргэхгүй — дахин оруулна уу.</p> : null}
-              <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">
-                <Button type="button" size="lg" onClick={() => void resolveOffer(true)}>
-                  Үргэлжлүүлэх
-                </Button>
-                <Button type="button" size="lg" variant="outline" onClick={() => void resolveOffer(false)}>
-                  Хаях
-                </Button>
-              </div>
-            </div>
-          ) : null}
-          {editable ? (
-            <ol className="grid grid-cols-2 gap-2" aria-label="Алхам">
-              {([1, 2] as const).map((s) => (
-                <li key={s}>
-                  <button
-                    type="button"
-                    aria-current={step === s ? "step" : undefined}
-                    disabled={busy || (s === 2 && !item)}
-                    onClick={() => {
-                      if (s === 2 && dirty) void saveStep1();
-                      else onStep(s);
-                    }}
-                    className={cn(
-                      "flex min-h-11 w-full items-center gap-2 rounded-xl border px-3 text-left text-sm font-semibold disabled:opacity-50",
-                      step === s ? "border-brand-500 bg-brand-50 text-brand-700" : "border-line text-muted hover:bg-surface-2"
-                    )}
-                  >
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-surface text-xs">{s}</span>
-                    <span className="min-w-0 leading-tight">{s === 1 ? "Гэрээний ноорог үүсгэх" : "Батлуулахаар илгээх"}</span>
-                  </button>
-                </li>
-              ))}
-            </ol>
-          ) : (
+        <div className="min-w-0 space-y-5">
+          {!isDraft && item ? (
+            <RegisteredView item={item} ctx={ctx} pdf={pdf} gapRows={gapRows} onOpenGap={openGap} />
+          ) : !editable ? (
             <p className="rounded-xl bg-surface-2 px-3 py-2 text-sm text-muted">
-              {item && item.status !== "draft"
-                ? "Энэ гэрээ ноорог биш — илгээсэн/батлагдсан гэрээг картын «Гэрээ» хэсгээс харна."
-                : "Энэ ноорог гэрээг засах эрхгүй."}
+              {item ? "Энэ ноорог гэрээг бүртгэх эрхгүй." : "Гэрээ бүртгэх эрхгүй — хөрөнгийн үүрэгт агент бүртгэнэ."}
+            </p>
+          ) : (
+            <p className="text-sm text-muted">
+              PMC-ийн тамга, гарын үсэгтэй гэрээгээ PDF-ээр оруулж бүртгэмэгц (батлуулахгүй) гэрээ хүчинтэй болж, хөрөнгийн мэдээлэл
+              бүрэн бол хөрөнгө идэвхтэй болно.
             </p>
           )}
 
-          {editable && step === 1 ? (
-            <>
-              <ContractDraftStep
-                key={signerKey}
-                ctx={ctx}
-                form={form}
-                edit={edit}
-                onConfirm={(k) => setForm((f) => confirmPrefilled(f, k))}
-                onAutoNumber={(auto) => {
-                  setForm((f) => setAutoNumber(f, auto));
-                  setErrors((e) => ({ ...e, number: undefined }));
-                }}
-                errors={errors}
-                isNew={!item}
-                termMonths={termMonths}
-                onStartToday={() => edit("start_date", ctx.today)}
-                onEndTerm={() => {
-                  const end = termEndDate(form.start_date, termMonths);
-                  if (end) edit("end_date", end);
-                }}
-                recalc={recalc}
-                onRecalc={() => recalc && setForm((f) => confirmPrefilled(applyCommission(f, recalc), "commission"))}
-                warning={warning}
-                signerInitial={signer}
-                onSignerChange={setSigner}
-                staff={staff}
-                sources={sources}
-                panel={panel}
-                disabled={busy}
-                onOwnerChanged={() => void refresh()}
-              />
-              <MissingList items={step1Missing} title="Батлуулахад дутуу (энэ алхамд):" />
-            </>
+          {invalidated && editable ? (
+            <p className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+              <span className="min-w-0 break-words">
+                Өмнөх гэрээ {invalidated.number} «Гэрээ буруу» гэж буцаагдсан
+                {invalidated.termination_reason ? ` — ${invalidated.termination_reason.replace(/^Гэрээ буруу:\s*/, "")}` : ""}. Зөв PDF-ээ
+                оруулж дахин бүртгэнэ үү.
+              </span>
+            </p>
           ) : null}
 
-          {editable && step === 2 && item ? (
-            <ContractFilesStep
-              contract={item}
-              uploads={uploads}
-              canRestricted={canRestricted}
-              fileAtOffice={fileAtOffice}
-              onFileAtOffice={(v) => void toggleFileAtOffice(v)}
-              missing={missing}
-              onOpenPages={() => setPagesOpen(true)}
-              onPickFiles={(kind, files) => void pickFiles(kind, files)}
-              onRetry={(id) => void uploads.retry(id)}
-              onRemove={(id) => void uploads.remove(id)}
-              disabled={busy}
-            />
+          {isDraft && (editable || item) ? (
+            <>
+              <div id={`${ids}-pdf`} className="scroll-mt-4">
+                <ContractPdfSection
+                  pdf={pdf}
+                  legacy={legacy}
+                  extras={extras}
+                  uploads={uploads}
+                  editable={editable}
+                  canRestricted={draftId ? canRestricted : false}
+                  extrasOpen={missing.includes("ownership_doc")}
+                  stampConfirmed={stampConfirmed}
+                  stampErrorId={serverField === "stamp_confirmed" && error ? `${ids}-err` : undefined}
+                  onStamp={(v) => {
+                    setStampFor(v && pdf ? pdf.id : null);
+                    if (serverField === "stamp_confirmed") setServerField(null);
+                  }}
+                  onScan={() => void scan()}
+                  onPickPdf={(f) => void pickPdf(f)}
+                  onReplace={() => pdf && setConfirm({ kind: "replace", file: pdf })}
+                  onDeleteFile={(f) => setConfirm({ kind: "delete", file: f })}
+                  onPickExtras={(list) => void pickExtras(list)}
+                  onRetry={(id) => void uploads.retry(id)}
+                  onRemove={(id) => void uploads.remove(id)}
+                  disabled={busy}
+                />
+              </div>
+              {busyText ? (
+                <p role="status" className="flex items-center gap-2 text-sm text-muted">
+                  <Loader2 className="size-4 animate-spin" aria-hidden /> {busyText}
+                </p>
+              ) : null}
+
+              <section className="space-y-2" aria-label="Хугацаа">
+                <SectionTitle>Хугацаа</SectionTitle>
+                <p className="text-sm text-muted">Эхлэх: өнөөдөр ({fmtIsoDate(today)}) — бүртгэсэн өдөр.</p>
+                <div className="space-y-1.5">
+                  <label htmlFor={`${ids}-end`} className="block text-sm font-medium text-ink">
+                    Дуусах огноо
+                  </label>
+                  <input
+                    ref={dateRef}
+                    id={`${ids}-end`}
+                    type="date"
+                    value={endDate}
+                    min={today}
+                    max={brokerageMaxEndDate(today)}
+                    disabled={!editable || busy}
+                    aria-invalid={!!dateError || (serverField === "end_date" && !!error)}
+                    aria-describedby={
+                      [dateError ? `${ids}-end-err` : null, serverField === "end_date" && error ? `${ids}-err` : null]
+                        .filter(Boolean)
+                        .join(" ") || undefined
+                    }
+                    onChange={(e) => {
+                      setEndDate(e.target.value);
+                      if (serverField === "end_date") setServerField(null);
+                    }}
+                    className={INPUT_CLASS}
+                  />
+                  {dateError ? (
+                    <p id={`${ids}-end-err`} className="text-xs text-danger">
+                      {dateError}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Хугацааны түргэн сонголт">
+                  {endDateChips(termMonths).map((m) => {
+                    const end = termEndDate(today, m);
+                    return (
+                      <Chip
+                        key={m}
+                        on={!!end && end === endDate}
+                        disabled={!editable || busy || !end}
+                        onClick={() => {
+                          if (!end) return;
+                          setEndDate(end);
+                          if (serverField === "end_date") setServerField(null);
+                        }}
+                      >
+                        +{m} сар
+                      </Chip>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <div id={`${ids}-owner`} className="scroll-mt-4 space-y-1.5">
+                {ownerComplete(ownerCtx.owner) ? (
+                  <OwnerLine ctx={ownerCtx} panel={panel} />
+                ) : (
+                  <OwnerBlock ctx={ownerCtx} sources={sources} panel={panel} disabled={busy} onChanged={() => void refresh()} />
+                )}
+                {ownerDiffers ? (
+                  <p className="px-1 text-xs text-muted">
+                    Энэ гэрээнд өмнөх гэрээний эзэн бичигдэнэ — хөрөнгийн одоогийн эзнээс өөр.
+                  </p>
+                ) : null}
+              </div>
+
+              <ContractAgentRow
+                value={agentId}
+                fallbackMe={!agentId && fillsMe}
+                onChange={setAgentChoice}
+                staff={staff}
+                meId={meId}
+                teamIds={ctx.teamIds}
+                canChange={editable && ctx.canEditProperty}
+                disabled={busy}
+              />
+
+              {editable ? <MissingList id={`${ids}-missing`} items={missing} title="Бүртгэхэд дутуу:" /> : null}
+              {editable ? (
+                <MissingList
+                  items={gapRows}
+                  tone="muted"
+                  title="Хөрөнгө идэвхжихэд дутуу (дараа нь нөхөж болно):"
+                  onOpen={openGap}
+                />
+              ) : null}
+            </>
           ) : null}
         </div>
       </BottomSheet>
 
-      {item && editable ? (
+      {draftId && editable && isDraft ? (
         <DocPagesSheet
           open={open && pagesOpen}
           onClose={() => setPagesOpen(false)}
           profileId={meId}
           propertyId={propertyId}
           officeId={officeId}
-          contractId={item.id}
+          contractId={draftId}
           limits={limits}
-          onQueued={(n) => toast.success(n > 1 ? `Гэрээ ${n} PDF болж илгээгдэж байна` : "Гэрээ PDF болж илгээгдэж байна")}
+          onQueued={() => {
+            setStampFor(null);
+            if (typeof navigator !== "undefined" && navigator.onLine === false) {
+              toast.info("Гэрээ PDF болж утсан дээр хадгалагдлаа", { description: "Интернэт холбогдмогц өөрөө хуулагдана." });
+            } else {
+              toast.success("Гэрээ PDF болж хуулагдаж байна");
+            }
+          }}
         />
       ) : null}
+
+      <ConfirmDialog
+        open={!!confirm}
+        onClose={() => setConfirm(null)}
+        title={confirm?.kind === "replace" ? "Одоогийн PDF-ийг солих уу?" : "Файл устгах уу?"}
+        description={
+          confirm?.kind === "replace"
+            ? "Одоогийн PDF устгагдана. Дараа нь шинээр скан хийх эсвэл PDF файл сонгоно."
+            : (confirm?.file.file_name ?? undefined)
+        }
+        confirmLabel={confirm?.kind === "replace" ? "Солих" : "Устгах"}
+        tone="danger"
+        onConfirm={async () => {
+          const c = confirm;
+          if (!c) return null;
+          const res = await deleteBrokerageFile(c.file.id);
+          if (!res.ok) return res.error;
+          if (c.kind === "replace" || c.file.id === pdf?.id) setStampFor(null);
+          toast.success(c.kind === "replace" ? "Хуучин PDF устгагдлаа — шинээ оруулна уу" : "Файл устгагдлаа");
+          await refresh();
+          return null;
+        }}
+      />
     </>
+  );
+}
+
+/** Бүртгэгдсэн (эсвэл хүчингүй болсон) гэрээ — зөвхөн харна. */
+function RegisteredView({
+  item,
+  ctx,
+  pdf,
+  gapRows,
+  onOpenGap,
+}: {
+  item: Item;
+  ctx: ContractContext;
+  pdf: BrokerageFileItem | null;
+  gapRows: { key: string; label: string; openable: boolean }[];
+  onOpenGap: (key: string) => void;
+}) {
+  const active = item.status === "active";
+  // Ноорог (эсвэл энэ гэрээгээр сунгагдсан «гэрээ дууссан») хөрөнгө — мэдээлэл нөхөгдөхөд DB өөрөө идэвхжүүлнэ.
+  const autoPending = autoActivates({ status: ctx.propertyStatus, status_changed_at: ctx.checklist.property.status_changed_at }, item);
+  return (
+    <div className="space-y-3">
+      <p
+        className={
+          active
+            ? "rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+            : "rounded-xl bg-surface-2 px-3 py-2 text-sm text-muted"
+        }
+      >
+        {active
+          ? `Энэ гэрээ бүртгэгдсэн (${item.start_date ? fmtIsoDate(item.start_date) : "—"} – ${item.end_date ? fmtIsoDate(item.end_date) : "—"}). Засахгүй — буруу бол батлагч эсвэл багийн ахлагч «Гэрээ буруу» гэж буцаана; хугацааг «Сунгах»-аар.`
+          : `Энэ гэрээ ${BROKERAGE_STATUS_LABEL[item.status].toLowerCase()} — картын «Зуучлалын гэрээ» хэсгээс харна.`}
+      </p>
+      {pdf ? (
+        <div className="flex min-h-11 min-w-0 items-center gap-2 rounded-xl border border-line px-3 py-1.5 text-sm">
+          <FileText className="size-4 shrink-0 text-muted" aria-hidden />
+          {pdf.url ? (
+            <a
+              href={pdf.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="-my-1.5 flex min-h-11 min-w-0 flex-1 items-center font-medium text-brand-700 hover:underline"
+            >
+              <span className="min-w-0 truncate">{pdf.file_name || "Гэрээ (PDF)"}</span>
+            </a>
+          ) : (
+            <span className="min-w-0 flex-1 truncate">{pdf.file_name || "Гэрээ (PDF)"}</span>
+          )}
+          <span className="shrink-0 text-xs text-muted">{fmtFileSize(pdf.size_bytes)}</span>
+        </div>
+      ) : null}
+      {autoPending ? (
+        gapRows.length ? (
+          <MissingList
+            items={gapRows}
+            title="Хөрөнгө идэвхжихэд дутуу (нөхмөгц автоматаар идэвхжинэ):"
+            className="border-amber-300"
+            onOpen={onOpenGap}
+          />
+        ) : (
+          <ActivationReadiness propertyId={ctx.propertyId} state={{ kind: "ready" }} />
+        )
+      ) : null}
+    </div>
   );
 }

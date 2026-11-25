@@ -146,20 +146,23 @@ export type BrokerageFlags = {
   status: Crm2BrokerageStatus;
   canEditDraft: boolean;
   canAttach: boolean;
-  canDecide: boolean;
+  /** «Гэрээ буруу» — батлагч эсвэл агентын багийн ахлагч (crm2_can_invalidate_brokerage). */
+  canInvalidate: boolean;
   canTerminate: boolean;
   canRenew: boolean;
 };
 
+/**
+ * Гэрээний үйлдэл (20261125000100 — батлах алхамгүй): ноорогт «Бүртгэх» (PDF, огноо, тамга — доод
+ * цонхонд), хаях, файл; бүртгэгдсэнд «Гэрээ буруу», цуцлах, сунгах.
+ */
 export type BrokerageActionSet = {
-  edit: boolean;
-  submit: boolean;
+  register: boolean;
   discard: boolean;
+  /** Файл хавсаргах — зөвхөн ноорогт (бүртгэгдсэн гэрээний PDF-ийг DB солихгүй). */
   upload: boolean;
   deleteFile: boolean;
-  withdraw: boolean;
-  approve: boolean;
-  reject: boolean;
+  invalidate: boolean;
   terminate: boolean;
   renew: boolean;
 };
@@ -167,18 +170,14 @@ export type BrokerageActionSet = {
 /** Гэрээний төлөв ба эрхээр харуулах үйлдэл. */
 export function brokerageActions(b: BrokerageFlags, opts: { fileCount?: number; maxFiles?: number } = {}): BrokerageActionSet {
   const draft = b.status === "draft";
-  const pending = b.status === "pending";
   const active = b.status === "active";
   const roomForFiles = opts.maxFiles === undefined || (opts.fileCount ?? 0) < opts.maxFiles;
   return {
-    edit: draft && b.canEditDraft,
-    submit: draft && b.canEditDraft,
+    register: draft && b.canEditDraft,
     discard: draft && b.canEditDraft,
-    upload: (draft || pending || active) && b.canAttach && roomForFiles,
+    upload: draft && b.canAttach && roomForFiles,
     deleteFile: draft && b.canEditDraft,
-    withdraw: pending && b.canEditDraft,
-    approve: pending && b.canDecide,
-    reject: pending && b.canDecide,
+    invalidate: active && b.canInvalidate,
     terminate: active && b.canTerminate,
     renew: (active || b.status === "expired") && b.canRenew,
   };
@@ -206,7 +205,7 @@ export function renewableExpired<T extends ChainItem>(contracts: T[]): T | null 
 }
 
 /**
- * Холбоогүй шинэ гэрээ нэмэх: засах эрхтэй, ноорог/илгээсэн/батлагдсан гэрээ байхгүй,
+ * Холбоогүй шинэ гэрээ нэмэх: засах эрхтэй, ноорог/бүртгэгдсэн (эсвэл хуучин илгээсэн) гэрээ байхгүй,
  * сунгах ёстой дууссан гэрээ ч байхгүй үед (байвал засах эсвэл «Сунгах» — хувилбарын гинж тасрахгүй).
  */
 export function canCreateBrokerage(contracts: ChainItem[], canEditProperty: boolean): boolean {

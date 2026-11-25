@@ -5,7 +5,7 @@ import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Drawer } from "@/components/ui/drawer";
-import { dialogOpener, focusDialogStart, trapTab } from "@/components/ui/dialog-focus";
+import { dialogOpener, focusDialogStart, ownsKeyboard, trapTab } from "@/components/ui/dialog-focus";
 import { KEYBOARD_OPEN_PX, useKeyboardInset } from "@/lib/crm2/device/viewport";
 
 /**
@@ -129,6 +129,8 @@ function MobileSheet({
     }
 
     function onKey(e: KeyboardEvent) {
+      // Дээр нь давхарласан диалог (ConfirmDialog г.м.) фокустай бол тэр нь Escape/Tab-ыг шийднэ.
+      if (!ownsKeyboard(panelRef.current)) return;
       if (e.key === "Escape") {
         e.preventDefault();
         onCloseRef.current();

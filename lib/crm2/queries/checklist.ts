@@ -1,6 +1,7 @@
 import {
   buildChecklist,
   checklistSettings,
+  countContractFiles,
   nextStep,
   type Checklist,
   type ChecklistContract,
@@ -17,7 +18,8 @@ import type { Crm2PropertyRow } from "@/lib/crm2/types";
 /**
  * Картын «Дараагийн алхам» ба шалгах жагсаалт (P3) — getProperty()-ийн үр дүнгээс (нэмэлт уншилтгүй)
  * lib/crm2/checklist-ийн цэвэр дүрмээр. Эцсийн шалгалт DB дээр (crm2_property_missing, brokerage_missing,
- * publish_blockers). Хувийн талбар харах эрхгүй бол эзэн 'hidden'.
+ * publish_blockers). Хувийн талбар харах эрхгүй бол эзэн 'hidden'. Гэрээ батлагдахгүй — бүртгэгдэнэ
+ * (20261125000100).
  */
 
 /** Нийтэд гардаг бичвэрийн талбарууд (утас, тоот, хаалганы кодыг шалгана). */
@@ -26,30 +28,21 @@ const PUBLIC_TEXT_KEYS = ["advantages", "condition", "view_note", "availability_
 /** Шалгах жагсаалтад хэрэгтэй гэрээний талбарууд (BrokerageItem ба incomplete.ts-ийн мөр хоёулаа тохирно). */
 export type ChecklistContractRow = Pick<
   BrokerageItem,
-  | "status"
-  | "start_date"
-  | "end_date"
-  | "approved_at"
-  | "commission_type"
-  | "commission_value"
-  | "owner_contact_id"
-  | "terms"
-  | "no_special_terms"
-  | "signer_differs"
-  | "signer_note"
-  | "prefilled"
-  | "file_at_office"
+  "status" | "start_date" | "end_date" | "approved_at" | "registered_at" | "stamp_confirmed" | "owner_contact_id"
 > & {
   owner: { source: string | null; name_unverified: boolean } | null;
-  files: readonly { kind: string | null }[] | null;
+  /** kind ба mime_type — PDF гэрээ, хуучин зураг гэрээ, өмчлөлийн баримтыг ялгана. */
+  files: readonly { kind: string | null; mime_type: string | null }[] | null;
+  /** false — өмчлөлийн баримт (restricted) харах эрхгүй: RLS нуудаг тул тоо нь мэдэгдэхгүй (DB шалгана). */
+  canViewRestricted?: boolean;
 };
 
 /**
- * Шалгах жагсаалтад тооцох гэрээ: хүчинтэй (active) нь давуу, эс бөгөөс хамгийн сүүлийн ноорог/илгээсэн.
+ * Шалгах жагсаалтад тооцох гэрээ: хүчинтэй (active) нь давуу, эс бөгөөс хамгийн сүүлийн ноорог.
  * Жагсаалт хувилбараар (шинэ нь эхэнд) эрэмбэлэгдсэн байна.
  */
 export function pickChecklistContract<T extends { status: string }>(list: readonly T[]): T | null {
-  return list.find((c) => c.status === "active") ?? list.find((c) => c.status === "draft" || c.status === "pending") ?? null;
+  return list.find((c) => c.status === "active") ?? list.find((c) => c.status === "draft") ?? null;
 }
 
 export function toChecklistContract(
@@ -57,27 +50,20 @@ export function toChecklistContract(
   owner: { source: string | null; nameUnverified: boolean } | null
 ): ChecklistContract | null {
   if (!c) return null;
-  const files = c.files ?? [];
-  const count = (k: string) => files.filter((f) => (f.kind ?? "contract") === k).length;
+  const files = countContractFiles(c.files);
   return {
     status: c.status,
     start_date: c.start_date,
     end_date: c.end_date,
     approved_at: c.approved_at,
-    commission_type: c.commission_type,
-    commission_value: c.commission_value,
+    registered_at: c.registered_at ?? null,
+    stamp_confirmed: !!c.stamp_confirmed,
     owner_contact_id: c.owner_contact_id,
     ownerNameUnverified: c.owner?.name_unverified ?? owner?.nameUnverified ?? false,
     ownerSource: c.owner ? (c.owner.source ?? null) : (owner?.source ?? null),
-    terms: c.terms,
-    no_special_terms: !!c.no_special_terms,
-    signer_differs: !!c.signer_differs,
-    signer_note: c.signer_note ?? null,
-    prefilled: c.prefilled ?? [],
-    fileCount: count("contract"),
-    ownershipFileCount: count("ownership"),
-    otherFileCount: count("id") + count("other"),
-    file_at_office: !!c.file_at_office,
+    pdfCount: files.pdf,
+    nonPdfContractCount: files.nonPdf,
+    ownershipFileCount: c.canViewRestricted === false ? null : files.ownership,
   };
 }
 
@@ -85,14 +71,15 @@ export function toChecklistContract(
 export const CHECKLIST_PROPERTY_COLUMNS =
   "category, property_type, project_id, district, location_text, address_detail, lat, area_m2, rooms, floor, " +
   "building_floors, year_in_use, price, price_total, currency, price_period, listing_agent_id, contract_agent_id, " +
-  "photo_agent_id, last_verified_at, unconfirmed, status, listing_id, source_listing_id, published_at, advantages, " +
-  "condition, view_note, availability_note, features";
+  "photo_agent_id, last_verified_at, unconfirmed, status, status_changed_at, listing_id, source_listing_id, published_at, " +
+  "advantages, condition, view_note, availability_note, features";
 
 export type ChecklistPropertyRow = Pick<
   Crm2PropertyRow,
   | "category" | "property_type" | "project_id" | "district" | "location_text" | "address_detail" | "lat" | "area_m2"
   | "rooms" | "floor" | "building_floors" | "year_in_use" | "price" | "price_total" | "currency" | "price_period"
   | "listing_agent_id" | "contract_agent_id" | "photo_agent_id" | "last_verified_at" | "unconfirmed" | "status"
+  | "status_changed_at"
   | "listing_id" | "source_listing_id" | "published_at" | "advantages" | "condition" | "view_note"
   | "availability_note" | "features"
 >;
@@ -121,6 +108,7 @@ export function checklistProperty(p: ChecklistPropertyRow): ChecklistInput["prop
     last_verified_at: p.last_verified_at,
     unconfirmed: p.unconfirmed ?? [],
     status: p.status,
+    status_changed_at: p.status_changed_at ?? null,
     listing_id: p.listing_id,
     source_listing_id: p.source_listing_id ?? null,
     published_at: p.published_at,

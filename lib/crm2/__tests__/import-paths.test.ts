@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
@@ -124,20 +126,39 @@ describe("incomplete helpers", () => {
     ]);
   });
 
-  it("digestPushBody: зөвхөн тоо", () => {
-    expect(digestPushBody({ properties: 3, owner: 1, contract: 2, contract_file: 0, approve: 1 })).toBe(
-      "3 хөрөнгө дутуу: 1 эзэн, 2 гэрээ. 1 гэрээ батлахыг хүлээж байна"
+  it("digestPushBody: зөвхөн тоо; «гэрээ бүртгэгдээгүй», батлах мөргүй (20261125000100)", () => {
+    expect(digestPushBody({ properties: 3, owner: 1, contract: 2, contract_file: 1 })).toBe(
+      "3 хөрөнгө дутуу: 1 эзэн, 2 гэрээ, 1 гэрээ бүртгэгдээгүй"
     );
-    expect(digestPushBody({ properties: 0, approve: 2 })).toBe("2 гэрээ батлахыг хүлээж байна");
+    // Хуучин counts.approve-ийг үл тооно.
+    expect(digestPushBody({ properties: 3, owner: 1, contract: 2, contract_file: 0, approve: 1 })).toBe("3 хөрөнгө дутуу: 1 эзэн, 2 гэрээ");
+    expect(digestPushBody({ properties: 0, approve: 2 })).toBe("Дутуу бүртгэлээ шалгана уу");
     expect(digestPushBody(null)).toBe("Дутуу бүртгэлээ шалгана уу");
     const body = digestPushBody({ properties: "99112233<script>", owner: -1 });
     expect(body).toBe("Дутуу бүртгэлээ шалгана уу");
   });
 
-  it("digestPushTarget: зөвхөн батлах гэрээ бол батлах жагсаалт руу", () => {
-    expect(digestPushTarget({ properties: 0, approve: 2 }).url).toBe("/agent/crm/approvals");
-    expect(digestPushTarget({ properties: 1, approve: 2 }).url).toBe("/agent/crm/staff/incomplete");
-    expect(digestPushTarget(null).url).toBe("/agent/crm/staff/incomplete");
+  it("digestPushBody ≙ crm2_daily_digest-ийн бичвэр (хамгийн сүүлийн миграц)", () => {
+    const dir = path.resolve(__dirname, "../../../supabase/migrations");
+    let body = "";
+    for (const f of fs.readdirSync(dir).filter((x) => x.endsWith(".sql")).sort()) {
+      const re = /create (?:or replace )?function public\.crm2_daily_digest\b[\s\S]*?\$\$([\s\S]*?)\$\$/g;
+      for (const m of fs.readFileSync(path.join(dir, f), "utf8").matchAll(re)) {
+        body = m[1];
+      }
+    }
+    expect(body).toContain("' хөрөнгө дутуу: '");
+    expect(body).toContain("' эзэн'");
+    expect(body).toContain("' гэрээ'");
+    expect(body).toContain("' гэрээ бүртгэгдээгүй'");
+    expect(body).not.toContain("батлахыг хүлээж");
+    expect(body).toContain("'/agent/crm/staff/incomplete'");
+  });
+
+  it("digestPushTarget: үргэлж өнөөдрийн дутуу бүртгэл (батлах жагсаалт руу биш)", () => {
+    for (const counts of [{ properties: 0, approve: 2 }, { properties: 1, approve: 2 }, null]) {
+      expect(digestPushTarget(counts)).toEqual({ title: "Өнөөдрийн дутуу бүртгэл", url: "/agent/crm/staff/incomplete" });
+    }
   });
 
   it("digestPushAllowed: хувийн сонголт > оффисын матриц > анхдагч", () => {

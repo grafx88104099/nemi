@@ -4575,6 +4575,15 @@ export type Database = {
           prefilled: string[];
           /** Зөвхөн батлах RPC тавина; ноорог/илгээсэн төлөвт null. */
           approver_file_checked: boolean | null;
+          // 20261125000100: батлах алхамгүй — агент PMC тамгатай PDF-ээр бүртгэнэ (crm2_brokerage_register).
+          /** Бүртгэсэн агент (зөвхөн RPC тавина; хуучин батлагдсан гэрээнд null). */
+          registered_by: string | null;
+          registered_at: string | null;
+          /** «PMC-ийн тамга, гарын үсэгтэй» — агент бүртгэхдээ баталгаажуулсан. Шинэ дүрмээр шилжүүлсэн гэрээнд false. */
+          stamp_confirmed: boolean;
+          /** «Гэрээ буруу» (crm2_brokerage_invalidate) — гэрээ terminated, шалтгаан termination_reason-д. */
+          invalidated_by: string | null;
+          invalidated_at: string | null;
           created_by: string;
           created_at: string;
           updated_by: string | null;
@@ -4617,6 +4626,12 @@ export type Database = {
           prefilled?: string[];
           /** Клиент тавихгүй (guard: INSERT → null, UPDATE → хуучин утга). */
           approver_file_checked?: boolean | null;
+          /** registered_*, stamp_confirmed, invalidated_* — клиент тавихгүй (guard: INSERT → цэвэрлэнэ, UPDATE → хориглоно). */
+          registered_by?: string | null;
+          registered_at?: string | null;
+          stamp_confirmed?: boolean;
+          invalidated_by?: string | null;
+          invalidated_at?: string | null;
           created_by?: string;
           created_at?: string;
           updated_by?: string | null;
@@ -6257,7 +6272,10 @@ export type Database = {
       };
       // === crm2 (20261113000100_crm2_foundation): authenticated-д нээлттэй RPC/helper ===
       crm2_activity_editable: { Args: { p_deal: string; p_agent: string; p_created_by: string }; Returns: boolean };
-      /** jsonb Crm2BrokerageApproveResult. p_file_checked (20261124000500): require_file үед false бол татгалзана. */
+      /**
+       * 20261125000100-аас алдаа өгдөг хоосон функц (хуучин табын тайлбартай мессеж); дараагийн миграцаар устгана.
+       * submit/approve/reject/withdraw-ийг апп дуудахгүй — «Гэрээ бүртгэх» (crm2_brokerage_register).
+       */
       crm2_brokerage_approve: {
         Args: {
           p_contract: string;
@@ -6269,12 +6287,21 @@ export type Database = {
       };
       crm2_brokerage_approver: { Args: { p_responsible: string }; Returns: boolean };
       crm2_brokerage_discard: { Args: { p_contract: string; p_reason?: string | null }; Returns: undefined };
+      /** 20261125000100: «Гэрээ буруу» — jsonb Crm2BrokerageInvalidateResult. */
+      crm2_brokerage_invalidate: { Args: { p_contract: string; p_reason: string }; Returns: Json };
+      /** 20261125000100: ноорог → active (батлагчгүй), jsonb Crm2BrokerageRegisterResult. */
+      crm2_brokerage_register: {
+        Args: { p_contract: string; p_end_date?: string | null; p_stamp_confirmed?: boolean };
+        Returns: Json;
+      };
       crm2_brokerage_reject: { Args: { p_contract: string; p_note: string }; Returns: undefined };
       crm2_brokerage_renew: { Args: { p_contract: string }; Returns: string };
       crm2_brokerage_submit: { Args: { p_contract: string }; Returns: undefined };
       crm2_brokerage_terminate: { Args: { p_contract: string; p_reason: string }; Returns: string };
       crm2_brokerage_withdraw: { Args: { p_contract: string }; Returns: undefined };
       crm2_can_attach_brokerage: { Args: { p_contract: string }; Returns: boolean };
+      /** 20261125000100: батлагч (crm2_brokerage_approver) эсвэл агентын багийн ахлагч. */
+      crm2_can_invalidate_brokerage: { Args: { p_contract: string }; Returns: boolean };
       crm2_can_decide_request: { Args: { p_request: string }; Returns: boolean };
       crm2_can_detach_brokerage: { Args: { p_contract: string }; Returns: boolean };
       crm2_can_edit_brokerage_draft: { Args: { p_contract: string }; Returns: boolean };

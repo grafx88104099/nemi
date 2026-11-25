@@ -88,6 +88,7 @@ export function PropertyFieldSheet({
   focusField,
   onClose,
   onOpenSheet,
+  contractRegistered = false,
 }: {
   sheet: PropertyFormSheet;
   property: Property;
@@ -99,6 +100,8 @@ export function PropertyFieldSheet({
   focusField: string | null;
   onClose: () => void;
   onOpenSheet: (sheet: "contract") => void;
+  /** Бүртгэгдсэн (хүчинтэй) гэрээтэй, бүртгэх ноорог алга — гэрээний цонх зөвхөн харуулна. */
+  contractRegistered?: boolean;
 }) {
   const router = useRouter();
   const keys = SHEET_FORM_KEYS[sheet];
@@ -319,9 +322,13 @@ export function PropertyFieldSheet({
             />
             <div className="space-y-2 rounded-xl border border-line p-3">
               <p className="text-sm font-medium text-ink">Гэрээ байгуулсан агент</p>
-              <p className="text-sm text-muted">{contractName ?? "Сонгоогүй"} — зуучлалын гэрээний цонхонд баталгаажуулна.</p>
+              <p className="text-sm text-muted">
+                {contractRegistered
+                  ? `${contractName ?? "Сонгоогүй"} — бүртгэгдсэн гэрээгээр баталгаажсан.`
+                  : `${contractName ?? "Сонгоогүй"} — гэрээ бүртгэхэд баталгаажна (анхдагч: бүртгэсэн агент).`}
+              </p>
               <Button type="button" variant="outline" size="md" className="w-full sm:w-auto" onClick={() => onOpenSheet("contract")}>
-                Гэрээний цонх нээх
+                {contractRegistered ? "Гэрээ харах" : "Гэрээ бүртгэх цонх нээх"}
               </Button>
             </div>
           </>

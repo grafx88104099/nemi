@@ -1,7 +1,21 @@
 import { describe, expect, it } from "vitest";
 
 import { daysUntil, isIsoDate, isoToUbInput, taskBucket, ubInputToIso, ubToday } from "@/lib/crm2/datetime";
-import { HEIC_ERROR, docPath, fileExt, fileMime, mediaPath, validateDocFile, validateMediaFile } from "@/lib/crm2/files";
+import {
+  CONTRACT_PDF_ACCEPT,
+  CONTRACT_PDF_TYPES,
+  HEIC_ERROR,
+  contractPdfOnlyText,
+  contractPdfTooLargeText,
+  docPath,
+  fileExt,
+  fileMime,
+  isPdfHeader,
+  mediaPath,
+  validateContractPdf,
+  validateDocFile,
+  validateMediaFile,
+} from "@/lib/crm2/files";
 import { describeHistory, formatHistoryValue } from "@/lib/crm2/history";
 import { formatAmount, formatCommission, formatMoney, formatPrice } from "@/lib/crm2/money";
 import { crm2MenuItems, crm2Paths, panelBase, panelFromPathname } from "@/lib/crm2/paths";
@@ -65,6 +79,46 @@ describe("files", () => {
     expect(validateDocFile({ name: "a.pdf", type: "application/pdf", size: 21 * MB }, limits)).toMatch(/20 МБ/);
     expect(validateDocFile({ name: "a.docx", type: "application/msword", size: MB }, limits)).toMatch(/PDF/);
     expect(validateDocFile({ name: "a.pdf", type: "application/pdf", size: MB }, limits, 20)).toMatch(/20 хүртэл/);
+  });
+  it("өмчлөлийн/бусад баримт PDF эсвэл зураг (validateDocFile хэвээр)", () => {
+    expect(validateDocFile({ name: "gerchilgee.jpg", type: "image/jpeg", size: MB }, limits)).toBeNull();
+    expect(validateDocFile({ name: "gerchilgee.pdf", type: "application/pdf", size: MB }, limits)).toBeNull();
+  });
+  it("гэрээ (kind='contract') зөвхөн PDF — validateContractPdf", () => {
+    expect(CONTRACT_PDF_TYPES).toEqual(["application/pdf"]);
+    expect(CONTRACT_PDF_ACCEPT).toBe("application/pdf,.pdf");
+    expect(validateContractPdf({ name: "geree.pdf", type: "application/pdf", size: MB }, limits)).toBeNull();
+    // Хөтөч төрлийг хоосон / octet-stream өгвөл .pdf өргөтгөлөөр.
+    expect(validateContractPdf({ name: "geree.PDF", type: "", size: MB }, limits)).toBeNull();
+    expect(validateContractPdf({ name: "geree.pdf", type: "application/octet-stream", size: MB }, limits)).toBeNull();
+    for (const [name, type] of [
+      ["geree.jpg", "image/jpeg"],
+      ["geree.png", "image/png"],
+      ["geree.webp", "image/webp"],
+      ["IMG_1.HEIC", "image/heic"],
+      ["geree.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+      ["geree.jpg", ""],
+    ] as const) {
+      const err = validateContractPdf({ name, type, size: MB }, limits);
+      expect(err, name).toBe(contractPdfOnlyText(name));
+      expect(err, name).toContain("гэрээг зөвхөн PDF хэлбэрээр оруулна");
+      expect(err, name).toContain("Зураг гэрээ гэж тооцогдохгүй");
+    }
+    expect(validateContractPdf({ name: "geree.pdf", type: "application/pdf", size: 21 * MB }, limits)).toMatch(/20 МБ/);
+    expect(validateContractPdf({ name: "geree.pdf", type: "application/pdf", size: 0 }, limits)).toMatch(/хоосон/);
+    expect(contractPdfTooLargeText(23.4 * MB)).toBe("Гэрээ хэт том (23.4 МБ) — хуудсын тоог багасгана уу.");
+  });
+  it("isPdfHeader: эхний 5 байт «%PDF-»", () => {
+    const enc = (s: string) => new TextEncoder().encode(s);
+    expect(isPdfHeader(enc("%PDF-1.7\n"))).toBe(true);
+    expect(isPdfHeader(enc("%PDF-"))).toBe(true);
+    expect(isPdfHeader(enc("%PDF"))).toBe(false);
+    expect(isPdfHeader(enc("%pdf-1.4"))).toBe(false);
+    expect(isPdfHeader(new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00]))).toBe(false); // JPEG
+    expect(isPdfHeader(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d]))).toBe(false); // PNG
+    expect(isPdfHeader([0x25, 0x50, 0x44, 0x46, 0x2d])).toBe(true);
+    expect(isPdfHeader(null)).toBe(false);
+    expect(isPdfHeader(undefined)).toBe(false);
   });
   it("mime, өргөтгөл, зам", () => {
     expect(fileMime({ name: "x.MOV", type: "", size: 1 })).toBe("video/quicktime");

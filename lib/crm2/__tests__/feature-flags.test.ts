@@ -76,8 +76,12 @@ describe("UI_EVENTS", () => {
   it("DB-ийн event хэлбэр (^[a-z][a-z0-9_]{1,39}$), давхардалгүй", () => {
     for (const e of UI_EVENTS) expect(e).toMatch(/^[a-z][a-z0-9_]{1,39}$/);
     expect(new Set(UI_EVENTS).size).toBe(UI_EVENTS.length);
-    expect(UI_EVENTS).toHaveLength(36);
+    expect(UI_EVENTS).toHaveLength(38);
     expect(isUiEvent("quick_save")).toBe(true);
+    // 20261125000100: гэрээ бүртгэх / «Гэрээ буруу»; хуучин contract_submitted түүхэнд үлдэнэ.
+    expect(isUiEvent("contract_registered")).toBe(true);
+    expect(isUiEvent("contract_invalidated")).toBe(true);
+    expect(isUiEvent("contract_submitted")).toBe(true);
     expect(isUiEvent("owner_phone_typed")).toBe(false);
   });
 });

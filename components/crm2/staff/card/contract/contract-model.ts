@@ -1,82 +1,39 @@
-import { applyCommissionDefault, suspiciousCommission, type CommissionPrefill } from "@/lib/crm2/commission-defaults";
 import {
-  contractSubmitMissing,
+  activationMissing,
+  autoActivates,
+  brokerageEndDateError,
+  buildChecklist,
+  contractRegisterMissing,
+  countContractFiles,
   isUnconfirmableKey,
   type ChecklistContract,
   type ChecklistInput,
+  type ChecklistTarget,
+  type ContractFileCounts,
   type UnconfirmableKey,
 } from "@/lib/crm2/checklist";
-import { formatPhone, isFullPhone, normalizePhone } from "@/lib/crm2/phone";
 
 /**
- * Гэрээний доод цонхны (ContractSheet) цэвэр загвар — клиент, сервер, тест.
+ * «Гэрээ бүртгэх» доод цонхны (ContractSheet) цэвэр загвар — клиент, сервер, тест.
  *
- * Алхам 1 «Гэрээний ноорог үүсгэх»: дугаар, огноо, шимтгэл, онцгой нөхцөл, гарын үсэг зурагч,
- * гэрээ байгуулсан ба хариуцсан агент. Алхам 2 «Батлуулахаар илгээх»: файл, илгээх.
- * Оффисын анхдагчаар бөглөсөн утга prefilled[]-д байна (шар) — «Зөв» эсвэл засахад хасагдана.
- * Эцсийн шалгалт DB дээр (crm2_brokerage_missing); энд зөвхөн урьдчилан харуулна.
+ * Гэрээ = PMC-ийн тамга, гарын үсэгтэй НЭГ PDF (20261125000100, батлах алхамгүй). Агент PDF-ээ
+ * хавсаргаж (скан → нэг PDF, эсвэл PDF файл), дуусах огноог шалгаж, «PMC-ийн тамга, гарын үсэгтэй»-г
+ * тэмдэглээд «Бүртгэх» дарна. Дугаарыг (B###) DB олгоно, эхлэх огноо = бүртгэсэн өдөр.
+ * Эцсийн шалгалт DB дээр (crm2_brokerage_register → crm2_brokerage_missing); энд зөвхөн урьдчилан харуулна.
  */
 
-export const CONTRACT_PREFILL_KEYS = ["number", "start_date", "end_date", "commission"] as const;
-export type ContractPrefillKey = (typeof CONTRACT_PREFILL_KEYS)[number];
-
-export type ContractCommissionType = "percent" | "fixed";
+export type { ContractFileCounts };
 
 export type ContractForm = {
-  /** Цаасан гэрээний дугаар (autoNumber бол хоосон — DB B### олгоно). */
-  number: string;
-  /** «Систем дугаар өгөх». */
-  autoNumber: boolean;
-  start_date: string;
+  /** Дуусах огноо (YYYY-MM-DD) — заавал; анхдагч нь өнөөдөр + brokerage.default_term_months − 1 хоног. */
   end_date: string;
-  commission_type: ContractCommissionType | "";
-  commission_value: string;
-  commission_currency: "MNT" | "USD";
-  commission_note: string;
-  terms: string;
-  no_special_terms: boolean;
-  signer_differs: boolean;
-  /** Гарын үсэг зурагчийн холбоо/эрх (жишээ: итгэмжлэлээр). */
-  signer_relation: string;
-  responsible_agent_id: string;
-  /** crm2_properties.contract_agent_id — хадгалахад баталгаажна. */
-  contract_agent_id: string;
-  prefilled: ContractPrefillKey[];
-};
-
-/** Гарын үсэг зурагчийн утас/нэр (vault-д битүүмжилнэ; signer_note-ийн сүүлийн мөрөнд хадгалагдана). */
-export type SignerContact = { name: string; phone: string };
-
-export type ContractRowLike = {
-  number: string;
-  start_date: string | null;
-  end_date: string | null;
-  commission_type: ContractCommissionType | null;
-  commission_value: number | null;
-  commission_currency: string | null;
-  commission_note: string | null;
-  terms: string | null;
-  no_special_terms: boolean | null;
-  signer_differs: boolean | null;
-  signer_note: string | null;
-  responsible_agent_id: string | null;
-  prefilled: readonly string[] | null;
+  /** «PMC-ийн тамга, гарын үсэгтэй» (одоогийн PDF-д). */
+  stamp_confirmed: boolean;
 };
 
 export type ContractPropertyLike = {
-  category: string | null;
-  price_total: number | null;
-  currency: string | null;
-  price_period: string | null;
-  price_basis: string | null;
   contract_agent_id: string | null;
-  listing_agent_id: string | null;
   unconfirmed: readonly string[] | null;
-};
-
-export type ContractSettingsLike = {
-  "brokerage.default_term_months": number;
-  "brokerage.default_commission"?: Partial<Record<string, string>> | null;
 };
 
 // ── Огноо ──────────────────────────────────────────────────────────────────
@@ -99,424 +56,215 @@ export function termEndDate(start: string, months: number): string | null {
   return end.toISOString().slice(0, 10);
 }
 
-// ── Гарын үсэг зурагч (signer_note) ───────────────────────────────────────
-
-export const SIGNER_NOTE_MAX = 500;
-export const SIGNER_LINE_PREFIX = "Гарын үсэг зурагч: ";
-
-/** Холбоо/эрх + (сонголтоор) зурагчийн нэр, утас → signer_note (≤ 500). */
-export function composeSignerNote(relation: string, signer: SignerContact | null): string | null {
-  const rel = relation.replace(/\s+$/g, "").trim();
-  const parts: string[] = [];
-  const name = signer?.name.trim() ?? "";
-  const phone = signer && isFullPhone(signer.phone) ? formatPhone(normalizePhone(signer.phone)) : "";
-  if (name) parts.push(name);
-  if (phone) parts.push(phone);
-  const line = parts.length ? `${SIGNER_LINE_PREFIX}${parts.join(" · ")}` : "";
-  if (!rel && !line) return null;
-  if (!line) return rel.slice(0, SIGNER_NOTE_MAX);
-  const room = SIGNER_NOTE_MAX - line.length - 1;
-  const relCut = room > 0 ? rel.slice(0, room).trim() : "";
-  return (relCut ? `${relCut}\n${line}` : line).slice(0, SIGNER_NOTE_MAX);
-}
-
-/** signer_note → холбоо/эрх ба зурагч (composeSignerNote-ийн урвуу). */
-export function parseSignerNote(note: string | null | undefined): { relation: string; signer: SignerContact | null } {
-  const text = (note ?? "").trim();
-  if (!text) return { relation: "", signer: null };
-  const lines = text.split("\n");
-  const last = lines[lines.length - 1] ?? "";
-  if (!last.startsWith(SIGNER_LINE_PREFIX)) return { relation: text, signer: null };
-  const rest = last.slice(SIGNER_LINE_PREFIX.length).split(" · ").map((s) => s.trim());
-  let name = "";
-  let phone = "";
-  for (const p of rest) {
-    if (!phone && isFullPhone(p) && /^[+\d\s-]+$/.test(p)) phone = p.replace(/\D/g, "");
-    else if (!name) name = p;
+/** Дуусах огнооны түргэн сонголт (сар): 6, 12, 24 ба оффисын анхдагч хугацаа — өсөхөөр, давхардалгүй, 60 сар хүртэл. */
+export function endDateChips(termMonths: number): number[] {
+  const out: number[] = [];
+  for (const m of [6, 12, 24, Math.round(termMonths)]) {
+    if (Number.isFinite(m) && m >= 1 && m <= 60 && !out.includes(m)) out.push(m);
   }
-  return { relation: lines.slice(0, -1).join("\n").trim(), signer: name || phone ? { name, phone } : null };
+  return out.sort((a, b) => a - b);
 }
 
 // ── Анхны төлөв ───────────────────────────────────────────────────────────
 
-function prefilledOf(list: readonly string[] | null | undefined): ContractPrefillKey[] {
-  const allowed = new Set<string>(CONTRACT_PREFILL_KEYS);
-  return CONTRACT_PREFILL_KEYS.filter((k) => (list ?? []).includes(k) && allowed.has(k));
-}
-
-function numText(v: number | null | undefined): string {
-  return v == null || !Number.isFinite(v) ? "" : String(v);
-}
-
-/** Үнийн суурь (applyCommissionDefault-д). */
-export function priceBasisOf(p: ContractPropertyLike) {
-  return { price_total: p.price_total, currency: p.currency, price_period: p.price_period, price_basis: p.price_basis };
-}
-
 /**
- * Шинэ ноорог: эхлэх = өнөөдөр, дуусах = +default_term_months, шимтгэл = оффисын анхдагч (MNT сарын
- * түрээсэд rent_x). Бөглөсөн бүхэн prefilled[]. Байгаа ноорог: мөрийн утга, prefilled хэвээр.
+ * Маягтын анхны утга: ноорогт маргаашаас хойшхи дуусах огноо байвал түүнийг, эс бөгөөс
+ * өнөөдөр + termMonths − 1 хоног. Тамганы тэмдэглэгээ үргэлж хоосон (PDF бүрт дахин тэмдэглэнэ).
  */
 export function initialContractForm(opts: {
-  contract: ContractRowLike | null;
-  property: ContractPropertyLike;
-  settings: ContractSettingsLike;
+  contract: { end_date: string | null } | null;
   today: string;
-  meId: string;
+  termMonths: number;
 }): ContractForm {
-  const { contract: c, property: p, settings, today, meId } = opts;
-  const contractAgent = p.contract_agent_id ?? meId;
-  if (c) {
-    const signer = parseSignerNote(c.signer_note);
-    return {
-      number: c.number ?? "",
-      autoNumber: false,
-      start_date: c.start_date ?? "",
-      end_date: c.end_date ?? "",
-      commission_type: c.commission_type ?? "",
-      commission_value: numText(c.commission_value),
-      commission_currency: c.commission_currency === "USD" ? "USD" : "MNT",
-      commission_note: c.commission_note ?? "",
-      terms: c.terms ?? "",
-      no_special_terms: !!c.no_special_terms,
-      signer_differs: !!c.signer_differs,
-      signer_relation: signer.relation,
-      responsible_agent_id: c.responsible_agent_id ?? contractAgent,
-      contract_agent_id: contractAgent,
-      prefilled: prefilledOf(c.prefilled),
-    };
-  }
-  const prefilled: ContractPrefillKey[] = ["start_date"];
-  const end = termEndDate(today, settings["brokerage.default_term_months"]);
-  if (end) prefilled.push("end_date");
-  const commission: CommissionPrefill | null = applyCommissionDefault(p.category, priceBasisOf(p), {
-    "brokerage.default_commission": settings["brokerage.default_commission"] ?? null,
-  });
-  if (commission) prefilled.push("commission");
-  return {
-    number: "",
-    autoNumber: false,
-    start_date: today,
-    end_date: end ?? "",
-    commission_type: commission?.commission_type ?? "",
-    commission_value: commission ? String(commission.commission_value) : "",
-    commission_currency: "MNT",
-    commission_note: commission?.commission_note ?? "",
-    terms: "",
-    no_special_terms: false,
-    signer_differs: false,
-    signer_relation: "",
-    responsible_agent_id: contractAgent,
-    contract_agent_id: contractAgent,
-    prefilled: CONTRACT_PREFILL_KEYS.filter((k) => prefilled.includes(k)),
-  };
-}
-
-// ── Засвар ─────────────────────────────────────────────────────────────────
-
-const PREFILL_OF_FIELD: Partial<Record<keyof ContractForm, ContractPrefillKey>> = {
-  number: "number",
-  autoNumber: "number",
-  start_date: "start_date",
-  end_date: "end_date",
-  commission_type: "commission",
-  commission_value: "commission",
-  commission_currency: "commission",
-  commission_note: "commission",
-};
-
-/** Талбар засах — агент өөрөө оруулсан утга тул холбогдох prefilled хасагдана. */
-export function editContractField<K extends keyof ContractForm>(form: ContractForm, key: K, value: ContractForm[K]): ContractForm {
-  const next = { ...form, [key]: value };
-  const pk = PREFILL_OF_FIELD[key];
-  if (pk && form[key] !== value) next.prefilled = form.prefilled.filter((k) => k !== pk);
-  return next;
-}
-
-/** «Зөв» — анхдагч утгыг хэвээр нь баталгаажуулна. */
-export function confirmPrefilled(form: ContractForm, key: ContractPrefillKey): ContractForm {
-  return { ...form, prefilled: form.prefilled.filter((k) => k !== key) };
-}
-
-export function isPrefilled(form: ContractForm, key: ContractPrefillKey): boolean {
-  return form.prefilled.includes(key);
-}
-
-/** Дугаарыг цаасан/системийн хооронд солих. */
-export function setAutoNumber(form: ContractForm, auto: boolean): ContractForm {
-  return { ...editContractField(form, "autoNumber", auto), number: auto ? "" : form.number };
-}
-
-/** Шимтгэлийг оффисын анхдагчаар дахин бөглөх (prefilled 'commission'). */
-export function applyCommission(form: ContractForm, prefill: CommissionPrefill): ContractForm {
-  return {
-    ...form,
-    commission_type: prefill.commission_type,
-    commission_value: String(prefill.commission_value),
-    commission_currency: "MNT",
-    commission_note: prefill.commission_note ?? "",
-    prefilled: form.prefilled.includes("commission") ? form.prefilled : [...form.prefilled, "commission"],
-  };
-}
-
-const RENT_X_NOTE = /^сарын түрээсийн ([\d.]+) дахин$/;
-
-/**
- * Үнэ өөрчлөгдсөн бол «сарын түрээсийн N дахин»-ээр тооцсон шимтгэлийг шинэ үнээр дахин тооцох санал.
- * Тооцоо зөрөхгүй, эсвэл тэр аргаар бөглөөгүй бол null.
- */
-export function commissionRecalc(
-  form: ContractForm,
-  property: ContractPropertyLike,
-  settings: ContractSettingsLike
-): CommissionPrefill | null {
-  if (form.commission_type !== "fixed" || !RENT_X_NOTE.test(form.commission_note.trim())) return null;
-  const now = applyCommissionDefault(property.category, priceBasisOf(property), {
-    "brokerage.default_commission": settings["brokerage.default_commission"] ?? null,
-  });
-  if (!now || now.commission_note !== form.commission_note.trim()) return null;
-  const current = Number(form.commission_value.replace(/[\s,]/g, ""));
-  return Number.isFinite(current) && current === now.commission_value ? null : now;
-}
-
-/** Тоон текст → тоо (хоосон/буруу бол null). '2,5' → 2.5, '1 500 000' → 1500000. */
-export function parseAmount(text: string): number | null {
-  const s = text.trim().replace(/\s+/g, "");
-  if (!s) return null;
-  const normalized = /^\d+,\d{1,2}$/.test(s) ? s.replace(",", ".") : s.replace(/,/g, "");
-  const n = Number(normalized);
-  return Number.isFinite(n) ? n : null;
+  const { contract: c, today, termMonths } = opts;
+  const end = c?.end_date && c.end_date > today ? c.end_date : (termEndDate(today, termMonths) ?? "");
+  return { end_date: end, stamp_confirmed: false };
 }
 
 // ── Шалгалт ────────────────────────────────────────────────────────────────
 
-export type ContractFieldErrors = Partial<Record<"number" | "end_date" | "commission_value" | "signer_note", string>>;
+export type ContractFieldErrors = Partial<Record<"end_date" | "stamp_confirmed", string>>;
 
-/** Хадгалахаас өмнөх хатуу алдаа (ноорогт ч зөвшөөрөхгүй). */
-export function contractFormErrors(form: ContractForm, opts: { isNew: boolean }): ContractFieldErrors {
+export const STAMP_REQUIRED_TEXT = "PMC-ийн тамга, гарын үсэгтэйг баталгаажуулна уу.";
+
+/** Бүртгэхийн өмнөх хатуу алдаа: дуусах огноо (өнөөдрөөс 5 жилийн дотор) ба тамганы тэмдэглэгээ. */
+export function contractFormErrors(form: ContractForm, today: string): ContractFieldErrors {
   const e: ContractFieldErrors = {};
-  if (opts.isNew && !form.autoNumber && !form.number.trim()) {
-    e.number = "Цаасан гэрээний дугаар оруулах эсвэл «Систем дугаар өгөх»-ийг сонгоно уу";
-  }
-  if (form.start_date && form.end_date && form.end_date < form.start_date) {
-    e.end_date = "Дуусах огноо эхлэх огнооноос өмнө байж болохгүй";
-  }
-  const v = parseAmount(form.commission_value);
-  if (form.commission_value.trim() && v === null) e.commission_value = "Шимтгэлийг тоогоор оруулна уу";
-  else if (v !== null && v < 0) e.commission_value = "Шимтгэл сөрөг байж болохгүй";
-  else if (v !== null && form.commission_type === "percent" && v > 100) e.commission_value = "Хувь 100-аас ихгүй";
-  if (form.signer_differs && !form.signer_relation.trim()) {
-    e.signer_note = "Гарын үсэг зурагчийн холбоо, эрхийг бичнэ үү (жишээ: итгэмжлэлээр)";
-  }
+  const end = brokerageEndDateError(form.end_date, today);
+  if (end) e.end_date = end;
+  if (!form.stamp_confirmed) e.stamp_confirmed = STAMP_REQUIRED_TEXT;
   return e;
 }
 
-/** Сэжигтэй шимтгэлийн сануулга (хадгалахыг хориглохгүй). */
-export function commissionWarning(form: ContractForm, category: string | null): string | null {
-  return suspiciousCommission(form.commission_type || null, parseAmount(form.commission_value), category);
+// ── Файл ───────────────────────────────────────────────────────────────────
+
+type FileLike = { id?: string; kind: string | null; mime_type?: string | null };
+
+/** Гэрээний файлын тоо: PDF гэрээ, PDF биш гэрээ (хуучин зураг), өмчлөл, бусад. */
+export function fileCounts(files: readonly FileLike[] | null | undefined): ContractFileCounts {
+  return countContractFiles(files);
 }
 
-// ── Хадгалах payload ───────────────────────────────────────────────────────
+const isContractKind = (f: FileLike) => (f.kind ?? "contract") === "contract";
+const isPdf = (f: FileLike) => (f.mime_type ?? "").toLowerCase() === "application/pdf";
 
-export type ContractDraftFields = {
-  number: string;
-  owner_contact_id: string | null;
-  start_date: string;
-  end_date: string;
-  terms: string;
-  commission_type: ContractCommissionType | "";
-  commission_value: number | null;
-  commission_currency?: "MNT" | "USD";
-  commission_note: string;
-  responsible_agent_id: string;
-  no_special_terms: boolean;
-  signer_differs: boolean;
-  signer_note: string | null;
-  prefilled: ContractPrefillKey[];
-};
-
-/** createBrokerageDraft / updateBrokerageDraft-ийн талбарууд. */
-export function contractDraftFields(
-  form: ContractForm,
-  opts: { ownerContactId: string | null; signer: SignerContact | null }
-): ContractDraftFields {
-  return {
-    number: form.autoNumber ? "" : form.number.trim(),
-    owner_contact_id: opts.ownerContactId,
-    start_date: form.start_date,
-    end_date: form.end_date,
-    terms: form.terms,
-    commission_type: form.commission_type,
-    commission_value: parseAmount(form.commission_value),
-    commission_currency: form.commission_type === "fixed" ? form.commission_currency : undefined,
-    commission_note: form.commission_note,
-    responsible_agent_id: form.responsible_agent_id,
-    no_special_terms: form.no_special_terms,
-    signer_differs: form.signer_differs,
-    signer_note: form.signer_differs ? composeSignerNote(form.signer_relation, opts.signer) : null,
-    prefilled: [...form.prefilled],
-  };
+/** Гэрээний PDF (DB нэгээс олныг зөвшөөрөхгүй) — байхгүй бол null. */
+export function contractPdf<T extends FileLike>(files: readonly T[] | null | undefined): T | null {
+  return (files ?? []).find((f) => isContractKind(f) && isPdf(f)) ?? null;
 }
+
+/** Хуучин урсгалын гэрээний зураг (kind='contract', PDF биш) — устгатал бүртгэхгүй ('file_not_pdf'). */
+export function legacyContractImages<T extends FileLike>(files: readonly T[] | null | undefined): T[] {
+  return (files ?? []).filter((f) => isContractKind(f) && !isPdf(f));
+}
+
+/** Нэмэлт баримт (өмчлөл, иргэний үнэмлэх, бусад). */
+export function extraDocs<T extends FileLike>(files: readonly T[] | null | undefined): T[] {
+  return (files ?? []).filter((f) => !isContractKind(f));
+}
+
+// ── Гэрээ байгуулсан агент ─────────────────────────────────────────────────
 
 /**
- * Хадгалаагүй өөрчлөлт байгаа эсэх (хадгалах payload-оор харьцуулна — «1 500 000» ба 1500000 ижил).
- * Гэрээ байгуулсан агент баталгаажаагүй бол хадгалах хэрэгтэй гэж үзнэ.
+ * Агент гэрээ байгуулсан агентыг гараар сольсон бол хөрөнгөд бичих patch (баталгаажуулалттай);
+ * солиогүй бол null — бүртгэх RPC өөрөө бөглөж/баталгаажуулна.
  */
-export function contractDirty(
-  form: ContractForm,
-  baseline: ContractForm,
-  signer: SignerContact | null,
-  baselineSigner: SignerContact | null,
-  agent: { property: Pick<ContractPropertyLike, "contract_agent_id" | "unconfirmed">; canEdit: boolean }
-): boolean {
-  const a = contractDraftFields(form, { ownerContactId: null, signer });
-  const b = contractDraftFields(baseline, { ownerContactId: null, signer: baselineSigner });
-  if (JSON.stringify(a) !== JSON.stringify(b)) return true;
-  if (form.responsible_agent_id !== baseline.responsible_agent_id) return true;
-  return agent.canEdit && contractAgentPatch(form, agent.property) !== null;
-}
-
-/** Гэрээ байгуулсан агентыг хөрөнгөд бичих хэрэгтэй эсэх (солигдсон эсвэл баталгаажаагүй). */
 export function contractAgentPatch(
-  form: ContractForm,
-  property: Pick<ContractPropertyLike, "contract_agent_id" | "unconfirmed">
+  agentId: string | null | undefined,
+  property: ContractPropertyLike
 ): { contract_agent_id: string; unconfirmed?: UnconfirmableKey[] } | null {
-  const id = form.contract_agent_id;
-  if (!id) return null;
+  if (!agentId || agentId === property.contract_agent_id) return null;
   const unconfirmed = property.unconfirmed ?? [];
-  const pending = unconfirmed.includes("contract_agent_id");
-  if (id === property.contract_agent_id && !pending) return null;
-  if (!pending) return { contract_agent_id: id };
-  return { contract_agent_id: id, unconfirmed: unconfirmed.filter((k): k is UnconfirmableKey => k !== "contract_agent_id" && isUnconfirmableKey(k)) };
+  if (!unconfirmed.includes("contract_agent_id")) return { contract_agent_id: agentId };
+  return {
+    contract_agent_id: agentId,
+    unconfirmed: unconfirmed.filter((k): k is UnconfirmableKey => k !== "contract_agent_id" && isUnconfirmableKey(k)),
+  };
 }
 
 // ── Дутуу зүйлс ────────────────────────────────────────────────────────────
 
-/** Алхам 1-д (маягт дээр) засах зүйлс. */
-export const STEP1_MISSING = new Set([
-  "start_date",
-  "end_date",
-  "end_date_past",
-  "commission",
-  "owner",
-  "owner_name",
-  "owner_source",
-  "special_terms",
-  "signer_authority",
-  "defaults_unconfirmed",
-  "role_unconfirmed",
-]);
-
-/** Алхам 2-т (файл) засах зүйлс. */
-export const STEP2_MISSING = new Set(["file", "ownership_doc"]);
-
-export type ContractFileCounts = { contract: number; ownership: number; other: number };
-
-export function fileCounts(files: readonly { kind: string | null }[] | null | undefined): ContractFileCounts {
-  const out: ContractFileCounts = { contract: 0, ownership: 0, other: 0 };
-  for (const f of files ?? []) {
-    const k = f.kind ?? "contract";
-    if (k === "contract") out.contract++;
-    else if (k === "ownership") out.ownership++;
-    else out.other++;
-  }
-  return out;
-}
-
 /**
- * Илгээхэд дутуу (contractSubmitMissing + UI-ийн 'owner_source'). Маягтын хадгалаагүй утгыг тусгана:
- * хадгалахад гэрээ байгуулсан агент баталгаажна. 'file'-ийг «гэрээ оффист үлдсэн» ХЭЗЭЭ Ч хангахгүй.
+ * Бүртгэхэд дутуу: contractRegisterMissing (≙ crm2_brokerage_missing, DB-ийн дарааллаар) + тамганы
+ * тэмдэглэгээгүй бол 'stamp_unconfirmed' (RPC-тэй адил төгсгөлд). Маягтын хадгалаагүй дуусах огноог тусгана.
  */
 export function contractMissing(
   input: ChecklistInput,
   form: ContractForm,
   opts: {
     status: ChecklistContract["status"];
+    /** Гэрээний бодит эзэн (≙ coalesce(гэрээний эзэн, хөрөнгийн эзэн)) — effectiveContractOwner(). */
     owner: { id: string; nameUnverified: boolean; source: string | null } | null | "hidden";
     files: ContractFileCounts;
-    fileAtOffice: boolean;
-    signerNote: string | null;
-    /** Хадгалахад гэрээ байгуулсан агентыг хөрөнгөд бичих эрхтэй (хөрөнгө засах эрх). */
-    confirmsAgent?: boolean;
+    /**
+     * false — өмчлөлийн баримт (restricted) харах эрхгүй: RLS файлыг нуудаг тул тоо нь мэдэгдэхгүй, DB
+     * (crm2_brokerage_missing) өөрөө шалгана — 'ownership_doc'-ийг дутуу гэж үзэхгүй.
+     */
+    ownershipKnown?: boolean;
   }
 ): string[] {
   const o = opts.owner;
   const owner = o && o !== "hidden" ? o : null;
   const contract: ChecklistContract = {
     status: opts.status,
-    start_date: form.start_date || null,
+    start_date: null,
     end_date: form.end_date || null,
-    commission_type: form.commission_type || null,
-    commission_value: parseAmount(form.commission_value),
-    owner_contact_id: owner?.id ?? (o === "hidden" ? "hidden" : null),
+    approved_at: null,
+    registered_at: null,
+    stamp_confirmed: form.stamp_confirmed,
+    owner_contact_id: owner?.id ?? null,
     ownerNameUnverified: owner?.nameUnverified ?? false,
     ownerSource: owner?.source ?? null,
-    terms: form.terms,
-    no_special_terms: form.no_special_terms,
-    signer_differs: form.signer_differs,
-    signer_note: form.signer_differs ? opts.signerNote : null,
-    prefilled: form.prefilled,
-    fileCount: opts.files.contract,
-    ownershipFileCount: opts.files.ownership,
-    otherFileCount: opts.files.other,
-    file_at_office: opts.fileAtOffice,
+    pdfCount: opts.files.pdf,
+    nonPdfContractCount: opts.files.nonPdf,
+    ownershipFileCount: opts.ownershipKnown === false ? null : opts.files.ownership,
   };
-  const confirms = opts.confirmsAgent ?? true;
-  const property = confirms
-    ? {
-        ...input.property,
-        contract_agent_id: form.contract_agent_id || null,
-        unconfirmed: (input.property.unconfirmed ?? []).filter((k) => k !== "contract_agent_id"),
-      }
-    : input.property;
-  const out = contractSubmitMissing({ ...input, property, contract });
-  // Эх сурвалж гэрээ илгээхэд заавал (DB нь «Бүртгэл» бүлэгт шаарддаг; энд UI түвшинд).
-  if (opts.status === "draft" && owner && !owner.source && !out.includes("owner_source")) {
-    const at = out.indexOf("owner_name");
-    out.splice(at >= 0 ? at + 1 : out.length, 0, "owner_source");
-  }
+  const out = contractRegisterMissing({ ...input, owner: o, contract });
+  // Цонхонд огноог хоосолсон (анхдагч нь үргэлж бөглөгдсөн) — DB-ийн дарааллаар эхэнд.
+  if (!form.end_date) out.unshift("end_date");
+  if (!form.stamp_confirmed) out.push("stamp_unconfirmed");
   return out;
 }
 
-// ── Батлах / идэвхжүүлэх ───────────────────────────────────────────────────
+/**
+ * Гэрээний бодит эзэн (≙ crm2_brokerage_missing: coalesce(гэрээний эзэн, хөрөнгийн эзэн)). Сунгалтын
+ * ноорог өмнөх гэрээний эзнийг өвлөнө — хөрөнгийн одоогийн эзнээс өөр байж болно. Гэрээнд эзэн бичигдсэн
+ * боловч RLS-ээр харагдахгүй бол 'hidden' (DB өөрөө шалгана).
+ */
+export function effectiveContractOwner<O extends { id: string }>(
+  propertyOwner: O | null | "hidden",
+  contract: { owner_contact_id: string | null; owner: O | null } | null
+): { owner: O | null | "hidden"; fromContract: boolean } {
+  if (!contract?.owner_contact_id) return { owner: propertyOwner, fromContract: false };
+  const own = contract.owner && contract.owner.id === contract.owner_contact_id ? contract.owner : null;
+  return { owner: own ?? "hidden", fromContract: true };
+}
 
-export type ActivationPanelState =
-  | { kind: "hidden" }
-  | { kind: "scheduled" }
-  | { kind: "ready" }
-  | { kind: "auto" }
-  | { kind: "blocked"; missing: string[] };
+export type PropertyGap = { key: string; label: string; target: ChecklistTarget };
 
 /**
- * Батлагдсан гэрээтэй ноорог хөрөнгийн идэвхжүүлэлт: manual горимд «Идэвхжүүлэх», дутуу бол жагсаалт.
- * activate_on_start (эхлэх өдөр нь автоматаар) бол «scheduled».
+ * crm2_brokerage_register-ийн бөглөх дүрэм: хоосон «гэрээ байгуулсан агент»-ыг бүртгэгчээр (би) бөглөх
+ * эсэх — бүртгэгч оффисын идэвхтэй ажилтан, мөн «нэг агент олон үүрэг» зөвшөөрөгдсөн эсвэл бүртгэгч
+ * листлэгч/зурагчин биш. Бөглөхгүй бол хоосон үлдэж хөрөнгө идэвхжихэд дутуу болно.
+ */
+export function registrantFillsContractAgent(
+  property: { contract_agent_id: string | null; listing_agent_id: string | null; photo_agent_id: string | null },
+  me: { id: string; isStaff: boolean },
+  sameAgentMultiRole: boolean
+): boolean {
+  if (property.contract_agent_id || !me.isStaff) return false;
+  return sameAgentMultiRole || (me.id !== property.listing_agent_id && me.id !== property.photo_agent_id);
+}
+
+/**
+ * Хөрөнгө идэвхжихэд дутуу (crm2_property_missing − гэрээ). Бүртгэлийг саатуулахгүй — нөхмөгц DB
+ * автоматаар идэвхжүүлнэ.
+ *   registering (анхдагч) — ноорог бүртгэхийн өмнө: agentId = бүртгэхэд тавигдах гэрээ байгуулсан агент
+ *     (сонгосон, одоогийн, эсвэл registrantFillsContractAgent бол би; null = хоосон үлдэнэ), бүртгэл
+ *     түүнийг баталгаажуулна (unconfirmed-ээс хасна).
+ *   registering = false — бүртгэгдсэн гэрээ: хөрөнгийн бодит утга (орлуулахгүй).
+ */
+export function propertyGaps(input: ChecklistInput, agentId: string | null, opts: { registering?: boolean } = {}): PropertyGap[] {
+  const registering = opts.registering ?? true;
+  const property = registering
+    ? {
+        ...input.property,
+        contract_agent_id: agentId ?? input.property.contract_agent_id,
+        unconfirmed: (input.property.unconfirmed ?? []).filter((k) => k !== "contract_agent_id"),
+      }
+    : input.property;
+  const next: ChecklistInput = { ...input, property };
+  const keys = activationMissing(next).filter((k) => k !== "brokerage_contract");
+  if (!keys.length) return [];
+  const items = new Map(buildChecklist(next).groups.flatMap((g) => g.items.map((i) => [i.key, i] as const)));
+  return keys.map((key) => {
+    const item = items.get(key);
+    return { key, label: item?.label ?? key, target: item?.target ?? { sheet: "checklist", field: null } };
+  });
+}
+
+// ── Хөрөнгийн идэвхжүүлэлт ─────────────────────────────────────────────────
+
+export type ActivationPanelState = { kind: "hidden" } | { kind: "ready" } | { kind: "blocked"; missing: string[] };
+
+/**
+ * Бүртгэгдсэн (хүчинтэй) гэрээтэй ноорог хөрөнгө (эсвэл сунгалт бүртгэгдсэн «гэрээ дууссан» — autoActivates):
+ * дутуу бол жагсаалт (нөхмөгц DB автоматаар идэвхжүүлнэ); бүрэн боловч идэвхжээгүй (ховор — автомат
+ * идэвхжүүлэлт гацсан) бол «Идэвхжүүлэх».
  */
 export function activationPanelState(opts: {
-  propertyStatus: string;
+  propertyStatus: ChecklistInput["property"]["status"];
   hasActiveContract: boolean;
-  activateOnStart: boolean;
-  mode: "auto" | "manual";
   check: { ok: boolean; missing: readonly string[] } | null;
+  /** Хөрөнгийн status_changed_at ба хүчинтэй гэрээний registered_at («гэрээ дууссан» хөрөнгөд). */
+  statusChangedAt?: string | null;
+  activeRegisteredAt?: string | null;
 }): ActivationPanelState {
-  if (opts.propertyStatus !== "draft" || !opts.hasActiveContract) return { kind: "hidden" };
-  if (opts.activateOnStart) return { kind: "scheduled" };
-  if (!opts.check) return { kind: "hidden" };
+  const auto = autoActivates(
+    { status: opts.propertyStatus, status_changed_at: opts.statusChangedAt },
+    opts.hasActiveContract ? { status: "active", registered_at: opts.activeRegisteredAt ?? null } : null
+  );
+  if (!auto || !opts.check) return { kind: "hidden" };
   if (!opts.check.ok) return { kind: "blocked", missing: [...opts.check.missing] };
-  return opts.mode === "manual" ? { kind: "ready" } : { kind: "auto" };
-}
-
-/** Батлахад файлтай тулгасныг заавал асуух эсэх. */
-export function needsFileCheck(requireFile: boolean): boolean {
-  return requireFile;
-}
-
-/** Батлах RPC-ийн file_checked аргумент (асуухгүй үед undefined — хуучин функцтэй таарна). */
-export function approveFileArg(requireFile: boolean, checked: boolean): boolean | undefined {
-  return requireFile ? checked : undefined;
-}
-
-/** Алхам: гэрээгүй эсвэл алхам 1-ийн дутуутай бол 1, эс бөгөөс 2. */
-export function initialStep(hasContract: boolean, missing: readonly string[]): 1 | 2 {
-  if (!hasContract) return 1;
-  return missing.some((m) => STEP1_MISSING.has(m)) ? 1 : 2;
+  return { kind: "ready" };
 }

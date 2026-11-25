@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { buildPdfFromJpegs, fitOnA4, readJpegInfo, splitBySize, type JpegPage } from "@/lib/crm2/device/jpeg-pdf";
+import {
+  SINGLE_PDF_QUALITY_STEPS,
+  buildPdfFromJpegs,
+  buildSinglePdf,
+  fitOnA4,
+  readJpegInfo,
+  splitBySize,
+  type JpegPage,
+} from "@/lib/crm2/device/jpeg-pdf";
+import { isPdfHeader } from "@/lib/crm2/files";
 
 /** Хамгийн жижиг «JPEG»: SOI + SOF0 (w×h, 3 суваг) + дүүргэлт + EOI. */
 function fakeJpeg(w: number, h: number, pad = 100, components = 3): Uint8Array {
@@ -107,5 +116,54 @@ describe("splitBySize", () => {
     expect(r.pdfs).toHaveLength(2);
     expect(r.pageGroups).toEqual([[0], [1]]);
     for (const p of r.pdfs) expect(latin1(p)).toContain("/Count 1");
+  });
+});
+
+describe("buildSinglePdf (гэрээ = НЭГ PDF, хэзээ ч хуваахгүй)", () => {
+  const big = (pad: number) => ({ bytes: fakeJpeg(1000, 1400, pad) });
+  /** Хуурамч дахин кодлол: чанартай пропорциональ байт (анхны хуудаснаас). */
+  const reencode = async (p: JpegPage, q: number): Promise<JpegPage> => {
+    const pad = Math.round((p.bytes.length - 40) * (q / 0.85));
+    return { bytes: fakeJpeg(1000, 1400, Math.max(1, pad)) };
+  };
+
+  it("багтвал анхны чанараар нэг PDF («%PDF-» толгойтой)", async () => {
+    const r = await buildSinglePdf([big(100), big(100), big(100)], 1_000_000, reencode);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.quality).toBeNull();
+    expect(isPdfHeader(r.pdf)).toBe(true);
+    expect(latin1(r.pdf)).toContain("/Count 3");
+  });
+
+  it("том бол чанарыг алхамаар бууруулна — бүх хуудас нэг PDF-д", async () => {
+    const pages = [big(5000), big(5000)];
+    const full = buildPdfFromJpegs(pages).length;
+    const r = await buildSinglePdf(pages, Math.round(full * 0.8), reencode);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(SINGLE_PDF_QUALITY_STEPS as readonly number[]).toContain(r.quality);
+    expect(r.pdf.length).toBeLessThanOrEqual(Math.round(full * 0.8));
+    expect(latin1(r.pdf)).toContain("/Count 2");
+  });
+
+  it("хамгийн бага чанараар ч том бол хуваахгүй — too_large (хэмжээтэй)", async () => {
+    const pages = [big(5000), big(5000)];
+    const r = await buildSinglePdf(pages, 5000, reencode);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toBe("too_large");
+    expect(r.bytes).toBeGreaterThan(5000);
+    // Хамгийн сүүлийн (бага) чанарын хэмжээ.
+    const last = SINGLE_PDF_QUALITY_STEPS[SINGLE_PDF_QUALITY_STEPS.length - 1];
+    const smallest = buildPdfFromJpegs(await Promise.all(pages.map((p) => reencode(p, last)))).length;
+    expect(r.bytes).toBe(smallest);
+  });
+
+  it("дахин кодлогчгүй бол шууд too_large; хоосон жагсаалт → алдаа", async () => {
+    const pages = [big(5000)];
+    const r = await buildSinglePdf(pages, 100);
+    expect(r).toEqual({ ok: false, error: "too_large", bytes: buildPdfFromJpegs(pages).length });
+    await expect(buildSinglePdf([], 1000)).rejects.toThrow();
   });
 });

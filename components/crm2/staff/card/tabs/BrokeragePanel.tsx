@@ -2,22 +2,7 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import {
-  ArrowRight,
-  Ban,
-  Check,
-  FilePlus2,
-  FileText,
-  Lock,
-  Paperclip,
-  Pencil,
-  RefreshCw,
-  Send,
-  Trash2,
-  Undo2,
-  Upload,
-  X,
-} from "lucide-react";
+import { AlertTriangle, ArrowRight, Ban, CheckCircle2, FilePlus2, FileText, Lock, Paperclip, RefreshCw, Trash2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,16 +13,11 @@ import { CodeChip } from "@/components/crm2/ui/code-chip";
 import { ConfirmDialog } from "@/components/crm2/ui/confirm-dialog";
 import { MaskedName } from "@/components/crm2/ui/masked-name";
 import { ReasonDialog } from "@/components/crm2/ui/reason-dialog";
-import {
-  discardBrokerage,
-  rejectBrokerage,
-  renewBrokerage,
-  terminateBrokerage,
-  withdrawBrokerage,
-} from "@/lib/crm2/actions/brokerage";
+import { logUiEvent } from "@/lib/crm2/actions/events";
+import { discardBrokerage, invalidateBrokerage, renewBrokerage, terminateBrokerage } from "@/lib/crm2/actions/brokerage";
 import { deleteBrokerageFile } from "@/lib/crm2/actions/media";
 import { fmtIsoDate } from "@/lib/crm2/datetime";
-import { DOC_ACCEPT, fmtFileSize } from "@/lib/crm2/files";
+import { fmtFileSize } from "@/lib/crm2/files";
 import {
   BROKERAGE_FILE_KIND_LABEL,
   BROKERAGE_STATUS_LABEL,
@@ -48,23 +28,27 @@ import { formatCommission } from "@/lib/crm2/money";
 import { crm2Paths, type Crm2Panel } from "@/lib/crm2/paths";
 import type { BrokerageItem } from "@/lib/crm2/queries/properties";
 import type { Crm2Settings } from "@/lib/crm2/settings";
-import { uploadBrokerageFile, uploadMany } from "@/lib/crm2/storage";
 import type { Crm2StaffMember } from "@/lib/crm2/types";
 import { fmtDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-import { ApproveBrokerageDialog } from "@/components/crm2/approvals/ApproveBrokerageDialog";
 import { ActivationReadiness } from "../contract/ActivationReadiness";
 import { ContractSheet } from "../contract/ContractSheet";
 import type { ActivationPanelState } from "../contract/contract-model";
 import type { ContractContext } from "../contract/contract-types";
+import { useCardSheet } from "../sheets/use-card-sheet";
 import { brokerageActions, brokerageChain, brokerageEndInfo, renewableExpired } from "../logic";
 
+/** «Гэрээ буруу: …» угтвартай цуцлалтын шалтгаанаас зөвхөн шалтгааныг. */
+function invalidReason(c: Pick<BrokerageItem, "termination_reason">): string {
+  return (c.termination_reason ?? "").replace(/^Гэрээ буруу:\s*/, "");
+}
+
 /**
- * «Зуучлалын гэрээ» таб: хувилбарын гинж, гэрээ бүрийн төлөв, огноо, шимтгэл,
- * хариуцагч, файл (signed URL). Ноорог үүсгэх/засах/илгээх нь ContractSheet (2 алхамтай доод цонх).
- * Илгээсэн — буцааж авах, батлах/татгалзах (батлагч, файлтай тулгасныг тэмдэглэнэ); батлагдсан —
- * цуцлах, сунгах, (manual горимд) хөрөнгийг идэвхжүүлэх. Эцсийн шалгалт RPC дээр, алдааг нь харуулна.
+ * «Зуучлалын гэрээ» таб (20261125000100 — батлах алхамгүй): хувилбарын гинж, гэрээ бүрийн төлөв,
+ * огноо, хариуцагч, PDF (signed URL). Ноорог «Бүртгэх» нь ContractSheet (нэг дэлгэц: PMC тамгатай PDF,
+ * дуусах огноо, тамганы тэмдэглэгээ). Бүртгэгдсэнд — «Гэрээ буруу» (батлагч, багийн ахлагч), цуцлах,
+ * сунгах; мэдээлэл дутуу ноорог хөрөнгийн жагсаалт. Эцсийн шалгалт RPC дээр, алдааг нь харуулна.
  */
 export function BrokeragePanel({
   panel,
@@ -77,9 +61,7 @@ export function BrokeragePanel({
   context,
   activation,
   limits,
-  requireFile,
   names,
-  approverOf,
   now,
 }: {
   panel: Crm2Panel;
@@ -93,15 +75,13 @@ export function BrokeragePanel({
   context: ContractContext | null;
   activation: ActivationPanelState;
   limits: { maxDocMb: number; maxDocsPerContract: number };
-  requireFile: boolean;
   names: Record<string, string>;
-  /** Илгээсэн гэрээнд хэрэглэгч батлагч эсэх (өөрийгөө батлах дүрмээс өмнө). */
-  approverOf: Record<string, boolean>;
   now: number;
 }) {
   const searchParams = useSearchParams();
+  const cardSheet = useCardSheet();
   const editableDraft = contracts.find((c) => c.status === "draft" && c.canEditDraft) ?? null;
-  const [sheet, setSheet] = React.useState<{ contract: BrokerageItem | null; step?: 1 | 2 } | null>(() =>
+  const [sheet, setSheet] = React.useState<{ contract: BrokerageItem | null } | null>(() =>
     searchParams?.get("sheet") === "contract" && (editableDraft || canCreate) ? { contract: editableDraft } : null
   );
   const chain = brokerageChain(contracts);
@@ -113,13 +93,14 @@ export function BrokeragePanel({
     <div className="space-y-4">
       <ActivationReadiness propertyId={propertyId} state={activation} />
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-muted">
-          Эзэнтэй хийсэн зуучлалын гэрээ батлагдсанаар хөрөнгө идэвхтэй Staff санд орно. Сунгалт нь өмнөх гэрээтэй холбоотой шинэ
-          хувилбар.
+        <p className="min-w-0 text-sm text-muted">
+          PMC-ийн тамга, гарын үсэгтэй гэрээний PDF-ийг хавсаргаж бүртгэмэгц (батлуулахгүй), хөрөнгийн мэдээлэл бүрэн бол хөрөнгө
+          идэвхтэй болно (дутуу бол нөхмөгц). Сунгалт нь өмнөх
+          гэрээтэй холбоотой шинэ хувилбар.
         </p>
         {canCreate ? (
           <Button type="button" size="lg" className="w-full shrink-0 sm:w-auto" onClick={() => setSheet({ contract: null })}>
-            <FilePlus2 className="size-4" aria-hidden /> {contracts.length ? "Шинэ гэрээ (өмнөхтэй холбоогүй)" : "Гэрээ байгуулах"}
+            <FilePlus2 className="size-4" aria-hidden /> Гэрээ бүртгэх
           </Button>
         ) : null}
       </div>
@@ -127,7 +108,7 @@ export function BrokeragePanel({
       {toRenew && !live ? (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           {toRenew.number ? `${toRenew.number} гэрээ` : "Гэрээ"} дууссан. Шинэ хугацааны гэрээг доорх «Сунгах»-аар үүсгэнэ — өмнөх
-          гэрээний хувилбартай холбогдож, нөхцөл нь хуулагдана.
+          гэрээний хувилбартай холбогдоно; PMC тамгатай PDF-ээ шинээр оруулж бүртгэнэ.
         </p>
       ) : null}
 
@@ -148,7 +129,8 @@ export function BrokeragePanel({
 
       {contracts.length === 0 ? (
         <Card className="p-6 text-center text-sm text-muted">
-          Зуучлалын гэрээ бүртгэгдээгүй.{canCreate ? " «Гэрээ байгуулах»-аар урьдчилан бөглөсөн ноорог үүсгэж, гэрээний зургаа аваад батлуулна." : ""}
+          Зуучлалын гэрээ бүртгэгдээгүй.
+          {canCreate ? " «Гэрээ бүртгэх»-ээр PMC-ийн тамга, гарын үсэгтэй гэрээгээ скан хийж (нэг PDF) эсвэл PDF-ээр оруулна." : ""}
         </Card>
       ) : (
         <ul className="space-y-3">
@@ -157,14 +139,11 @@ export function BrokeragePanel({
               key={c.id}
               panel={panel}
               c={c}
-              officeId={officeId}
               previousNumber={c.previous_id ? (numberById[c.previous_id] ?? null) : null}
               limits={limits}
               names={names}
-              approver={!!approverOf[c.id]}
-              requireFile={requireFile}
               now={now}
-              onEdit={(step) => setSheet({ contract: c, step })}
+              onRegister={() => setSheet({ contract: c })}
             />
           ))}
         </ul>
@@ -179,7 +158,10 @@ export function BrokeragePanel({
           staff={staff}
           context={context}
           panel={panel}
-          initialStep={sheet.step}
+          onOpenSheet={(s, field) => {
+            setSheet(null);
+            cardSheet.open(s, field);
+          }}
           onClose={() => setSheet(null)}
         />
       ) : null}
@@ -194,55 +176,29 @@ function who(names: Record<string, string>, id: string | null | undefined): stri
 function ContractCard({
   panel,
   c,
-  officeId,
   previousNumber,
   limits,
   names,
-  approver,
-  requireFile,
   now,
-  onEdit,
+  onRegister,
 }: {
   panel: Crm2Panel;
   c: BrokerageItem;
-  officeId: string;
   previousNumber: string | null;
   limits: { maxDocMb: number; maxDocsPerContract: number };
   names: Record<string, string>;
-  approver: boolean;
-  requireFile: boolean;
   now: number;
-  /** ContractSheet нээх (1 — ноорог засах, 2 — файл/илгээх). */
-  onEdit: (step: 1 | 2) => void;
+  /** ContractSheet («Гэрээ бүртгэх») нээх. */
+  onRegister: () => void;
 }) {
   const router = useRouter();
   const paths = crm2Paths(panel);
-  const fileInput = React.useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = React.useState<string | null>(null);
-  const [dialog, setDialog] = React.useState<null | "discard" | "withdraw" | "approve" | "reject" | "terminate" | "renew">(null);
+  const [dialog, setDialog] = React.useState<null | "discard" | "invalidate" | "terminate" | "renew">(null);
   const [deleteFile, setDeleteFile] = React.useState<{ id: string; name: string } | null>(null);
   const actions = brokerageActions(c, { fileCount: c.files.length, maxFiles: limits.maxDocsPerContract });
   const endInfo = c.status === "active" ? brokerageEndInfo(c.end_date, now) : null;
   const close = () => setDialog(null);
-
-  async function onFiles(list: FileList | null) {
-    const files = Array.from(list ?? []);
-    if (fileInput.current) fileInput.current.value = "";
-    if (files.length === 0) return;
-    setUploading(`0/${files.length}`);
-    try {
-      const res = await uploadMany(
-        files,
-        (file, i) => uploadBrokerageFile({ file, officeId, contractId: c.id, limits, existing: c.files.length + i }),
-        (done, total) => setUploading(`${done}/${total}`)
-      );
-      if (res.ok.length) toast.success(`${res.ok.length} файл хавсаргалаа`);
-      for (const e of res.errors) toast.error(e);
-      router.refresh();
-    } finally {
-      setUploading(null);
-    }
-  }
+  const commission = formatCommission(c.commission_type, c.commission_value, c.commission_currency);
 
   const done = (msg: string, description?: string) => {
     toast.success(msg, description ? { description } : undefined);
@@ -252,11 +208,12 @@ function ContractCard({
 
   return (
     <li id={`brokerage-${c.id}`} className="scroll-mt-24">
-      <Card className={cn("min-w-0 p-4", c.status === "active" && "border-emerald-200")}>
+      <Card className={cn("min-w-0 p-4", c.status === "active" && "border-emerald-200", c.invalidated_at && "border-rose-200")}>
         <div className="flex flex-wrap items-center gap-2">
           <CodeChip code={c.number} title={`Зуучлалын гэрээ ${c.number}`} />
           <Badge>{c.version}-р хувилбар</Badge>
           <BrokerageStatusBadge status={c.status} />
+          {c.invalidated_at ? <Badge tone="rose">Гэрээ буруу</Badge> : null}
           {endInfo ? <Badge tone={endInfo.tone}>{endInfo.text}</Badge> : null}
           {previousNumber ? <span className="text-xs text-muted">Сунгалт: өмнөх {previousNumber}</span> : null}
         </div>
@@ -265,14 +222,8 @@ function ContractCard({
           <div>
             <dt className="text-xs text-muted">Хугацаа</dt>
             <dd className="text-ink tabular-nums">
-              {c.start_date ? fmtIsoDate(c.start_date) : "—"} – {c.end_date ? fmtIsoDate(c.end_date) : "—"}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted">Шимтгэл</dt>
-            <dd className="text-ink">
-              {formatCommission(c.commission_type, c.commission_value, c.commission_currency) || "—"}
-              {c.commission_note ? <span className="block text-xs text-muted">{c.commission_note}</span> : null}
+              {c.start_date ? fmtIsoDate(c.start_date) : c.status === "draft" ? "бүртгэсэн өдрөөс" : "—"} –{" "}
+              {c.end_date ? fmtIsoDate(c.end_date) : "—"}
             </dd>
           </div>
           <div>
@@ -292,52 +243,72 @@ function ContractCard({
               )}
             </dd>
           </div>
-          {c.terms || c.no_special_terms ? (
-            <div className="sm:col-span-2">
-              <dt className="text-xs text-muted">Онцгой нөхцөл</dt>
-              <dd className="whitespace-pre-line break-words text-ink">{c.terms || "Онцгой нөхцөлгүй"}</dd>
+          {/* Хуучин урсгалын талбар — утгатай үед л. */}
+          {commission ? (
+            <div>
+              <dt className="text-xs text-muted">Шимтгэл</dt>
+              <dd className="text-ink">
+                {commission}
+                {c.commission_note ? <span className="block text-xs text-muted">{c.commission_note}</span> : null}
+              </dd>
             </div>
           ) : null}
-          {c.signer_differs ? (
+          {c.terms ? (
+            <div className="sm:col-span-2">
+              <dt className="text-xs text-muted">Онцгой нөхцөл</dt>
+              <dd className="whitespace-pre-line break-words text-ink">{c.terms}</dd>
+            </div>
+          ) : null}
+          {c.signer_differs && c.signer_note ? (
             <div className="sm:col-span-2">
               <dt className="text-xs text-muted">Гарын үсэг зурагч (эзнээс өөр)</dt>
-              <dd className="whitespace-pre-line break-words text-ink">{c.signer_note || "—"}</dd>
+              <dd className="whitespace-pre-line break-words text-ink">{c.signer_note}</dd>
             </div>
           ) : null}
         </dl>
 
         <ul className="mt-3 space-y-1 text-xs text-muted">
-          {c.submitted_at ? (
+          {c.registered_at ? (
             <li>
-              Илгээсэн: {who(names, c.submitted_by)} · {fmtDateTime(c.submitted_at)}
+              Бүртгэсэн: {who(names, c.registered_by)} · {fmtDateTime(c.registered_at)}
             </li>
           ) : null}
-          {c.approved_at ? (
+          {c.registered_at && c.stamp_confirmed ? (
+            <li className="flex items-center gap-1 text-emerald-700">
+              <CheckCircle2 className="size-3.5 shrink-0" aria-hidden /> PMC тамга, гарын үсэгтэй (агент баталгаажуулсан)
+            </li>
+          ) : null}
+          {c.registered_at && !c.stamp_confirmed ? (
+            <li className="text-amber-800">Шинэ дүрмээр шилжүүлсэн — PDF-ийн тамга, гарын үсгийг шалгана уу.</li>
+          ) : null}
+          {c.approved_at && !c.registered_at ? (
             <li className="text-emerald-700">
-              Баталсан: {who(names, c.approved_by)} · {fmtDateTime(c.approved_at)}
+              Баталсан (хуучин): {who(names, c.approved_by)} · {fmtDateTime(c.approved_at)}
               {c.approval_note ? ` · ${c.approval_note}` : ""}
             </li>
           ) : null}
           {c.status === "draft" && c.rejected_at ? (
             <li className="text-rose-700">
-              Татгалзсан: {who(names, c.rejected_by)} · {fmtDateTime(c.rejected_at)}
+              Татгалзсан (хуучин): {who(names, c.rejected_by)} · {fmtDateTime(c.rejected_at)}
               {c.rejection_note ? ` · ${c.rejection_note}` : ""}
             </li>
           ) : null}
-          {c.terminated_at ? (
+          {c.invalidated_at ? (
+            <li className="flex items-start gap-1 font-semibold text-rose-700">
+              <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden />
+              <span className="min-w-0 break-words">
+                Гэрээ буруу: {who(names, c.invalidated_by)} · {fmtDateTime(c.invalidated_at)}
+                {invalidReason(c) ? ` · ${invalidReason(c)}` : ""}
+              </span>
+            </li>
+          ) : c.terminated_at ? (
             <li className="text-rose-700">
               Цуцалсан: {who(names, c.terminated_by)} · {fmtDateTime(c.terminated_at)}
               {c.termination_reason ? ` · ${c.termination_reason}` : ""}
             </li>
           ) : null}
-          {c.status === "draft" && c.prefilled?.length ? (
-            <li className="text-amber-800">Оффисын анхдагч утгыг баталгаажуулаагүй — «Засах»-аар шалгана уу.</li>
-          ) : null}
-          {c.status === "draft" && c.file_at_office ? (
-            <li className="text-amber-800">Гэрээ оффист үлдсэн — файл хавсаргатал батлуулахаар илгээх боломжгүй.</li>
-          ) : null}
-          {c.activate_on_start && c.status === "active" ? (
-            <li className="text-sky-700">Эхлэх өдөр нь хөрөнгө автоматаар идэвхжинэ.</li>
+          {c.status === "draft" && actions.register ? (
+            <li className="text-sky-800">PMC-ийн тамга, гарын үсэгтэй PDF-ээ хавсаргаад «Бүртгэх»-ийг дарна.</li>
           ) : null}
         </ul>
 
@@ -347,38 +318,42 @@ function ContractCard({
           </p>
           {c.files.length ? (
             <ul className="space-y-1">
-              {c.files.map((f) => (
-                <li key={f.id} className="flex min-w-0 items-center gap-2 text-sm">
-                  {f.kind === "ownership" || f.kind === "id" ? (
-                    <Lock className="size-4 shrink-0 text-muted" aria-label={BROKERAGE_FILE_KIND_LABEL[f.kind]} />
-                  ) : (
-                    <FileText className="size-4 shrink-0 text-muted" aria-hidden />
-                  )}
-                  {f.url ? (
-                    <a href={f.url} target="_blank" rel="noopener noreferrer" className="min-w-0 truncate font-medium text-brand-700 hover:underline">
-                      {f.file_name || "Файл"}
-                    </a>
-                  ) : (
-                    <span className="min-w-0 truncate text-muted">{f.file_name || "Файл"}</span>
-                  )}
-                  {f.kind && f.kind !== "contract" ? (
-                    <span className="shrink-0 rounded-md bg-surface-2 px-1.5 text-xs text-muted">
-                      {BROKERAGE_FILE_KIND_LABEL[f.kind as Crm2BrokerageFileKindKey] ?? f.kind}
-                    </span>
-                  ) : null}
-                  <span className="shrink-0 text-xs text-muted">{fmtFileSize(f.size_bytes)}</span>
-                  {actions.deleteFile ? (
-                    <button
-                      type="button"
-                      onClick={() => setDeleteFile({ id: f.id, name: f.file_name || "Файл" })}
-                      aria-label={`${f.file_name || "Файл"} устгах`}
-                      className="ml-auto flex size-11 -my-1.5 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-rose-50 hover:text-rose-700"
-                    >
-                      <Trash2 className="size-4" aria-hidden />
-                    </button>
-                  ) : null}
-                </li>
-              ))}
+              {c.files.map((f) => {
+                const kind = (f.kind ?? "contract") as Crm2BrokerageFileKindKey;
+                const notPdf = kind === "contract" && (f.mime_type ?? "").toLowerCase() !== "application/pdf";
+                return (
+                  <li key={f.id} className="flex min-h-11 min-w-0 items-center gap-2 text-sm">
+                    {kind === "ownership" || kind === "id" ? (
+                      <Lock className="size-4 shrink-0 text-muted" aria-label={BROKERAGE_FILE_KIND_LABEL[kind]} />
+                    ) : (
+                      <FileText className="size-4 shrink-0 text-muted" aria-hidden />
+                    )}
+                    {f.url ? (
+                      <a href={f.url} target="_blank" rel="noopener noreferrer" className="min-w-0 truncate font-medium text-brand-700 hover:underline">
+                        {f.file_name || "Файл"}
+                      </a>
+                    ) : (
+                      <span className="min-w-0 truncate text-muted">{f.file_name || "Файл"}</span>
+                    )}
+                    {notPdf ? (
+                      <span className="shrink-0 rounded-md bg-amber-50 px-1.5 text-xs text-amber-900">Зураг — гэрээ биш</span>
+                    ) : kind !== "contract" ? (
+                      <span className="shrink-0 rounded-md bg-surface-2 px-1.5 text-xs text-muted">{BROKERAGE_FILE_KIND_LABEL[kind] ?? kind}</span>
+                    ) : null}
+                    <span className="shrink-0 text-xs text-muted">{fmtFileSize(f.size_bytes)}</span>
+                    {actions.deleteFile ? (
+                      <button
+                        type="button"
+                        onClick={() => setDeleteFile({ id: f.id, name: f.file_name || "Файл" })}
+                        aria-label={`${f.file_name || "Файл"} устгах`}
+                        className="ml-auto flex size-11 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-rose-50 hover:text-rose-700"
+                      >
+                        <Trash2 className="size-4" aria-hidden />
+                      </button>
+                    ) : null}
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <p className="text-xs text-subtle">Файл хавсаргаагүй.</p>
@@ -386,55 +361,19 @@ function ContractCard({
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2">
-          {actions.edit ? (
-            <Button type="button" size="touch" variant="outline" onClick={() => onEdit(1)}>
-              <Pencil className="size-4" aria-hidden /> Засах
-            </Button>
-          ) : null}
-          {actions.upload && c.status !== "draft" ? (
-            <>
-              <input
-                ref={fileInput}
-                type="file"
-                accept={DOC_ACCEPT}
-                multiple
-                className="sr-only"
-                tabIndex={-1}
-                aria-hidden
-                onChange={(e) => void onFiles(e.target.files)}
-              />
-              <Button type="button" size="touch" variant="outline" disabled={!!uploading} onClick={() => fileInput.current?.click()}>
-                <Upload className="size-4" aria-hidden /> {uploading ? `Хуулж байна ${uploading}` : "Файл нэмэх"}
-              </Button>
-            </>
-          ) : null}
-          {actions.submit ? (
-            <Button type="button" size="touch" onClick={() => onEdit(2)}>
-              <Send className="size-4" aria-hidden /> Батлуулахаар илгээх
-            </Button>
-          ) : null}
-          {actions.approve ? (
-            <Button
-              type="button"
-              size="touch"
-              onClick={() => setDialog("approve")}
-            >
-              <Check className="size-4" aria-hidden /> Батлах
-            </Button>
-          ) : null}
-          {actions.reject ? (
-            <Button type="button" size="touch" variant="outline" onClick={() => setDialog("reject")}>
-              <X className="size-4" aria-hidden /> Татгалзах
-            </Button>
-          ) : null}
-          {actions.withdraw ? (
-            <Button type="button" size="touch" variant="ghost" onClick={() => setDialog("withdraw")}>
-              <Undo2 className="size-4" aria-hidden /> Буцааж авах
+          {actions.register ? (
+            <Button type="button" size="touch" className="min-w-0 flex-1 sm:flex-none" onClick={onRegister}>
+              <CheckCircle2 className="size-4" aria-hidden /> Бүртгэх
             </Button>
           ) : null}
           {actions.renew ? (
             <Button type="button" size="touch" variant="outline" onClick={() => setDialog("renew")}>
               <RefreshCw className="size-4" aria-hidden /> Сунгах
+            </Button>
+          ) : null}
+          {actions.invalidate ? (
+            <Button type="button" size="touch" variant="ghost" className="text-rose-700" onClick={() => setDialog("invalidate")}>
+              <AlertTriangle className="size-4" aria-hidden /> Гэрээ буруу
             </Button>
           ) : null}
           {actions.terminate ? (
@@ -448,47 +387,26 @@ function ContractCard({
             </Button>
           ) : null}
         </div>
-        {c.status === "pending" && !actions.approve ? (
-          <p className="mt-2 text-xs text-muted">
-            {approver
-              ? "Та энэ гэрээ эсвэл хөрөнгөд оролцсон тул өөр батлагч батална (өөрийгөө батлах дүрэм)."
-              : "Батлах эрхтэй хүн (менежер эсвэл хариуцагчийн багийн ахлагч) шийднэ."}
-          </p>
-        ) : null}
       </Card>
 
-      <ConfirmDialog
-        open={dialog === "withdraw"}
-        onClose={close}
-        title="Илгээснээ буцааж авах уу?"
-        description="Гэрээ ноорог болж дахин засах боломжтой болно."
-        confirmLabel="Буцааж авах"
-        onConfirm={async () => {
-          const res = await withdrawBrokerage(c.id);
-          return res.ok ? done("Ноорог руу буцаалаа") : res.error;
-        }}
-      />
-      <ApproveBrokerageDialog
-        open={dialog === "approve"}
-        onClose={close}
-        contractId={c.id}
-        title={`${c.number} гэрээ батлах`}
-        updatedAt={c.updated_at}
-        requireFile={requireFile}
-        files={c.files}
-        onApproved={() => router.refresh()}
-      />
       <ReasonDialog
-        open={dialog === "reject"}
+        open={dialog === "invalidate"}
         onClose={close}
-        title={`${c.number} гэрээнээс татгалзах`}
-        description="Гэрээ ноорог руу буцаж, илгээгч засаад дахин илгээнэ."
-        label="Татгалзсан шалтгаан"
-        confirmLabel="Татгалзах"
+        title={`${c.number} гэрээ буруу`}
+        description="Гэрээ хүчингүй болж, хөрөнгө ноорог руу буцна (зар нийтлэлээс буцна; түрээслэгдсэн, зарагдсан хөрөнгийн төлөв хэвээр). Агентад мэдэгдэнэ. Агент зөв PDF-ээр шинэ гэрээ бүртгэнэ."
+        label="Юу буруу байна (агентад очно)"
+        placeholder="Жишээ: тамга харагдахгүй, 2-р хуудас дутуу"
+        maxLength={1900}
+        confirmLabel="Гэрээ буруу"
         tone="danger"
         onSubmit={async ({ text }) => {
-          const res = await rejectBrokerage(c.id, text);
-          return res.ok ? done("Гэрээнээс татгалзлаа") : res.error;
+          const res = await invalidateBrokerage(c.id, text);
+          if (!res.ok) return res.error;
+          logUiEvent({ event: "contract_invalidated", flow: "card", property_id: c.property_id, meta: { to_draft: res.data.propertyStatus === "draft" } });
+          return done(
+            "Гэрээ буруу гэж буцаагдлаа",
+            `Хөрөнгийн төлөв: ${PROPERTY_STATUS_LABEL[res.data.propertyStatus] ?? res.data.propertyStatus}. Агентад мэдэгдэл очлоо.`
+          );
         }}
       />
       <ReasonDialog
@@ -522,11 +440,11 @@ function ContractCard({
         open={dialog === "renew"}
         onClose={close}
         title={`${c.number} гэрээг сунгах`}
-        description="Өмнөх гэрээтэй холбоотой шинэ ноорог хувилбар үүснэ (нөхцөл, эзэн, шимтгэл хуулагдана; дуусах огноо, файлаа шинээр оруулна)."
+        description="Өмнөх гэрээтэй холбоотой шинэ ноорог хувилбар үүснэ (эзэн хуулагдана). Шинэ гэрээний дуусах огноо, PMC тамгатай PDF-ээ шинээр оруулж бүртгэнэ."
         confirmLabel="Сунгалт үүсгэх"
         onConfirm={async () => {
           const res = await renewBrokerage(c.id);
-          return res.ok ? done("Сунгалтын ноорог үүслээ", "Дуусах огноо, файлаа оруулаад батлуулахаар илгээнэ.") : res.error;
+          return res.ok ? done("Сунгалтын ноорог үүслээ", "PMC тамгатай PDF-ээ оруулаад «Бүртгэх»-ийг дарна.") : res.error;
         }}
       />
       <ConfirmDialog

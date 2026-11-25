@@ -160,7 +160,39 @@ export const SPLIT_QUALITY_STEPS = [0.8, 0.75] as const;
 
 export type SplitResult = { pdfs: Uint8Array[]; quality: number | null; pageGroups: number[][] };
 
+/** Гэрээний скан (НЭГ PDF): анхны чанарын дараа дахин кодлох чанарын шат. */
+export const SINGLE_PDF_QUALITY_STEPS = [0.8, 0.75, 0.65, 0.55] as const;
+
+export type SinglePdfResult =
+  | { ok: true; pdf: Uint8Array; quality: number | null }
+  /** bytes — хамгийн бага чанараар ч гарсан PDF-ийн хэмжээ (UI: «Гэрээ хэт том (N МБ)»). */
+  | { ok: false; error: "too_large"; bytes: number };
+
 /**
+ * Гэрээний горим (20261125000100: гэрээ = PMC-ийн тамга, гарын үсэгтэй НЭГ PDF): хуудсуудыг ЯГ НЭГ PDF
+ * болгоно, хэзээ ч хуваахгүй. maxBytes-аас хэтэрвэл чанарыг алхамаар бууруулж (анхны хуудаснаас дахин
+ * кодлоно), тэгээд ч том бол 'too_large' буцаана — агент хуудсын тоог багасгана.
+ */
+export async function buildSinglePdf(
+  pages: JpegPage[],
+  maxBytes: number,
+  reencode?: Reencode,
+  steps: readonly number[] = SINGLE_PDF_QUALITY_STEPS
+): Promise<SinglePdfResult> {
+  let pdf = buildPdfFromJpegs(pages);
+  if (pdf.length <= maxBytes) return { ok: true, pdf, quality: null };
+  if (reencode) {
+    for (const q of steps) {
+      const current = await Promise.all(pages.map((p) => reencode(p, q)));
+      pdf = buildPdfFromJpegs(current);
+      if (pdf.length <= maxBytes) return { ok: true, pdf, quality: q };
+    }
+  }
+  return { ok: false, error: "too_large", bytes: pdf.length };
+}
+
+/**
+ * Гэрээний бус баримтад (хуучин урсгал). Гэрээний PDF-д buildSinglePdf-ийг хэрэглэнэ — гэрээг хуваахгүй.
  * PDF maxBytes-аас хэтэрвэл эхлээд чанарыг 0.75 хүртэл бууруулна; тэгээд ч том бол
  * хуудсуудыг дараалал хадгалж хэд хэдэн PDF болгон (ихэвчлэн 2) хуваана.
  * Ганц хуудас өөрөө хэтэрсэн ч тусдаа PDF болж үлдэнэ (хязгаарыг DB/storage шалгана).

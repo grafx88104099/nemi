@@ -31,7 +31,7 @@ export default async function CrmSettingsPage() {
             href: "/office/crm/settings/policies",
             icon: SlidersHorizontal,
             title: "Staff-ийн дүрэм, анхдагч утга",
-            desc: "Ангилал, гэрээ батлагч, эрх, сануулгын хугацаа, архивын дүрэм, файлын хязгаар",
+            desc: "Ангилал, гэрээний шаардлага, хүсэлтийн батлагч, эрх, сануулгын хугацаа, архивын дүрэм, файлын хязгаар",
           },
         ]
       : []),

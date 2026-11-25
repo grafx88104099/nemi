@@ -9,8 +9,9 @@ import { Button } from "@/components/ui/button";
 import { BottomSheet } from "@/components/crm2/ui/bottom-sheet";
 import { logUiEvent } from "@/lib/crm2/actions/events";
 import { IMAGE_READ_ERROR, prepareDocPage, progressLabel, reencodeJpeg } from "@/lib/crm2/device/image-prep";
-import { splitBySize, type JpegPage } from "@/lib/crm2/device/jpeg-pdf";
-import { enqueue, listQueue, startQueue, useUploadQueue, type QueueItem } from "@/lib/crm2/device/upload-queue";
+import { buildSinglePdf, type JpegPage } from "@/lib/crm2/device/jpeg-pdf";
+import { NOT_PDF_ERROR, enqueue, listQueue, startQueue, useUploadQueue } from "@/lib/crm2/device/upload-queue";
+import { contractPdfTooLargeText } from "@/lib/crm2/files";
 import type { Crm2FileLimits } from "@/lib/crm2/settings";
 
 import {
@@ -45,11 +46,15 @@ function cropStep(c: DocPageMeta["crop"]): number {
 }
 
 /**
- * Энэ гэрээний дараалалд байгаа файлууд; хуудсаас үүсгэсэн PDF бүгд хуулагдмагц утсан дээрх
- * хуудсыг устгаж, картыг шинэчилнэ.
+ * Энэ гэрээний дараалалд байгаа файлууд; хуудсаас үүсгэсэн PDF хуулагдмагц утсан дээрх хуудсыг
+ * устгаж, картыг шинэчилнэ. onDone — шинэ файл хуулагдах бүрд (гэрээний цонх өгөгдлөө дахин ачаална).
  */
-export function useContractUploads(profileId: string, propertyId: string, contractId: string | null) {
+export function useContractUploads(profileId: string, propertyId: string, contractId: string | null, onDone?: () => void) {
   const router = useRouter();
+  const onDoneRef = React.useRef(onDone);
+  React.useEffect(() => {
+    onDoneRef.current = onDone;
+  }, [onDone]);
   const { items: all, retry, remove } = useUploadQueue(null);
   const items = React.useMemo(
     () => all.filter((i) => i.target.kind === "brokerage" && i.target.contractId === contractId),
@@ -66,6 +71,7 @@ export function useContractUploads(profileId: string, propertyId: string, contra
     if (doneKey && doneKey !== seenDone.current) {
       seenDone.current = doneKey;
       router.refresh();
+      onDoneRef.current?.();
     }
     let cancelled = false;
     void (async () => {
@@ -121,9 +127,10 @@ function usePageUrls(profileId: string, pages: DocPageMeta[]) {
 }
 
 /**
- * Гэрээний олон хуудас камераар (R12). Хуудас бүр prepareDocPage (2480px / 0.85) → шууд vault-д
- * битүүмжилнэ (24 цаг) → буцаж ороход сэргэнэ. Эргүүлэх, сонголтоор тайрах, контраст. «PDF болгож
- * илгээх» → нэг PDF (хэт том бол хуваана) → дахин оролддог дараалал (kind 'contract').
+ * «Гэрээ скан хийх» — гэрээний олон хуудас камераар (R12). Хуудас бүр prepareDocPage (2480px / 0.85) →
+ * шууд vault-д битүүмжилнэ (24 цаг) → буцаж ороход сэргэнэ. Эргүүлэх, сонголтоор тайрах, контраст.
+ * «Нэг PDF болгох» → ЯГ НЭГ PDF (buildSinglePdf: хэт том бол чанарыг бууруулна, хэзээ ч хуваахгүй;
+ * тэгээд ч том бол хуудсын тоог багасгахыг хүснэ) → дахин оролддог дараалал (kind 'contract').
  */
 export function DocPagesSheet({
   open,
@@ -142,7 +149,7 @@ export function DocPagesSheet({
   officeId: string;
   contractId: string;
   limits: Limits;
-  onQueued?: (pdfCount: number) => void;
+  onQueued?: () => void;
 }) {
   const cameraRef = React.useRef<HTMLInputElement>(null);
   const galleryRef = React.useRef<HTMLInputElement>(null);
@@ -165,7 +172,7 @@ export function DocPagesSheet({
         setRestored(r.pages.length > 0 && r.queuedIds.length === 0);
       })
       .catch(() => {
-        if (!cancelled) setError("Утсан дээрх хадгалах сан боломжгүй — хуудсыг илгээтэл энэ цонхыг бүү хаа.");
+        if (!cancelled) setError("Утсан дээрх хадгалах сан боломжгүй — PDF хуулагдтал энэ цонхыг бүү хаа.");
       })
       .finally(() => {
         if (!cancelled) setLoaded(true);
@@ -241,38 +248,41 @@ export function DocPagesSheet({
         }
       }
       const maxBytes = Math.max(1, limits.maxDocMb) * 1024 * 1024;
-      const split = await splitBySize(pages, maxBytes, async (page, q) => {
+      setBusy("PDF бэлдэж байна…");
+      const built = await buildSinglePdf(pages, maxBytes, async (page, q) => {
         const r = await reencodeJpeg(new Uint8Array(page.bytes), q);
         return { bytes: r.bytes, w: r.w, h: r.h };
       });
-      const date = new Date().toISOString().slice(0, 10);
-      const ids: string[] = [];
-      for (let i = 0; i < split.pdfs.length; i++) {
-        setBusy(`Дараалалд оруулж байна ${i + 1}/${split.pdfs.length}`);
-        const suffix = split.pdfs.length > 1 ? ` (${i + 1})` : "";
-        const item: QueueItem = await enqueue({
-          profileId,
-          target: { kind: "brokerage", contractId, fileKind: "contract", officeId, limits },
-          blob: new Blob([new Uint8Array(split.pdfs[i])], { type: "application/pdf" }),
-          name: `Гэрээ ${date}${suffix}.pdf`,
-        });
-        ids.push(item.id);
+      if (!built.ok) {
+        setError(contractPdfTooLargeText(built.bytes));
+        return;
       }
-      await persist({ ...rec, queuedIds: ids });
+      setBusy("Дараалалд оруулж байна…");
+      const date = new Date().toISOString().slice(0, 10);
+      const item = await enqueue({
+        profileId,
+        target: { kind: "brokerage", contractId, fileKind: "contract", officeId, limits },
+        blob: new Blob([new Uint8Array(built.pdf)], { type: "application/pdf" }),
+        name: `Гэрээ ${date}.pdf`,
+      });
+      await persist({ ...rec, queuedIds: [item.id] });
       void startQueue(profileId);
       logUiEvent({
         event: "contract_pages_captured",
         flow: "card",
         property_id: propertyId,
-        meta: { pages: rec.pages.length, pdfs: split.pdfs.length },
+        meta: { pages: rec.pages.length, pdfs: 1, reencoded: built.quality !== null },
       });
-      onQueued?.(split.pdfs.length);
+      onQueued?.();
       onClose();
     } catch (e) {
+      const msg = e instanceof Error ? e.message : "";
       setError(
-        e instanceof Error && e.message === "page_lost"
+        msg === "page_lost"
           ? "Хуудасны зураг утсан дээрээс олдсонгүй — тухайн хуудсыг устгаад дахин авна уу."
-          : "PDF үүсгэж чадсангүй. Дахин оролдоно уу."
+          : msg === NOT_PDF_ERROR
+            ? "PDF үүсгэж чадсангүй (гэрээ зөвхөн PDF). Дахин оролдоно уу."
+            : "PDF үүсгэж чадсангүй. Дахин оролдоно уу."
       );
     } finally {
       setBusy(null);
@@ -295,17 +305,17 @@ export function DocPagesSheet({
         onClick={() => void buildAndQueue()}
       >
         {busy && busy.startsWith("PDF") ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-        {queuedAlready ? "Илгээгдэж байна" : `PDF болгож илгээх${rec.pages.length ? ` (${rec.pages.length} хуудас)` : ""}`}
+        {queuedAlready ? "Гэрээ хуулагдаж байна" : rec.pages.length ? `Нэг PDF болгох (${rec.pages.length} хуудас)` : "Нэг PDF болгох"}
       </Button>
     </div>
   );
 
   return (
-    <BottomSheet open={open} onClose={() => !busy && onClose()} title="Гэрээний зураг авах" footer={footer}>
+    <BottomSheet open={open} onClose={() => !busy && onClose()} title="Гэрээ скан хийх" footer={footer}>
       <div className="space-y-4">
         <p className="text-sm text-muted">
-          Хуудас бүрийг тус тусад нь авна. Зураг утсан дээр шифрлэгдэж хадгалагдах тул апп солиход алдагдахгүй; илгээсний дараа
-          устгагдана.
+          Гэрээний хуудас бүрийг тус тусад нь авна — PMC-ийн тамга, гарын үсэг тод уншигдахаар. Бүх хуудас нэг PDF болно.
+          Зураг утсан дээр шифрлэгдэж хадгалагдах тул апп солиход алдагдахгүй; хуулагдсаны дараа устгагдана.
         </p>
 
         <input
@@ -347,7 +357,7 @@ export function DocPagesSheet({
           ) : restored ? (
             <span className="text-emerald-700">Өмнө авсан {rec.pages.length} хуудас сэргээгдлээ.</span>
           ) : queuedAlready ? (
-            <span className="text-sky-700">Гэрээ илгээгдэж байна — дуусмагц хуудсууд утаснаас устгагдана.</span>
+            <span className="text-sky-700">Гэрээ PDF болж хуулагдаж байна — дуусмагц хуудсууд утаснаас устгагдана.</span>
           ) : null}
         </p>
         {error ? (

@@ -23,14 +23,9 @@ export type Crm2SettingValues = {
   "property.duplicate_check": boolean;
   "property.min_images": number;
   "brokerage.require_owner": boolean;
-  "brokerage.require_file": boolean;
   "brokerage.remind_days_before": number[];
   "brokerage.on_expiry": "contract_ended" | "keep";
   "brokerage.default_term_months": number;
-  /** Ангилал → '<төрөл>:<утга>' (percent:3, rent_x:1, fixed:500000). Хоосон = урьдчилан бөглөхгүй. */
-  "brokerage.default_commission": Partial<Record<Crm2PropertyCategory, string>>;
-  "brokerage.activation_mode": "auto" | "manual";
-  "brokerage.require_special_terms": boolean;
   "brokerage.require_ownership_doc": boolean;
   "approvals.team_lead": boolean;
   "approvals.office_admin": boolean;
@@ -59,7 +54,6 @@ export type Crm2SettingValues = {
   "staff.quick_add_pilot": string[];
   "digest.scope": "off" | "pilot" | "all";
   "digest.owner_days": number;
-  "digest.pending_days": number;
   "ai.listing_parse": boolean;
 };
 
@@ -112,13 +106,9 @@ export const CRM2_SETTING_DEFAULTS: Crm2SettingValues = {
   "property.duplicate_check": true,
   "property.min_images": 1,
   "brokerage.require_owner": true,
-  "brokerage.require_file": true,
   "brokerage.remind_days_before": [30, 7, 1],
   "brokerage.on_expiry": "contract_ended",
   "brokerage.default_term_months": 12,
-  "brokerage.default_commission": {},
-  "brokerage.activation_mode": "auto",
-  "brokerage.require_special_terms": true,
   "brokerage.require_ownership_doc": false,
   "approvals.team_lead": true,
   "approvals.office_admin": false,
@@ -167,7 +157,6 @@ export const CRM2_SETTING_DEFAULTS: Crm2SettingValues = {
   "staff.quick_add_pilot": [],
   "digest.scope": "pilot",
   "digest.owner_days": 1,
-  "digest.pending_days": 2,
   "ai.listing_parse": false,
 };
 
@@ -195,20 +184,16 @@ export const CRM2_SETTING_LABEL: Record<Crm2SettingKey, string> = {
   "property.category_hints": "Ангиллын тайлбар (сонголтын доор)",
   "property.duplicate_check": "Давхардсан хөрөнгө шалгах",
   "property.min_images": "Зургийн доод тоо (идэвхжүүлэх, нийтлэх)",
-  "brokerage.require_owner": "Зуучлалын гэрээнд эзэн заавал",
-  "brokerage.require_file": "Зуучлалын гэрээнд файл заавал",
+  "brokerage.require_owner": "Гэрээ бүртгэхэд эзэн заавал",
   "brokerage.remind_days_before": "Гэрээ дуусахаас өмнө сануулах хоног",
   "brokerage.on_expiry": "Гэрээ дуусахад хөрөнгийн төлөв",
   "brokerage.default_term_months": "Гэрээний анхдагч хугацаа (сар)",
-  "brokerage.default_commission": "Шимтгэлийн анхдагч (ангиллаар)",
-  "brokerage.activation_mode": "Гэрээ батлагдсаны дараах идэвхжүүлэлт",
-  "brokerage.require_special_terms": "Онцгой нөхцөл эсвэл «онцгой нөхцөлгүй» заавал",
   "brokerage.require_ownership_doc": "Өмчлөлийн баримт заавал",
-  "approvals.team_lead": "Багийн ахлагч гэрээ, хүсэлт батлах",
-  "approvals.office_admin": "Оффисын админ гэрээ, хүсэлт батлах",
-  "approvals.allow_self": "Өөрийн гэрээ, хүсэлтийг батлах",
+  "approvals.team_lead": "Багийн ахлагч хүсэлт батлах",
+  "approvals.office_admin": "Оффисын админ хүсэлт батлах",
+  "approvals.allow_self": "Өөрийн хүсэлтийг батлах",
   "roles.work": "Бүртгэл хийх дүрүүд",
-  "roles.approve": "Батлах дүрүүд",
+  "roles.approve": "Хүсэлт батлах; шинэ гэрээний мэдэгдэл авч «Гэрээ буруу» гэж буцаах дүрүүд",
   "roles.finance": "Санхүүгийн эрхтэй дүрүүд",
   "contact.foreign_deal": "Өөр агентын харилцагчтай хэлцэл нээх",
   "contact.require_phone": "Харилцагчийн утас заавал",
@@ -223,13 +208,12 @@ export const CRM2_SETTING_LABEL: Record<Crm2SettingKey, string> = {
   "media.max_videos": "Нэг хөрөнгийн бичлэгийн дээд тоо",
   "media.max_image_mb": "Зургийн дээд хэмжээ (МБ)",
   "media.max_video_mb": "Бичлэгийн дээд хэмжээ (МБ)",
-  "docs.max_file_mb": "Гэрээний файлын дээд хэмжээ (МБ)",
+  "docs.max_file_mb": "Гэрээний PDF, баримтын дээд хэмжээ (МБ)",
   "docs.max_files_per_contract": "Нэг гэрээний файлын дээд тоо",
   "staff.quick_add": "Шуурхай бүртгэл",
   "staff.quick_add_pilot": "Шуурхай бүртгэлийн туршилтын агентууд",
   "digest.scope": "Өдрийн дутуу бүртгэлийн сануулга",
   "digest.owner_days": "Эзэн тодорхойгүй хөрөнгийг сануулах хоног",
-  "digest.pending_days": "Батлагдаагүй гэрээг сануулах хоног",
   "ai.listing_parse": "Зарын текстийг AI-аар задлах",
 };
 
@@ -239,10 +223,6 @@ export const CRM2_SETTING_OPTION_LABEL: Partial<Record<Crm2SettingKey, Record<st
   "brokerage.on_expiry": { contract_ended: "«Гэрээ дууссан» болгох", keep: "Төлөвийг хэвээр үлдээх" },
   "approvals.allow_self": { nobody: "Хэн ч үгүй", managers: "Зөвхөн менежер", all: "Бүгд" },
   "contact.foreign_deal": { deny: "Хориглох (шилжүүлэх хүсэлт)", allow: "Зөвшөөрөх" },
-  "brokerage.activation_mode": {
-    auto: "Батлагдмагц автоматаар идэвхжүүлэх",
-    manual: "Агент өөрөө «Идэвхжүүлэх» дарна",
-  },
   "staff.quick_add": { off: "Унтраастай", pilot: "Туршилтын агентуудад", all: "Бүх агентад" },
   "digest.scope": { off: "Илгээхгүй", pilot: "Туршилтын агентуудад", all: "Бүх агентад" },
 };
@@ -259,7 +239,6 @@ export const CRM2_SETTING_NUMBER_RANGE: Partial<Record<Crm2SettingKey, [number, 
   "property.min_images": [0, 20],
   "brokerage.default_term_months": [1, 60],
   "digest.owner_days": [0, 14],
-  "digest.pending_days": [1, 14],
 };
 
 // ── Уншигч ─────────────────────────────────────────────────────────────────

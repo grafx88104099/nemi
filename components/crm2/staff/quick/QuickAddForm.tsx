@@ -1320,7 +1320,7 @@ function QuickDraftEditor({
           onChange={(v) => set("listing_agent_id", v)}
           onConfirm={() => confirm("listing_agent_id")}
         />
-        <p className="text-xs text-muted">Гэрээ байгуулсан агентыг гэрээ үүсгэхэд тодорхойлно.</p>
+        <p className="text-xs text-muted">Гэрээ байгуулсан агент — гэрээ бүртгэсэн агент болно (гэрээ бүртгэх цонхонд сольж болно).</p>
       </Section>
 
       <details className="rounded-2xl border border-line bg-surface">

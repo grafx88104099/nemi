@@ -1,5 +1,5 @@
 import { NotFoundState } from "@/components/crm2/ui/empty";
-import { brokerageResponsibleOptions, callAgentOptions, dealUiSettings, workStaffOptions } from "@/components/crm2/deals/types";
+import { callAgentOptions, dealUiSettings, workStaffOptions } from "@/components/crm2/deals/types";
 import { getCrm2Context, getCrm2Settings } from "@/lib/crm2/context";
 import { PROPERTY_TAB_LABEL, crm2Paths, isPropertyTab, type Crm2Panel, type PropertyTab } from "@/lib/crm2/paths";
 import { getOfferContext } from "@/lib/crm2/queries/card-tabs";
@@ -80,8 +80,6 @@ export async function PropertyCardPage({
   const me = ctx?.profileId ?? null;
   const meName = me ? (directory.find((s) => s.profile_id === me)?.name ?? null) : null;
   const agentOptions = callAgentOptions(staff, ctx);
-  // Гэрээний хариуцагч: менежер — бүгд, ахлагч — баг, бусад — өөрөө; + хөрөнгийн 3 үүргийн агент.
-  const brokerageStaff = brokerageResponsibleOptions(staff, ctx, [p.listing_agent_id, p.contract_agent_id, p.photo_agent_id]);
   const canWork = !!ctx?.isMember && !!ctx.canWork;
   const now = requestNow();
   const { checklist, next } = buildCardChecklist(detail, settings);
@@ -150,7 +148,7 @@ export async function PropertyCardPage({
         <div className="min-w-0">
           {tab === "info" ? <InfoTab detail={detail} settings={settings} panel={panel} now={now} checklist={checklist} next={next} /> : null}
           {tab === "agreement" ? (
-            <AgreementTab detail={detail} settings={settings} panel={panel} staff={brokerageStaff} names={names} now={now} />
+            <AgreementTab detail={detail} settings={settings} panel={panel} staff={staff} names={names} now={now} />
           ) : null}
           {tab === "publish" ? <PublishTab panel={panel} propertyId={p.id} /> : null}
           {tab === "calls" || tab === "showings" ? (
@@ -195,10 +193,8 @@ export async function PropertyCardPage({
         teamIds={ctx?.teamId ? [ctx.teamId] : []}
         canReassign={canReassign}
         contract={
-          detail.brokerage.find((c) => c.status === "draft") ??
-          detail.brokerage.find((c) => c.status === "pending") ??
-          detail.brokerage.find((c) => c.status === "active") ??
-          null
+          // Ноорог эхэнд («Гэрээ буруу»-гийн дараах шинэ ноорог ч бүртгэгдэнэ), дараа нь бүртгэгдсэн.
+          detail.brokerage.find((c) => c.status === "draft") ?? detail.brokerage.find((c) => c.status === "active") ?? null
         }
       />
     </PageContainer>

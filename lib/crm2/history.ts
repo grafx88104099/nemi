@@ -133,6 +133,12 @@ export const HISTORY_FIELD_LABEL: Record<string, string> = {
   responsible_agent_id: "Хариуцсан агент",
   approved_by: "Баталсан",
   approval_note: "Батлалтын тэмдэглэл",
+  // 20261125000100: батлах алхамгүй бүртгэл ба «Гэрээ буруу».
+  registered_by: "Бүртгэсэн",
+  registered_at: "Бүртгэсэн огноо",
+  stamp_confirmed: "PMC-ийн тамга, гарын үсэгтэй (агент баталгаажуулсан)",
+  invalidated_by: "Гэрээ буруу гэж буцаасан",
+  invalidated_at: "Гэрээ буруу гэж буцаасан огноо",
   rejection_note: "Татгалзсан шалтгаан",
   termination_reason: "Цуцалсан шалтгаан",
   file_name: "Файлын нэр",
@@ -202,6 +208,8 @@ const AGENT_FIELDS = new Set([
   "photo_agent_id",
   "responsible_agent_id",
   "approved_by",
+  "registered_by",
+  "invalidated_by",
   "agent_id",
   "assignee_id",
 ]);

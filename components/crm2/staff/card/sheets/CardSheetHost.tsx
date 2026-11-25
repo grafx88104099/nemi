@@ -35,7 +35,8 @@ function useMounted(): boolean {
  * Картын доод цонхнуудын хост: ?sheet= (next | checklist | contract | owner | location | size | price |
  * roles | details | photos | confirm | publish) ба ?field=-ээр нэг цонхыг нээнэ.
  * - next → дараагийн алхмын цонх (URL-ийг тодорхой цонхоор солино — хадгалсны дараа үсрэхгүй);
- * - contract → ContractSheet (засах ноорог/илгээсэн гэрээ эсвэл шинэ ноорог), publish → «Зар» таб.
+ * - contract → ContractSheet «Гэрээ бүртгэх» (ноорог, бүртгэгдсэн гэрээ эсвэл эхний PDF дээр шинэ ноорог),
+ *   publish → «Зар» таб.
  */
 export function CardSheetHost({
   panel,
@@ -72,7 +73,7 @@ export function CardSheetHost({
   me: string | null;
   teamIds: string[];
   canReassign: boolean;
-  /** Гэрээний цонхонд нээх гэрээ (ноорог → илгээсэн → хүчинтэй); байхгүй бол шинэ ноорог. */
+  /** Гэрээний цонхонд нээх гэрээ (ноорог → бүртгэгдсэн); байхгүй бол шинэ ноорог. */
   contract: Crm2BrokerageRow | null;
 }) {
   const router = useRouter();
@@ -112,6 +113,7 @@ export function CardSheetHost({
         settings={settings}
         staff={staff}
         panel={panel}
+        onOpenSheet={(s, f) => openSheet(s, f)}
         onClose={close}
       />
     );
@@ -151,6 +153,7 @@ export function CardSheetHost({
           focusField={resolved.field}
           onClose={close}
           onOpenSheet={(s) => openSheet(s)}
+          contractRegistered={contract?.status === "active"}
         />
       );
     case "owner":

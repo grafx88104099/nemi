@@ -1,8 +1,10 @@
 "use server";
 
-import { CRM2_DOCS_BUCKET, CRM2_MEDIA_BUCKET, crm2Session, revalidateCrm2 } from "@/lib/crm2/server";
-import { AUTH_ERROR, NOT_FOUND_ERROR, dbFail, definedOnly, fail, ok, zodErrorText } from "@/lib/crm2/result";
+import { CRM2_DOCS_BUCKET, CRM2_MEDIA_BUCKET, crm2Session, revalidateCrm2, type Crm2Supabase } from "@/lib/crm2/server";
+import { AUTH_ERROR, NOT_FOUND_ERROR, dbErrorField, dbFail, definedOnly, fail, ok, zodErrorText } from "@/lib/crm2/result";
+import { isPdfHeader } from "@/lib/crm2/files";
 import {
+  CONTRACT_PDF_ONLY_ERROR,
   brokerageFileRowSchema,
   idSchema,
   mediaReorderSchema,
@@ -19,6 +21,7 @@ import type { Crm2Result } from "@/lib/crm2/types";
  * Медиа ба гэрээний файлын МӨР. Файлыг эхлээд клиент Storage руу хуулна
  * (lib/crm2/storage.ts), дараа нь энд мөрөө оруулна — trigger storage.objects-оос
  * хэмжээ/төрлийг уншиж хязгаарыг шалгана. Устгахад мөр, дараа нь файл.
+ * Гэрээний PDF (kind='contract') зөвхөн НООРОГ гэрээнд, нэг гэрээнд нэг; байтыг «%PDF-» толгойгоор шалгана.
  */
 
 /** Хуулсан зураг/бичлэгийн мөр. is_cover бол өмнөх нүүр зургийг солино. */
@@ -172,12 +175,25 @@ export async function deletePropertyMedia(mediaId: string): Promise<Crm2Result<n
 
 // ── Зуучлалын гэрээний файл ────────────────────────────────────────────────
 
-/** Хуулсан гэрээний файлын мөр (ноорогт засварлагч, илгээсэн/батлагдсанд батлагч). */
+/**
+ * Хуулсан гэрээний файлын мөр. Гэрээний PDF — зөвхөн ноорогт (засварлагч), нэг гэрээнд нэг; өмчлөлийн/бусад
+ * баримтыг хавсаргах эрх crm2_can_attach_brokerage-аар.
+ */
 export async function addBrokerageFileRow(input: BrokerageFileRowInput): Promise<Crm2Result<{ id: string }>> {
   const parsed = brokerageFileRowSchema.safeParse(input);
-  if (!parsed.success) return fail(zodErrorText(parsed.error));
+  if (!parsed.success) return { ok: false, error: zodErrorText(parsed.error), field: "file" };
   const session = await crm2Session();
   if (!session) return fail(AUTH_ERROR);
+  if (parsed.data.kind === "contract") {
+    // DB зөвхөн зарласан төрөл (application/pdf) ба .pdf өргөтгөлийг шалгана — байтыг энд шалгана.
+    const head = await storageHead(session.supabase, parsed.data.storage_path);
+    if (head === null) return fail("Гэрээний PDF-ийг шалгаж чадсангүй. Дахин оролдоно уу.");
+    if (!isPdfHeader(head)) {
+      const rm = await session.supabase.storage.from(CRM2_DOCS_BUCKET).remove([parsed.data.storage_path]);
+      if (rm.error) console.error("crm2 addBrokerageFileRow remove:", rm.error.message);
+      return { ok: false, error: CONTRACT_PDF_ONLY_ERROR, field: "file" };
+    }
+  }
   // office_id, property_id-г trigger гэрээнээс бөглөнө.
   const { data, error } = await session.supabase
     .from("crm2_brokerage_files")
@@ -190,9 +206,51 @@ export async function addBrokerageFileRow(input: BrokerageFileRowInput): Promise
     })
     .select("id")
     .single();
-  if (error || !data) return dbFail("addBrokerageFileRow", error);
+  if (error || !data) {
+    // «зөвхөн PDF», «нэг PDF», «PDF-ийг солихгүй» (files_guard) → field 'file' (upload-queue дахин оролдохгүй).
+    console.error("crm2 addBrokerageFileRow:", error?.message ?? error);
+    const { field, text } = dbErrorField(error);
+    return { ok: false, error: text, field };
+  }
   revalidateCrm2();
   return ok({ id: data.id });
+}
+
+/**
+ * crm2-docs объектын эхний 5 байт (хэрэглэгчийн client-ээр 60 с signed URL + Range). Уншиж чадаагүй бол
+ * null. Range-ийг үл тоовол (200) эхний хэсгийг уншаад урсгалыг зогсооно.
+ */
+async function storageHead(supabase: Crm2Supabase, path: string, n = 5): Promise<Uint8Array | null> {
+  const signed = await supabase.storage.from(CRM2_DOCS_BUCKET).createSignedUrl(path, 60);
+  if (signed.error || !signed.data?.signedUrl) {
+    console.error("crm2 storageHead sign:", signed.error?.message ?? "no url");
+    return null;
+  }
+  try {
+    const res = await fetch(signed.data.signedUrl, { headers: { Range: `bytes=0-${n - 1}` }, cache: "no-store" });
+    if (!res.ok || !res.body) {
+      console.error("crm2 storageHead fetch:", res.status);
+      return null;
+    }
+    const reader = res.body.getReader();
+    const out = new Uint8Array(n);
+    let got = 0;
+    try {
+      while (got < n) {
+        const { value, done } = await reader.read();
+        if (done || !value) break;
+        const take = Math.min(n - got, value.length);
+        out.set(value.subarray(0, take), got);
+        got += take;
+      }
+    } finally {
+      await reader.cancel().catch(() => undefined);
+    }
+    return out.subarray(0, got);
+  } catch (e) {
+    console.error("crm2 storageHead:", e instanceof Error ? e.message : e);
+    return null;
+  }
 }
 
 /** Гэрээний файл устгах (зөвхөн ноорог гэрээнд). */
@@ -208,7 +266,7 @@ export async function deleteBrokerageFile(fileId: string): Promise<Crm2Result<nu
     .select("id, storage_path");
   if (error) return dbFail("deleteBrokerageFile", error);
   const row = data?.[0];
-  if (!row) return fail("Файл олдсонгүй эсвэл устгах эрхгүй (илгээсэн гэрээний файлыг устгахгүй).");
+  if (!row) return fail("Файл олдсонгүй эсвэл устгах эрхгүй (бүртгэгдсэн гэрээний файлыг устгахгүй).");
   const rm = await session.supabase.storage.from(CRM2_DOCS_BUCKET).remove([row.storage_path]);
   if (rm.error) console.error("crm2 deleteBrokerageFile storage:", rm.error.message);
   revalidateCrm2();

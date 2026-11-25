@@ -1,20 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { Check } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { missingItemLabel } from "@/lib/crm2/labels";
 
 /** 16px гар утсанд (iOS томруулахгүй), 44px өндөр. */
 export const INPUT_CLASS =
-  "h-11 w-full rounded-xl border border-line bg-surface px-3.5 text-base text-ink placeholder:text-subtle focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50 sm:text-sm";
-
-export const TEXTAREA_CLASS =
-  "w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-base text-ink placeholder:text-subtle focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50 sm:text-sm";
-
-/** Урьдчилан бөглөсөн (шар) талбарын хүрээ. */
-export const PREFILLED_CLASS = "border-amber-300 bg-amber-50";
+  "h-11 w-full min-w-0 rounded-xl border border-line bg-surface px-3.5 text-base text-ink placeholder:text-subtle focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50 sm:text-sm";
 
 /** Сонголтын чип (≥44px). */
 export function Chip({
@@ -47,43 +41,63 @@ export function Chip({
   );
 }
 
-/** «Оффисын анхдагч · шалгана уу [Зөв]» мөр. */
-export function PrefillTag({ onConfirm, disabled, label = "оффисын анхдагч · шалгана уу" }: { onConfirm: () => void; disabled?: boolean; label?: string }) {
-  return (
-    <div className="flex items-center justify-between gap-2 rounded-lg bg-amber-50 px-2 py-1">
-      <span className="text-xs font-semibold text-amber-900">{label}</span>
-      <button
-        type="button"
-        onClick={onConfirm}
-        disabled={disabled}
-        className="inline-flex min-h-11 items-center gap-1 rounded-lg px-3 text-sm font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-50 sm:min-h-9"
-      >
-        <Check className="size-4" aria-hidden /> Зөв
-      </button>
-    </div>
-  );
-}
+export type MissingRow = { key: string; label?: string; /** onOpen-оор нээж нөхөх боломжтой. */ openable?: boolean };
 
-/** Дутуу зүйлсийн жагсаалт (илгээх товч яагаад идэвхгүйг тайлбарлана). */
+/**
+ * Дутуу зүйлсийн жагсаалт (товч яагаад идэвхгүйг тайлбарлана). items — кодын жагсаалт (нэрийг
+ * missingItemLabel-ээс) эсвэл мөр; openable мөрийг onOpen өгсөн үед товч болгоно (нөхөх цонхыг нээнэ).
+ */
 export function MissingList({
   items,
   title,
   id,
   className,
+  tone = "amber",
+  onOpen,
 }: {
-  items: readonly string[];
+  items: readonly (string | MissingRow)[];
   title: string;
   id?: string;
   className?: string;
+  /** amber — бүртгэлийг саатуулна; muted — саатуулахгүй (дараа нь нөхөж болно). */
+  tone?: "amber" | "muted";
+  onOpen?: (key: string) => void;
 }) {
   if (!items.length) return null;
+  const rows = items.map((i) => (typeof i === "string" ? { key: i } : i));
   return (
-    <div id={id} className={cn("rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900", className)}>
+    <div
+      id={id}
+      className={cn(
+        "min-w-0 rounded-xl border px-3 py-2 text-sm",
+        tone === "amber" ? "border-amber-200 bg-amber-50 text-amber-900" : "border-line bg-surface-2 text-ink",
+        className
+      )}
+    >
       <p className="font-semibold">{title}</p>
-      <ul className="mt-1 list-disc space-y-0.5 pl-5">
-        {items.map((m) => (
-          <li key={m}>{missingItemLabel(m)}</li>
-        ))}
+      <ul className="mt-1 space-y-0.5">
+        {rows.map((r) => {
+          const label = r.label ?? missingItemLabel(r.key);
+          return (
+            <li key={r.key} className="min-w-0">
+              {r.openable && onOpen ? (
+                <button
+                  type="button"
+                  onClick={() => onOpen(r.key)}
+                  className="flex min-h-11 w-full items-center gap-1 rounded-lg text-left font-medium underline-offset-2 hover:underline"
+                >
+                  <span className="min-w-0 flex-1 break-words">{label}</span>
+                  <ChevronRight className="size-4 shrink-0" aria-hidden />
+                </button>
+              ) : (
+                <span className="flex gap-2">
+                  <span aria-hidden>•</span>
+                  <span className="min-w-0 break-words">{label}</span>
+                </span>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

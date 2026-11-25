@@ -97,14 +97,28 @@ export type Crm2ActivationCheck = {
   has_valid_contract: boolean;
 };
 
-/** crm2_brokerage_approve() */
-export type Crm2BrokerageApproveResult = {
-  contract_status: Crm2BrokerageStatus;
+/**
+ * crm2_brokerage_register() (20261125000100) — ноорог → active, батлагчгүй. Хөрөнгийн мэдээлэл бүрэн бол
+ * хөрөнгө мөн идэвхжинэ; эс бөгөөс property_missing-ийг нөхмөгц DB өөрөө идэвхжүүлнэ.
+ */
+export type Crm2BrokerageRegisterResult = {
+  contract_status: "active";
+  /** Системийн дугаар (B###); хуучин ноорогт цаасан дугаар хэвээр. */
+  number: string;
+  /** Бүртгэсэн өдөр (УБ). */
+  start_date: string;
+  end_date: string;
   property_status: Crm2PropertyStatus;
+  /** crm2_property_missing — идэвхтэй бол хоосон. */
   property_missing: string[];
-  activate_on_start: boolean;
-  /** 20261124000500 — brokerage.activation_mode. 'manual' бол агент «Идэвхжүүлэх»-ээр идэвхжүүлнэ. Хуучин функц буцаахгүй. */
-  activation_mode?: "auto" | "manual";
+  /** Аль хэдийн бүртгэгдсэн (давхар дарсан) — өөрчлөлтгүй. */
+  already?: boolean;
+};
+
+/** crm2_brokerage_invalidate() — «Гэрээ буруу»: гэрээ terminated, хүчинтэй гэрээ үлдээгүй бол хөрөнгө ноорог. */
+export type Crm2BrokerageInvalidateResult = {
+  contract_status: "terminated";
+  property_status: Crm2PropertyStatus;
 };
 
 /** crm2_create_contact() давхардлын мөр. */

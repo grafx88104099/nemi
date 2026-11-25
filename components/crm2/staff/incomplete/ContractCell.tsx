@@ -21,10 +21,13 @@ export type ContractCellProps = {
   needsWork: boolean;
 };
 
-/** Шалгах жагсаалтад тооцох гэрээ: хүчинтэй нь, эс бөгөөс сүүлийн ноорог/илгээсэн. */
-function pickContract(ctx: ContractContext): Crm2BrokerageRow | null {
+/**
+ * Цонхонд нээх гэрээ: ноорог эхэнд (бүртгэх ажилтай — «Гэрээ буруу»-гийн дараа үүсгэсэн ноорог ч),
+ * эс бөгөөс бүртгэгдсэн (хүчинтэй) гэрээ.
+ */
+function pickContract(ctx: Pick<ContractContext, "contracts">): Crm2BrokerageRow | null {
   const list = ctx.contracts as unknown as Crm2BrokerageRow[];
-  return list.find((c) => c.status === "active") ?? list.find((c) => c.status === "draft" || c.status === "pending") ?? null;
+  return list.find((c) => c.status === "draft") ?? list.find((c) => c.status === "active") ?? null;
 }
 
 /**

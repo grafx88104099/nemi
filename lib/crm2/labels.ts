@@ -197,8 +197,9 @@ export const BROKERAGE_STATUSES = ["draft", "pending", "active", "expired", "ter
 
 export const BROKERAGE_STATUS_LABEL: Record<Crm2BrokerageStatus, string> = {
   draft: "Ноорог",
-  pending: "Батлуулахаар илгээсэн",
-  active: "Батлагдсан",
+  // 20261125000100-аас 'pending' үүсэхгүй (crm2_brokerage_no_pending) — enum-д үлдсэн тул нэр хэвээр.
+  pending: "Батлуулахаар илгээсэн (хуучин)",
+  active: "Бүртгэгдсэн",
   expired: "Хугацаа дууссан",
   terminated: "Цуцлагдсан",
 };
@@ -483,7 +484,7 @@ export const BROKERAGE_FILE_KINDS = ["contract", "ownership", "id", "other"] as 
 export type Crm2BrokerageFileKindKey = (typeof BROKERAGE_FILE_KINDS)[number];
 
 export const BROKERAGE_FILE_KIND_LABEL: Record<Crm2BrokerageFileKindKey, string> = {
-  contract: "Гэрээ",
+  contract: "Гэрээ (PDF)",
   ownership: "Өмчлөлийн баримт",
   id: "Иргэний үнэмлэх",
   other: "Бусад баримт",
@@ -517,12 +518,16 @@ export const MISSING_ITEM_LABEL: Record<string, string> = {
   showing_instructions: "үзүүлэх заавар",
   images: "зураг",
   unconfirmed: "баталгаажаагүй утга",
-  brokerage_contract: "батлагдсан, хүчинтэй зуучлалын гэрээ",
+  brokerage_contract: "бүртгэгдсэн, хүчинтэй зуучлалын гэрээ (PMC тамгатай PDF)",
+  // start_date, commission, special_terms, signer_authority, defaults_unconfirmed, role_unconfirmed —
+  // 20261125000100-аас DB үүсгэхгүй; хуучин мэдэгдэл, мессежид зориулж нэр нь үлдэнэ.
   start_date: "эхлэх огноо",
   end_date: "дуусах огноо",
   end_date_past: "дуусах огноо өнгөрсөн",
   commission: "шимтгэл",
-  file: "гэрээний файл",
+  file: "гэрээний PDF (PMC-ийн тамга, гарын үсэгтэй)",
+  file_not_pdf: "гэрээний зураг/бусад файл — гэрээг зөвхөн PDF-ээр оруулна (устгана уу)",
+  stamp_unconfirmed: "PMC-ийн тамга, гарын үсэгтэйг баталгаажуулаагүй",
   special_terms: "онцгой нөхцөл (эсвэл «онцгой нөхцөлгүй»)",
   signer_authority: "гарын үсэг зурах эрхийн тайлбар",
   defaults_unconfirmed: "оффисын анхдагч утгыг баталгаажуулаагүй",

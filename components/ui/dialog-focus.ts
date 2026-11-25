@@ -51,6 +51,18 @@ export function focusDialogStart(root: HTMLElement | null): void {
   (root.querySelector<HTMLElement>("[data-autofocus]") ?? root).focus();
 }
 
+/**
+ * Энэ диалог гарын үйлдлийг (Escape, Tab) хүлээж авах эсэх. Фокус дээр нь давхарласан ӨӨР aria-modal
+ * диалог дотор байвал үгүй — тэр диалог өөрөө шийднэ (доод цонхны дээрх баталгаажуулах цонхонд Escape
+ * дарахад доод цонх хаагдахгүй, Tab доод цонх руу үсрэхгүй). Фокус body эсвэл энэ диалогт бол тийм.
+ */
+export function ownsKeyboard(root: HTMLElement | null): boolean {
+  const active = document.activeElement;
+  if (!root || !(active instanceof Element)) return true;
+  const modal = active.closest('[aria-modal="true"]');
+  return !modal || modal === root;
+}
+
 /** Tab-ыг диалог дотор эргэлдүүлнэ (диалог өөрөө фокустай үед ч). */
 export function trapTab(e: KeyboardEvent, root: HTMLElement | null): void {
   if (!root) return;

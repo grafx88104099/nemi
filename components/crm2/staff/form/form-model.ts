@@ -1,7 +1,6 @@
 import type { z } from "zod";
 
 import { UNCONFIRMABLE_KEYS } from "@/lib/crm2/checklist";
-import { isIsoDate } from "@/lib/crm2/datetime";
 import { mergeSnapshot } from "@/lib/crm2/device/draft-store";
 import { perM2FromTotal, totalFromPerM2, type FieldValidationInput } from "@/lib/crm2/field-validation";
 import { CATEGORY_PRICE_PERIODS, defaultPricePeriod, missingItemLabel } from "@/lib/crm2/labels";
@@ -9,8 +8,6 @@ import { normalizePhone } from "@/lib/crm2/phone";
 import { propertyCreateSchema } from "@/lib/crm2/schemas";
 import { parseNumberText } from "@/lib/number-input";
 import type {
-  Crm2BrokerageRow,
-  Crm2CommissionType,
   Crm2Currency,
   Crm2PriceBasis,
   Crm2PricePeriod,
@@ -574,110 +571,9 @@ export function privatePayload(s: PrivateFormState): PrivatePayload {
   };
 }
 
-// ── Зуучлалын гэрээ ────────────────────────────────────────────────────────
-
-export type BrokerageFormState = {
-  number: string;
-  start_date: string;
-  end_date: string;
-  terms: string;
-  commission_type: Crm2CommissionType | "";
-  commission_value: string;
-  commission_currency: Crm2Currency;
-  commission_note: string;
-  /** Хоосон бол DB: гэрээ хийсэн агент → листлэгч → өөрөө. */
-  responsible_agent_id: string;
-};
-
-export function emptyBrokerageForm(): BrokerageFormState {
-  return {
-    number: "",
-    start_date: "",
-    end_date: "",
-    terms: "",
-    commission_type: "",
-    commission_value: "",
-    commission_currency: "MNT",
-    commission_note: "",
-    responsible_agent_id: "",
-  };
-}
-
-export function brokerageToForm(row: Crm2BrokerageRow): BrokerageFormState {
-  return {
-    number: str(row.number),
-    start_date: str(row.start_date),
-    end_date: str(row.end_date),
-    terms: str(row.terms),
-    commission_type: row.commission_type ?? "",
-    commission_value: numStr(row.commission_value),
-    commission_currency: cur(row.commission_currency),
-    commission_note: str(row.commission_note),
-    responsible_agent_id: str(row.responsible_agent_id),
-  };
-}
-
-/** Гэрээний хэсэгт ямар нэг зүйл бөглөсөн эсэх (шинэ хөрөнгөнд гэрээ үүсгэх эсэх). */
-export function brokerageHasInput(s: BrokerageFormState, fileCount = 0): boolean {
-  return (
-    fileCount > 0 ||
-    !!(
-      s.number.trim() ||
-      s.start_date ||
-      s.end_date ||
-      s.terms.trim() ||
-      s.commission_type ||
-      s.commission_value.trim() ||
-      s.commission_note.trim()
-    )
-  );
-}
-
-export type BrokeragePayload = {
-  number: string | null;
-  owner_contact_id: string | null;
-  start_date: string | null;
-  end_date: string | null;
-  terms: string | null;
-  commission_type: Crm2CommissionType | null;
-  commission_value: number | string | null;
-  commission_currency: Crm2Currency;
-  commission_note: string | null;
-  responsible_agent_id: string | null;
-};
-
-export function brokeragePayload(s: BrokerageFormState, ownerId: string | null): BrokeragePayload {
-  return {
-    number: textOrNull(s.number),
-    owner_contact_id: ownerId,
-    start_date: textOrNull(s.start_date),
-    end_date: textOrNull(s.end_date),
-    terms: textOrNull(s.terms),
-    commission_type: s.commission_type || null,
-    commission_value: parseNumberInput(s.commission_value),
-    commission_currency: s.commission_currency,
-    commission_note: textOrNull(s.commission_note),
-    responsible_agent_id: textOrNull(s.responsible_agent_id),
-  };
-}
-
-/**
- * Батлуулахаар илгээхэд дутуу зүйлс (DB-ийн crm2_brokerage_missing-тэй ижил
- * түлхүүр) — илгээхээс өмнө клиентэд анхааруулна; эцсийн шалгалт DB.
- */
-export function brokerageSubmitMissing(
-  s: BrokerageFormState,
-  opts: { ownerId: string | null; fileCount: number; requireOwner: boolean; requireFile: boolean; today: string }
-): string[] {
-  const missing: string[] = [];
-  if (!isIsoDate(s.start_date)) missing.push("start_date");
-  if (!isIsoDate(s.end_date)) missing.push("end_date");
-  else if (s.end_date < opts.today) missing.push("end_date_past");
-  if (!s.commission_type || typeof parseNumberInput(s.commission_value) !== "number") missing.push("commission");
-  if (opts.requireOwner && !opts.ownerId) missing.push("owner");
-  if (opts.requireFile && opts.fileCount === 0) missing.push("file");
-  return missing;
-}
+// ── Дутуу зүйлс ────────────────────────────────────────────────────────────
+// Зуучлалын гэрээг (PMC тамгатай PDF) хөрөнгийг хадгалсны дараа картаас бүртгэнэ (20261125000100) —
+// бүрэн формд гэрээний хэсэг байхгүй.
 
 /** Дутуу зүйлсийг энгийн монгол өгүүлбэр болгоно. */
 export function missingSentence(keys: string[]): string {
@@ -693,7 +589,6 @@ export type MediaLinkDraft = { id: string; url: string };
  * бичлэг. Зөвхөн нийтийн талбар: address_detail ба эзний мэдээлэл ЗӨВХӨН хувийн (битүүмжилсэн) хэсэгт.
  */
 export type CreateDraftForm = PropertyFormState & {
-  brokerage: BrokerageFormState;
   media_links: MediaLinkDraft[];
 };
 
@@ -703,17 +598,12 @@ export type CreateDraftPrivate = {
   owner_note: string;
   showing_instructions: string;
   address_detail: string;
-  brokerage_owner: OwnerRef | null;
-  brokerage_owner_touched: boolean;
   owner_phone?: string;
 };
 
 export type CreateDraftParts = {
   form: PropertyFormState;
   priv: PrivateFormState;
-  brokerage: BrokerageFormState;
-  brokerageOwner: OwnerRef | null;
-  brokerageOwnerTouched: boolean;
   links: MediaLinkDraft[];
 };
 
@@ -727,13 +617,11 @@ export function toCreateDraft(p: CreateDraftParts, quickPhone?: string | null): 
     owner_note: p.priv.owner_note,
     showing_instructions: p.priv.showing_instructions,
     address_detail: p.form.address_detail,
-    brokerage_owner: p.brokerageOwnerTouched ? p.brokerageOwner : null,
-    brokerage_owner_touched: p.brokerageOwnerTouched,
   };
   // Шуурхай бүртгэлийн дугаарыг эзэн сонгогдтол хадгална (алдагдахгүй).
   if (quickPhone && !p.priv.owner) priv.owner_phone = quickPhone;
   return {
-    form: { ...p.form, address_detail: "", brokerage: p.brokerage, media_links: p.links },
+    form: { ...p.form, address_detail: "", media_links: p.links },
     private: priv,
   };
 }
@@ -756,11 +644,11 @@ const oneOf = <T extends string>(v: unknown, allowed: readonly T[], fallback: T)
 const CATEGORIES = ["rent", "lease", "managed_rent", "sale"] as const;
 const PERIODS = ["total", "month", "day"] as const;
 const BASES = ["total", "per_m2"] as const;
-const COMMISSION_TYPES = ["percent", "fixed"] as const;
 
 /**
  * Ноорогоос маягтын төлөв (кодын хувилбар солигдсон, шуурхай бүртгэлийн ноорог ч аюулгүй):
- * мэдэгдэхгүй түлхүүр, буруу төрөл, буруу сонголтыг хаяна.
+ * мэдэгдэхгүй түлхүүр, буруу төрөл, буруу сонголтыг хаяна. Утсан дээрх хуучин ноорогт үлдсэн
+ * гэрээний хэсэг (brokerage, brokerage_owner*) — 20261125000100-аас хэрэглэхгүй, хаягдана.
  */
 export function fromCreateDraft(
   storedForm: unknown,
@@ -790,14 +678,6 @@ export function fromCreateDraft(
     address_detail: "",
   };
 
-  const bBase = emptyBrokerageForm();
-  const b = mergeSnapshot(bBase as unknown as Record<string, unknown>, raw.brokerage) as unknown as BrokerageFormState;
-  const brokerage: BrokerageFormState = {
-    ...b,
-    commission_type: oneOf(b.commission_type, [...COMMISSION_TYPES, ""] as const, ""),
-    commission_currency: cur(b.commission_currency),
-  };
-
   const links: MediaLinkDraft[] = (Array.isArray(raw.media_links) ? raw.media_links : [])
     .filter((l): l is MediaLinkDraft => isRecord(l) && typeof l.id === "string" && typeof l.url === "string")
     .map((l) => ({ id: l.id, url: l.url }));
@@ -806,14 +686,10 @@ export function fromCreateDraft(
   const text = (v: unknown) => (typeof v === "string" ? v : "");
   form.address_detail = text(p.address_detail);
   const owner = ownerRefOf(p.owner);
-  const touched = p.brokerage_owner_touched === true;
   const quickPhone = !owner && typeof p.owner_phone === "string" && p.owner_phone.trim() ? p.owner_phone.trim() : null;
   return {
     form,
     priv: { owner, owner_note: text(p.owner_note), showing_instructions: text(p.showing_instructions) },
-    brokerage,
-    brokerageOwner: touched ? ownerRefOf(p.brokerage_owner) : null,
-    brokerageOwnerTouched: touched,
     links,
     quickPhone,
   };

@@ -3,9 +3,12 @@ import { CHECKLIST_GROUPS, MISSING_ITEM_LABEL, type Crm2ChecklistGroup, type Crm
 /**
  * Staff хөрөнгийн «шалгах жагсаалт» (P3) ба «Дараагийн алхам» — цэвэр модуль (сервер, клиент, тест).
  * DB-ийн дүрмийг давхардуулж харуулна; эцсийн шалгалт DB дээр:
- *   activationMissing      ≙ crm2_property_missing (20261124000300)
- *   contractSubmitMissing  ≙ crm2_brokerage_missing (20261124000300)
- *   publishMissing         ≙ crm2_publish_blockers (20261124000600) — төлөв ба гэрээнээс бусад
+ *   activationMissing        ≙ crm2_property_missing (20261124000300)
+ *   contractRegisterMissing  ≙ crm2_brokerage_missing (20261125000100 — гэрээ бүртгэх)
+ *   hasValidContract         ≙ crm2_property_has_valid_contract (20261125000100)
+ *   publishMissing           ≙ crm2_publish_blockers (20261124000600) — төлөв ба гэрээнээс бусад
+ * Гэрээг батлахгүй: агент PMC-ийн тамга, гарын үсэгтэй PDF-ээр бүртгэмэгц хүчинтэй болж, хөрөнгийн
+ * мэдээлэл бүрэн бол хөрөнгө автоматаар идэвхжинэ.
  * Оролт (ChecklistInput) нь өөрийн тодорхой төрөлтэй — DB-ийн мөрийн төрлөөс хамаарахгүй, дуудагч
  * (queries/checklist.ts) мөрөөс угсарна.
  */
@@ -63,6 +66,8 @@ export type ChecklistProperty = {
   last_verified_at: string | null;
   unconfirmed: readonly string[] | null;
   status: PropertyStatus;
+  /** Төлөв сүүлд өөрчлөгдсөн агшин — «гэрээ дууссан» хөрөнгийн автомат идэвхжүүлэлтэд (autoActivates). */
+  status_changed_at?: string | null;
   listing_id: string | null;
   source_listing_id: string | null;
   published_at: string | null;
@@ -81,26 +86,26 @@ export type ChecklistContract = {
   status: BrokerageStatus;
   start_date: string | null;
   end_date: string | null;
-  /** Батлагдсан огноо (crm2_property_has_valid_contract approved_at шаардана). Өгөхгүй бол status='active'-ийг батлагдсан гэж үзнэ. */
-  approved_at?: string | null;
-  commission_type: string | null;
-  commission_value: number | null;
+  /** Хуучин урсгалаар батлагдсан огноо. */
+  approved_at: string | null;
+  /** Бүртгэсэн огноо (20261125000100). Хүчинтэй гэрээ = active ба (approved_at эсвэл registered_at). */
+  registered_at: string | null;
+  /** «PMC-ийн тамга, гарын үсэгтэй»-г агент бүртгэхдээ баталгаажуулсан (шинэ дүрмээр шилжүүлсэнд false). */
+  stamp_confirmed: boolean;
+  /** Гэрээний эзэн; null бол DB хөрөнгийн эзнийг (crm2_property_private) авна. */
   owner_contact_id: string | null;
+  /** Гэрээний (эсвэл хөрөнгийн) эзний нэр баталгаажаагүй. */
   ownerNameUnverified: boolean;
   ownerSource: string | null;
-  terms: string | null;
-  no_special_terms: boolean;
-  signer_differs: boolean;
-  signer_note: string | null;
-  prefilled: readonly string[];
-  /** kind='contract' файлын тоо (ноорогт зөвхөн эдгээр тооцогдоно). */
-  fileCount: number;
-  /** kind='ownership' файлын тоо (харах эрхгүй бол 0 — DB-ээс тоогоор нь авна). */
-  ownershipFileCount: number;
-  /** kind='id' | 'other' файлын тоо (илгээсэн/батлагдсан гэрээнд аль ч файл тооцогдоно). */
-  otherFileCount?: number;
-  /** «Гэрээ оффист үлдсэн» — зөвхөн сануулга; 'file'-ийг ХЭЗЭЭ Ч хангахгүй. */
-  file_at_office: boolean;
+  /** kind='contract' ба application/pdf файлын тоо (DB нэгээс олныг зөвшөөрөхгүй). */
+  pdfCount: number;
+  /** kind='contract' боловч PDF биш (хуучин зураг) — устгатал бүртгэхгүй ('file_not_pdf'). */
+  nonPdfContractCount: number;
+  /**
+   * kind='ownership' файлын тоо. null = мэдэгдэхгүй (restricted баримт харах эрхгүй — RLS нуудаг): 'ownership_doc'-ийг
+   * дутуу гэж үзэхгүй, DB (crm2_brokerage_missing) өөрөө шалгана.
+   */
+  ownershipFileCount: number | null;
 };
 
 /** Шалгах жагсаалтад хэрэгтэй тохиргоо (crm2 тохиргооноос checklistSettings()-ээр). */
@@ -108,10 +113,7 @@ export type ChecklistSettings = {
   activationRequired: readonly string[];
   minImages: number;
   requireOwner: boolean;
-  requireFile: boolean;
-  requireSpecialTerms: boolean;
   requireOwnershipDoc: boolean;
-  activationMode: "auto" | "manual";
 };
 
 export type ChecklistInput = {
@@ -121,7 +123,7 @@ export type ChecklistInput = {
   ownerPending: boolean;
   /** Үзүүлэх заавар (хувийн). 'hidden' = харах эрхгүй. */
   showingInstructions?: string | null | "hidden";
-  /** Одоогийн гэрээ (сүүлийн ноорог/илгээсэн/батлагдсан); дууссан/цуцлагдсан бол null. */
+  /** Одоогийн гэрээ (хүчинтэй нь, эс бөгөөс сүүлийн ноорог); дууссан/цуцлагдсан бол null. */
   contract: ChecklistContract | null;
   imageCount: number;
   /** Хөрөнгө авчирсан агент nemi.mn-д идэвхтэй нийтийн бүртгэлтэй (agents.status='active'). */
@@ -138,20 +140,67 @@ export function checklistSettings(s: {
   "property.activation_required": readonly string[];
   "property.min_images": number;
   "brokerage.require_owner": boolean;
-  "brokerage.require_file": boolean;
-  "brokerage.require_special_terms": boolean;
   "brokerage.require_ownership_doc": boolean;
-  "brokerage.activation_mode": "auto" | "manual";
 }): ChecklistSettings {
   return {
     activationRequired: s["property.activation_required"],
     minImages: s["property.min_images"],
     requireOwner: s["brokerage.require_owner"],
-    requireFile: s["brokerage.require_file"],
-    requireSpecialTerms: s["brokerage.require_special_terms"],
     requireOwnershipDoc: s["brokerage.require_ownership_doc"],
-    activationMode: s["brokerage.activation_mode"],
   };
+}
+
+/** Гэрээний файлын тоо (kind хоосон = 'contract'): PDF гэрээ, PDF биш гэрээ (хуучин зураг), өмчлөл, бусад. */
+export type ContractFileCounts = { pdf: number; nonPdf: number; ownership: number; other: number };
+
+export function countContractFiles(
+  files: readonly { kind: string | null; mime_type?: string | null }[] | null | undefined
+): ContractFileCounts {
+  const out: ContractFileCounts = { pdf: 0, nonPdf: 0, ownership: 0, other: 0 };
+  for (const f of files ?? []) {
+    const kind = f.kind ?? "contract";
+    if (kind === "contract") {
+      if ((f.mime_type ?? "").toLowerCase() === "application/pdf") out.pdf++;
+      else out.nonPdf++;
+    } else if (kind === "ownership") out.ownership++;
+    else out.other++;
+  }
+  return out;
+}
+
+// ── Гэрээний дуусах огноо (crm2_brokerage_register-тэй ижил) ─────────────────
+
+/** Дуусах огноо бүртгэсэн өдрөөс хамгийн хол (сар) — «5 жилээс хол байж болохгүй». */
+export const BROKERAGE_MAX_TERM_MONTHS = 60;
+
+const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** YYYY-MM-DD + N сар (Postgres `date + interval 'N months'`: сарын сүүлийн өдрийг хавчина). */
+export function addMonthsIso(day: string, months: number): string | null {
+  const m = ISO_DAY.exec(day);
+  if (!m || !Number.isFinite(months)) return null;
+  const [y0, mo0, d0] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  // Буруу огноо (13-р сар, 2-р сарын 30 г.м.) → null.
+  if (mo0 < 1 || mo0 > 12 || d0 < 1 || d0 > new Date(Date.UTC(y0, mo0, 0)).getUTCDate()) return null;
+  const target = mo0 - 1 + Math.round(months);
+  const y = y0 + Math.floor(target / 12);
+  const mo = ((target % 12) + 12) % 12;
+  const last = new Date(Date.UTC(y, mo + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(y, mo, Math.min(d0, last))).toISOString().slice(0, 10);
+}
+
+/** Бүртгэх үеийн дуусах огнооны дээд хязгаар (өнөөдөр + 60 сар). */
+export function brokerageMaxEndDate(today: string): string {
+  return addMonthsIso(today, BROKERAGE_MAX_TERM_MONTHS) ?? today;
+}
+
+/** Дуусах огнооны алдаа (null = зөв): өнөөдрөөс өмнө эсвэл 5 жилээс хол байж болохгүй. */
+export function brokerageEndDateError(end: string | null | undefined, today: string): string | null {
+  if (!end) return "Дуусах огноо оруулна уу.";
+  if (addMonthsIso(end, 0) === null) return "Дуусах огноо буруу (ОООО-СС-ӨӨ).";
+  if (end < today) return "Дуусах огноо өнөөдрөөс өмнө байж болохгүй.";
+  if (end > brokerageMaxEndDate(today)) return "Дуусах огноо 5 жилээс хол байж болохгүй.";
+  return null;
 }
 
 // ── Гаралт ─────────────────────────────────────────────────────────────────
@@ -230,9 +279,9 @@ const ITEM_LABEL: Record<string, string> = {
   last_verified_at: "Эзэнтэй мэдээлэл тулгасан",
   features: "Онцлог",
   building_floors: "Барилгын давхар",
-  contract_draft: "Гэрээний ноорог үүсгэх",
-  contract_submitted: "Гэрээг батлуулахаар илгээх",
-  brokerage_contract: "Батлагдсан, хүчинтэй зуучлалын гэрээ",
+  contract_draft: "Гэрээ (PMC тамгатай PDF) бүртгэх",
+  file_not_pdf: "Гэрээний зураг файлыг устгах (гэрээ зөвхөн PDF)",
+  brokerage_contract: "Бүртгэгдсэн, хүчинтэй зуучлалын гэрээ",
   publish_currency: "Үнэ төгрөгөөр (MNT)",
   publish_period: "Нийтлэх үнийн хугацаа (худалдах — нийт, түрээс — сар)",
   publish_price: "Үнэ (0-ээс их)",
@@ -311,33 +360,24 @@ const FIELD_OF: Record<string, string | null> = {
   agent_public: null,
   public_text_phone: "advantages",
   public_text_private: "advantages",
-  // Гэрээ
-  contract_draft: null,
-  contract_submitted: null,
+  // Гэрээ (20261125000100: PDF + дуусах огноо + тамганы тэмдэглэгээ)
+  contract_draft: "file",
   brokerage_contract: null,
-  commission: "commission_value",
   file: "file",
-  special_terms: "terms",
-  signer_authority: "signer_note",
-  defaults_unconfirmed: "prefilled",
+  file_not_pdf: "file",
+  stamp_unconfirmed: "stamp_confirmed",
   ownership_doc: "ownership_doc",
-  role_unconfirmed: "contract_agent_id",
   end_date_past: "end_date",
 };
 
 const CONTRACT_KEYS = new Set([
   "contract_draft",
-  "start_date",
   "end_date",
   "end_date_past",
-  "commission",
   "file",
-  "special_terms",
-  "signer_authority",
-  "defaults_unconfirmed",
+  "file_not_pdf",
+  "stamp_unconfirmed",
   "ownership_doc",
-  "role_unconfirmed",
-  "contract_submitted",
   "brokerage_contract",
 ]);
 
@@ -349,13 +389,34 @@ function targetOf(key: string): ChecklistTarget {
 
 // ── DB-ийн толь ────────────────────────────────────────────────────────────
 
-/** crm2_property_has_valid_contract: батлагдсан, өнөөдөр хүчинтэй гэрээ. */
+/** crm2_property_has_valid_contract: бүртгэгдсэн (эсвэл хуучин урсгалаар батлагдсан), өнөөдөр хүчинтэй гэрээ. */
 export function hasValidContract(input: ChecklistInput): boolean {
   const c = input.contract;
   const today = input.today ?? todayUb();
   if (!c || c.status !== "active") return false;
-  if (c.approved_at === null) return false;
+  if (!c.approved_at && !c.registered_at) return false;
   return !!c.start_date && !!c.end_date && c.start_date <= today && c.end_date >= today;
+}
+
+/** Гэрээ хөрөнгийн төлөв сүүлд өөрчлөгдсөнөөс хойш (эсвэл тэр агшинд) бүртгэгдсэн эсэх. */
+export function registeredSinceStatusChange(registeredAt: string | null | undefined, statusChangedAt: string | null | undefined): boolean {
+  const r = Date.parse(registeredAt ?? "");
+  const s = Date.parse(statusChangedAt ?? "");
+  return Number.isFinite(r) && Number.isFinite(s) && r >= s;
+}
+
+/**
+ * crm2_property_try_activate-ийн автомат замын дүрэм: бүртгэгдсэн (хүчинтэй) гэрээтэй хөрөнгийг мэдээлэл
+ * нөхөгдөхөд DB өөрөө идэвхжүүлэх эсэх. Ноорог — тийм; «гэрээ дууссан» — тэр төлөвт орсноос хойш гэрээ
+ * (сунгалт) бүртгэгдсэн бол л (хүчинтэй гэрээтэй байхад гараар дуусгасныг сэргээхгүй).
+ */
+export function autoActivates(
+  property: { status: PropertyStatus; status_changed_at?: string | null },
+  contract: { status: BrokerageStatus; registered_at: string | null } | null
+): boolean {
+  if (!contract || contract.status !== "active") return false;
+  if (property.status === "draft") return true;
+  return property.status === "contract_ended" && registeredSinceStatusChange(contract.registered_at, property.status_changed_at);
 }
 
 /** Ангилалд үнийн хугацаа таарахгүй (crm2_property_missing 'price_period'). */
@@ -425,7 +486,7 @@ export function activationMissing(input: ChecklistInput): string[] {
   return out;
 }
 
-/** Гэрээгүй үед: хөрөнгийн эзэнтэй хоосон ноорог (crm2_private_owner_to_drafts эзнийг хуулна). */
+/** Гэрээгүй үед: хөрөнгийн эзэнтэй хоосон ноорог (бүртгэхэд DB хөрөнгийн эзнийг гэрээнд хуулна). */
 function virtualDraft(input: ChecklistInput): ChecklistContract {
   const o = input.owner;
   const owner = o && o !== "hidden" ? o : null;
@@ -433,50 +494,52 @@ function virtualDraft(input: ChecklistInput): ChecklistContract {
     status: "draft",
     start_date: null,
     end_date: null,
-    commission_type: null,
-    commission_value: null,
-    owner_contact_id: owner?.id ?? (o === "hidden" ? "hidden" : null),
+    approved_at: null,
+    registered_at: null,
+    stamp_confirmed: false,
+    owner_contact_id: null,
     ownerNameUnverified: owner?.nameUnverified ?? false,
     ownerSource: owner?.source ?? null,
-    terms: null,
-    no_special_terms: false,
-    signer_differs: false,
-    signer_note: null,
-    prefilled: [],
-    fileCount: 0,
+    pdfCount: 0,
+    nonPdfContractCount: 0,
     ownershipFileCount: 0,
-    otherFileCount: 0,
-    file_at_office: false,
   };
 }
 
 /**
- * crm2_brokerage_missing-ийн толь: гэрээг илгээх/батлахад дутуу зүйлс. Гэрээгүй бол хоосон ноорогт
- * юу дутахыг буцаана. 'file' — «гэрээ оффист үлдсэн» (file_at_office) үүнийг ХЭЗЭЭ Ч хангахгүй;
- * ноорогт зөвхөн kind='contract' файл тооцогдоно. Эзний эх сурвалжийг DB гэрээн дээр шаарддаггүй
- * (property.activation_required 'owner_source'-оор «Бүртгэл» бүлэгт).
+ * Гэрээний эзэн (DB: coalesce(гэрээний эзэн, хөрөнгийн эзэн)). Хувийн талбар харах эрхгүй бол 'hidden' —
+ * эзэн байгаа эсэхийг үнэлэхгүй (DB өөрөө шалгана).
  */
-export function contractSubmitMissing(input: ChecklistInput): string[] {
+function contractOwner(input: ChecklistInput, c: ChecklistContract): string | null {
+  if (c.owner_contact_id) return c.owner_contact_id;
+  const o = input.owner;
+  if (o === "hidden") return "hidden";
+  return o?.id ?? null;
+}
+
+/**
+ * crm2_brokerage_missing-ийн толь (20261125000100): ноорог гэрээг бүртгэхэд дутуу зүйлс, DB-ийн дарааллаар.
+ * Гэрээгүй бол хоосон ноорогт юу дутахыг буцаана. «PMC-ийн тамга, гарын үсэгтэй» тэмдэглэгээ (UI-ийн
+ * төлөв) энд орохгүй — RPC p_stamp_confirmed-гүй бол 'stamp_unconfirmed'-ийг нэмнэ.
+ *   end_date_past → owner (brokerage.require_owner) → owner_name → file (PDF алга) →
+ *   file_not_pdf (kind='contract' зураг) → ownership_doc (brokerage.require_ownership_doc).
+ * Хоосон дуусах огноо (гэрээгүй, сунгалтын ноорог) дутуу БИШ: «Гэрээ бүртгэх» цонх анхдагчаар бөглөж,
+ * RPC ч coalesce(p_end_date, ноорогийнх, өнөөдөр + brokerage.default_term_months − 1)-ээр тавина —
+ * DB-ийн 'end_date' бүртгэлийн үед хэзээ ч гарахгүй. Цонхны хоосолсон огноог contractMissing шалгана.
+ * Өмчлөлийн баримтын тоо мэдэгдэхгүй (null — restricted харах эрхгүй) бол DB шалгана.
+ */
+export function contractRegisterMissing(input: ChecklistInput): string[] {
   const c = input.contract ?? virtualDraft(input);
   const s = input.settings;
   const today = input.today ?? todayUb();
   const out: string[] = [];
-  if (!c.start_date) out.push("start_date");
-  if (!c.end_date) out.push("end_date");
-  else if (c.end_date < today) out.push("end_date_past");
-  if (!c.commission_type || c.commission_value == null) out.push("commission");
-  if (s.requireOwner && !c.owner_contact_id) out.push("owner");
-  const files = c.status === "draft" ? c.fileCount : c.fileCount + c.ownershipFileCount + (c.otherFileCount ?? 0);
-  if (s.requireFile && files === 0) out.push("file");
-  if (c.status === "draft") {
-    if (c.owner_contact_id && c.ownerNameUnverified) out.push("owner_name");
-    if (s.requireSpecialTerms && blank(c.terms) && !c.no_special_terms) out.push("special_terms");
-    if (c.signer_differs && blank(c.signer_note)) out.push("signer_authority");
-    if (c.prefilled.length > 0) out.push("defaults_unconfirmed");
-    if (s.requireOwnershipDoc && c.ownershipFileCount === 0) out.push("ownership_doc");
-    const p = input.property;
-    if (p.contract_agent_id == null || unconfirmedSet(p).has("contract_agent_id")) out.push("role_unconfirmed");
-  }
+  if (c.end_date && c.end_date < today) out.push("end_date_past");
+  const owner = contractOwner(input, c);
+  if (s.requireOwner && !owner) out.push("owner");
+  if (owner && owner !== "hidden" && c.ownerNameUnverified) out.push("owner_name");
+  if (c.pdfCount === 0) out.push("file");
+  if (c.nonPdfContractCount > 0) out.push("file_not_pdf");
+  if (s.requireOwnershipDoc && c.ownershipFileCount === 0) out.push("ownership_doc");
   return out;
 }
 
@@ -605,7 +668,6 @@ export function buildChecklist(input: ChecklistInput): Checklist {
   push(makeItem(input, "category", "intake", itemFilled("category", input), true, "start"));
   push(makeItem(input, "price_period", "intake", itemFilled("price_period", input), true, "start"));
   const required = new Set(s.activationRequired);
-  const contractKeys = contractSubmitMissingKeysApplicable(input);
   const intakeKeys = [...s.activationRequired.filter((k) => k !== "contract_agent_id"), ...coreIntakeKeys(input)];
   const owner = input.owner;
   if (owner && owner !== "hidden" && owner.nameUnverified) intakeKeys.push("owner_name");
@@ -614,17 +676,16 @@ export function buildChecklist(input: ChecklistInput): Checklist {
     push(makeItem(input, key, "intake", itemFilled(key, input), required.has(key), required.has(key) ? "start" : null));
   }
 
-  // 2. Гэрээ
+  // 2. Гэрээ: (гэрээгүй бол «бүртгэх») → бүртгэхэд хэрэгтэй зүйлс → гэрээ байгуулсан агент → хүчинтэй гэрээ.
   const c = input.contract;
-  const missingC = new Set(contractSubmitMissing(input));
+  const registerMissing = contractRegisterMissing(input);
+  // Бүртгэгдсэн (active) гэрээнд бүртгэлийн шаардлага биелсэн — хуучин гэрээний зургийг дутуу гэж тооцохгүй.
+  const missingC = new Set(c && c.status === "active" ? [] : registerMissing);
   if (!c) push(makeItem(input, "contract_draft", "contract", false, true, "contract"));
-  for (const key of contractKeys) {
+  for (const key of contractRegisterKeys(input, missingC)) {
     push(makeItem(input, key, "contract", !missingC.has(key), true, "contract"));
   }
-  if (!contractKeys.includes("role_unconfirmed")) {
-    push(makeItem(input, "contract_agent_id", "contract", input.property.contract_agent_id != null, required.has("contract_agent_id"), "contract"));
-  }
-  push(makeItem(input, "contract_submitted", "contract", c != null && c.status !== "draft", true, "contract"));
+  push(makeItem(input, "contract_agent_id", "contract", input.property.contract_agent_id != null, required.has("contract_agent_id"), "contract"));
   push(makeItem(input, "brokerage_contract", "contract", hasValidContract(input), true, "contract"));
 
   // 3. Нийтлэхэд бэлэн (ноорог шатнаас харагдана)
@@ -671,22 +732,19 @@ export function buildChecklist(input: ChecklistInput): Checklist {
   return { groups: views, percent };
 }
 
-/** Гэрээний бүлэгт харуулах (тохиргоо, нөхцөлөөр хамаарах) мөрүүд. */
-function contractSubmitMissingKeysApplicable(input: ChecklistInput): string[] {
+/**
+ * Гэрээний бүлэгт харуулах бүртгэлийн мөрүүд (contractRegisterMissing-ийн дарааллаар): дуусах огноо, эзэн
+ * (тохиргоогоор), PDF, өмчлөлийн баримт (тохиргоогоор) үргэлж; эзний нэр ба PDF биш файл зөвхөн дутуу үед.
+ */
+function contractRegisterKeys(input: ChecklistInput, missing: ReadonlySet<string>): string[] {
   const s = input.settings;
-  const c = input.contract ?? virtualDraft(input);
-  const keys = ["start_date", "end_date", "commission"];
-  if (c.end_date && c.end_date < (input.today ?? todayUb())) keys.splice(2, 0, "end_date_past");
+  const keys = [missing.has("end_date_past") ? "end_date_past" : "end_date"];
   if (s.requireOwner) keys.push("owner");
-  if (s.requireFile) keys.push("file");
-  if (c.status === "draft") {
-    if (c.owner_contact_id && c.ownerNameUnverified) keys.push("owner_name");
-    if (s.requireSpecialTerms) keys.push("special_terms");
-    if (c.signer_differs) keys.push("signer_authority");
-    if (c.prefilled.length > 0) keys.push("defaults_unconfirmed");
-    if (s.requireOwnershipDoc) keys.push("ownership_doc");
-    keys.push("role_unconfirmed");
-  }
+  if (missing.has("owner_name")) keys.push("owner_name");
+  keys.push("file");
+  if (missing.has("file_not_pdf")) keys.push("file_not_pdf");
+  // Тоо нь мэдэгдэхгүй (restricted харах эрхгүй) бол мөрийг харуулахгүй — «бүрэн» гэж хуурахгүй.
+  if (s.requireOwnershipDoc && (input.contract === null || input.contract.ownershipFileCount !== null)) keys.push("ownership_doc");
   return keys;
 }
 
@@ -719,23 +777,31 @@ export function nextStep(input: ChecklistInput): NextStep {
     };
   }
   const c = input.contract;
-  const contractStep = (label: string): NextStep => {
-    const missing = contractSubmitMissing(input);
+  // Гэрээгүй эсвэл ноорог: «Гэрээ бүртгэх» (PDF эхэнд — гол алхам).
+  if (!c || c.status !== "active") {
+    const missing = contractRegisterMissing(input);
     const n = missing.length + (c ? 0 : 1);
+    const first = missing.find((k) => k === "file" || k === "file_not_pdf") ?? missing[0];
     return {
-      label: n > 0 ? `${label} (${n})` : label,
+      label: n > 0 ? `Гэрээ бүртгэх (${n})` : "Гэрээ бүртгэх",
       group: "contract",
       missingCount: n,
-      target: { sheet: "contract", field: missing[0] ? targetOf(missing[0]).field : null },
+      target: { sheet: "contract", field: first ? targetOf(first).field : "file" },
     };
-  };
-  if (!c) return contractStep("Гэрээ байгуулах");
-  if (c.status === "draft") return contractStep("Гэрээг батлуулахаар илгээх");
-  if (c.status === "pending") {
-    return { label: "Гэрээ батлагдахыг хүлээж байна", group: "contract", missingCount: 0, target: { sheet: "contract", field: null } };
   }
-  // Батлагдсан ч хөрөнгө ноорог: гар горим, эсвэл автомат идэвхжүүлэлт гацсан.
-  if (c.status === "active" && p.status === "draft") {
+  // Гэрээ бүртгэгдсэн ч хөрөнгө ноорог (эсвэл сунгалт бүртгэгдсэн «гэрээ дууссан»): мэдээллээ нөхмөгц DB
+  // автоматаар идэвхжүүлнэ.
+  if (autoActivates(p, c)) {
+    const gaps = activationMissing(input).filter((k) => k !== "brokerage_contract");
+    if (gaps.length > 0) {
+      return {
+        label: `Хөрөнгийн мэдээллийг гүйцээх (${gaps.length})`,
+        group: CONTRACT_KEYS.has(gaps[0]) || gaps[0] === "contract_agent_id" ? "contract" : "intake",
+        missingCount: gaps.length,
+        target: targetOf(gaps[0]),
+      };
+    }
+    // Бүрэн ч идэвхжээгүй (ховор — автомат идэвхжүүлэлт гацсан).
     return { label: "Хөрөнгийг идэвхжүүлэх", group: "contract", missingCount: 0, target: { sheet: "contract", field: null } };
   }
   if (p.status === "active") {

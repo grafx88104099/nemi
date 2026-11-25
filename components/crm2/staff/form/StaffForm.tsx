@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Building2, FileSignature, Images, KeyRound, MapPinned, Ruler, ScrollText, Send, UsersRound, Zap } from "lucide-react";
+import { Building2, FileSignature, Images, KeyRound, Loader2, MapPinned, Ruler, ScrollText, UsersRound, Zap } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button, buttonClasses } from "@/components/ui/button";
@@ -12,17 +12,14 @@ import { NumberInput } from "@/components/ui/number-input";
 import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
 import { DuplicateNotice } from "@/components/crm2/staff/duplicates/DuplicateNotice";
-import { createBrokerageDraft, submitBrokerage } from "@/lib/crm2/actions/brokerage";
 import { addPropertyVideoLink } from "@/lib/crm2/actions/media";
 import { createProperty, updateProperty, updatePropertyPrivate } from "@/lib/crm2/actions/properties";
 import { fieldStage } from "@/lib/crm2/checklist";
 import { ubToday } from "@/lib/crm2/datetime";
 import { getBlob, makeTitleHint, PRIVATE_LOST_TEXT, putBlob, type DraftMedia, type LoadedDraft } from "@/lib/crm2/device/draft-store";
-import { prepareDocPage } from "@/lib/crm2/device/image-prep";
 import { enqueue, listQueue, startQueue, whenIdle } from "@/lib/crm2/device/upload-queue";
 import { useKeyboardInset, useScrollFocusedIntoView } from "@/lib/crm2/device/viewport";
 import { issuesByField, validateFields } from "@/lib/crm2/field-validation";
-import { validateDocFile } from "@/lib/crm2/files";
 import {
   categoryLabel,
   CURRENCIES,
@@ -41,20 +38,16 @@ import { formatPhone } from "@/lib/crm2/phone";
 import type { PropertyDetail, PropertyPrivate } from "@/lib/crm2/queries/properties";
 import { dbErrorField } from "@/lib/crm2/result";
 import {
-  brokerageCreateSchema,
   type PropertyCreateInput,
   type PropertyPrivateInput,
   type PropertyUpdateInput,
 } from "@/lib/crm2/schemas";
 import { fileLimits, settingOptions, type Crm2Settings } from "@/lib/crm2/settings";
-import { uploadBrokerageFile, uploadMany, uploadPropertyMedia } from "@/lib/crm2/storage";
+import { uploadMany, uploadPropertyMedia } from "@/lib/crm2/storage";
 import type { Crm2Currency, Crm2PricePeriod, Crm2PropertyDuplicate, Crm2StaffMember } from "@/lib/crm2/types";
 import { fmtShortDateTime, fmtTime } from "@/lib/format";
 
 import { AgentSelect } from "./AgentSelect";
-import { brokerageResponsibleAllowed, type BrokerageResponsibleCtx } from "@/components/crm2/deals/types";
-
-import { BrokerageFields, DocList } from "./BrokerageFields";
 import {
   ChoiceChips,
   FieldNote,
@@ -68,22 +61,15 @@ import {
 } from "./fields";
 import { FloorField } from "./FloorField";
 import {
-  brokerageHasInput,
-  brokeragePayload,
-  brokerageSubmitMissing,
   confirmFields,
   diffPayload,
   draftTitleParts,
-  emptyBrokerageForm,
   emptyPrivateForm,
   emptyPropertyForm,
-  fieldErrors,
   fieldsFilled,
   fromCreateDraft,
   hasRentTerms,
   isUnconfirmed,
-  missingSentence,
-  newLocalId,
   omitKey,
   operatingCostIsSimple,
   parseRecent,
@@ -101,7 +87,6 @@ import {
   toCreateDraft,
   validationInput,
   withCategory,
-  type BrokerageFormState,
   type CreateDraftForm,
   type CreateDraftPrivate,
   type FieldNoteKey,
@@ -117,9 +102,6 @@ import { SuggestInput } from "./SuggestInput";
 import { loadLocationSuggestions, loadProjectSuggestions } from "./suggest-loaders";
 import { trackUi, useCreateDraft, useStaffDraftKey } from "./useCreateDraft";
 
-/** Схемийн шалгалтад (property_id үүсээгүй үед) түр id. */
-const PLACEHOLDER_ID = "00000000-0000-4000-8000-000000000000";
-
 /** Хадгалсны дараа зураг хуулахыг хүлээх дээд хугацаа — дараа нь дараалал өөрөө үргэлжлүүлнэ. */
 const UPLOAD_WAIT_MS = 90_000;
 
@@ -133,8 +115,6 @@ type CommonProps = {
   staff: Crm2StaffMember[];
   /** Томилогдсон үүрэгт агентыг солих (менежер/ахлагч) — идэвхжсэн хөрөнгөд. */
   canReassign: boolean;
-  /** Гэрээний хариуцагч сонгогчийн хүрээ (менежер/ахлагч/өөрөө + 3 үүргийн агент). */
-  responsibleCtx: BrokerageResponsibleCtx;
 };
 
 type Props =
@@ -266,7 +246,7 @@ export function QuickAddLink({ panel }: { panel: Crm2Panel }) {
 }
 
 function StaffFormInner(props: InnerProps) {
-  const { panel, officeId, me, settings, staff, canReassign, responsibleCtx, clientKey } = props;
+  const { panel, officeId, me, settings, staff, canReassign, clientKey } = props;
   const router = useRouter();
   const paths = React.useMemo(() => crm2Paths(panel), [panel]);
   const isEdit = props.mode === "edit";
@@ -300,29 +280,29 @@ function StaffFormInner(props: InnerProps) {
   const [touched, setTouched] = React.useState<ReadonlySet<string>>(() => new Set());
   const [serverError, setServerError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
+  /** Шинэ хөрөнгө: аль товч дарагдсан (ачаалж буй тэмдэг тэр товчон дээр). */
+  const [createAction, setCreateAction] = React.useState<"draft" | "contract" | null>(null);
   const [step, setStep] = React.useState<string | null>(null);
   const [processing, setProcessing] = React.useState(false);
 
-  // Зөвхөн шинэ хөрөнгөд: медиа ба гэрээ хөрөнгө үүссэний дараа хадгалагдана.
+  // Зөвхөн шинэ хөрөнгөд: медиа хөрөнгө үүссэний дараа хадгалагдана (гэрээг картаас бүртгэнэ).
   const [media, setMedia] = React.useState<MediaQueueValue>(EMPTY_MEDIA_QUEUE);
   /** Дараалсан файл (QueuedFile.id) → утсан дээрх blob (ноорогт). */
   const [blobs, setBlobs] = React.useState<Record<string, DraftMedia>>({});
-  const [brokerage, setBrokerage] = React.useState<BrokerageFormState>(emptyBrokerageForm);
-  const [bOwner, setBOwner] = React.useState<OwnerRef | null>(null);
-  const [bOwnerTouched, setBOwnerTouched] = React.useState(false);
-  const [docs, setDocs] = React.useState<{ id: string; file: File }[]>([]);
-  const [docErrors, setDocErrors] = React.useState<string[]>([]);
-  const [docBusy, setDocBusy] = React.useState(false);
-  const [bErrors, setBErrors] = React.useState<Record<string, string>>({});
   /** Шуурхай бүртгэлд бичсэн эзний дугаар (эзэн сонгогдтол хадгална). */
   const [quickPhone, setQuickPhone] = React.useState<string | null>(null);
-  /** Хадгалсан ч давхардал илэрсэн — DuplicateNotice + «Үргэлжлүүлэх». */
-  const [saved, setSaved] = React.useState<{ id: string; code: string; duplicates: Crm2PropertyDuplicate[] } | null>(null);
+  /** Хадгалсан ч давхардал илэрсэн — DuplicateNotice + «Үргэлжлүүлэх» (гэрээ бүртгэх эсвэл засах руу). */
+  const [saved, setSaved] = React.useState<{
+    id: string;
+    code: string;
+    duplicates: Crm2PropertyDuplicate[];
+    next: string;
+    thenContract: boolean;
+  } | null>(null);
   /** Давтан дарахад хөрөнгө/медиаг дахин үүсгэхгүй. */
-  const progress = React.useRef<{ created: CreateResultData | null; mediaDone: boolean; contractDone: boolean }>({
+  const progress = React.useRef<{ created: CreateResultData | null; mediaDone: boolean }>({
     created: null,
     mediaDone: false,
-    contractDone: false,
   });
 
   // ── Хэмжилт ──────────────────────────────────────────────────────────────
@@ -340,10 +320,7 @@ function StaffFormInner(props: InnerProps) {
   };
 
   // ── Ноорог (зөвхөн шинэ хөрөнгө) ─────────────────────────────────────────
-  const draftParts = toCreateDraft(
-    { form, priv, brokerage, brokerageOwner: bOwner, brokerageOwnerTouched: bOwnerTouched, links: media.links },
-    quickPhone
-  );
+  const draftParts = toCreateDraft({ form, priv, links: media.links }, quickPhone);
   const draftMedia = media.files.map((f) => blobs[f.id]).filter((m): m is DraftMedia => !!m);
   const draft = useCreateDraft<CreateDraftForm, CreateDraftPrivate>({
     profileId: me,
@@ -360,9 +337,6 @@ function StaffFormInner(props: InnerProps) {
       const r = fromCreateDraft(d.form, d.private, me);
       setForm(r.form);
       setPriv(r.priv);
-      setBrokerage(r.brokerage);
-      setBOwner(r.brokerageOwner);
-      setBOwnerTouched(r.brokerageOwnerTouched);
       setQuickPhone(r.quickPhone);
       setMedia((m) => ({ ...m, links: r.links }));
       if (d.media.length) {
@@ -408,8 +382,6 @@ function StaffFormInner(props: InnerProps) {
   const districtOptions = form.district && !districts.includes(form.district) ? [...districts, form.district] : districts;
   const recentRaw = useStoredString(recentDistrictsKey(me));
   const recentDistricts = parseRecent(recentRaw, districts).filter((d) => d !== form.district);
-  const brokerageOwner = bOwnerTouched ? bOwner : priv.owner;
-  const hasContractInput = brokerageHasInput(brokerage, docs.length);
   const busy = saving || !!saved;
 
   // Гар нээлттэй үед хадгалах мөр гарын дээр; идэвхтэй талбар голд гүйлгэгдэнэ.
@@ -569,42 +541,18 @@ function StaffFormInner(props: InnerProps) {
   }
 
   // ── Шинэ хөрөнгө ─────────────────────────────────────────────────────────
-  async function onCreate(submit: boolean) {
+  /**
+   * Хадгалах. thenContract — «Хадгалаад гэрээ бүртгэх»: хадгалсны дараа картын «Гэрээ бүртгэх»
+   * цонх (PMC тамгатай PDF) руу шилжинэ; эс бөгөөс засах хуудас руу (?created=1).
+   */
+  async function onCreate(thenContract: boolean) {
     setServerError(null);
-    setBErrors({});
     const input = validate();
     if (!input) return;
 
-    const wantContract = submit || hasContractInput;
-    const bInput = brokeragePayload(brokerage, brokerageOwner?.id ?? null);
-    if (wantContract && !progress.current.contractDone) {
-      const parsed = brokerageCreateSchema.safeParse({ property_id: PLACEHOLDER_ID, ...bInput });
-      if (!parsed.success) {
-        const be = fieldErrors(parsed.error);
-        setBErrors(be);
-        setServerError("Зуучлалын гэрээний алдаатай талбаруудыг засна уу.");
-        return;
-      }
-      if (submit) {
-        const missing = brokerageSubmitMissing(brokerage, {
-          ownerId: brokerageOwner?.id ?? null,
-          fileCount: docs.length,
-          requireOwner: settings["brokerage.require_owner"],
-          requireFile: settings["brokerage.require_file"],
-          today: ubToday(),
-        });
-        if (missing.length) {
-          setServerError(
-            `Батлуулахаар илгээхэд дутуу: ${missingSentence(missing)}. Эсвэл «${SAVE_DRAFT_LABEL}»-аар хадгалаад дараа нь илгээнэ үү.`
-          );
-          return;
-        }
-      }
-    }
-
     setSaving(true);
+    setCreateAction(thenContract ? "contract" : "draft");
     const warnings: string[] = [];
-    let submitted = false;
     let photos = 0;
     try {
       await draft.flush();
@@ -635,37 +583,6 @@ function StaffFormInner(props: InnerProps) {
         await pending;
       }
 
-      if (wantContract && !progress.current.contractDone) {
-        progress.current.contractDone = true;
-        setStep("Зуучлалын гэрээг бүртгэж байна…");
-        const b = await createBrokerageDraft({ property_id: id, ...bInput });
-        if (!b.ok) {
-          warnings.push(`Зуучлалын гэрээ бүртгэгдсэнгүй: ${b.error}`);
-        } else {
-          let uploaded = 0;
-          if (docs.length) {
-            setStep(`Гэрээний файл хуулж байна (0/${docs.length})…`);
-            const res = await uploadMany(
-              docs.map((d) => d.file),
-              (file) => uploadBrokerageFile({ file, officeId, contractId: b.data.id, limits }),
-              (done, total) => setStep(`Гэрээний файл хуулж байна (${done}/${total})…`)
-            );
-            uploaded = res.ok.length;
-            warnings.push(...res.errors);
-          }
-          if (submit) {
-            if (settings["brokerage.require_file"] && uploaded === 0) {
-              warnings.push("Гэрээний файл хуулагдаагүй тул батлуулахаар илгээсэнгүй — файлаа нэмээд илгээнэ үү.");
-            } else {
-              setStep("Батлуулахаар илгээж байна…");
-              const s = await submitBrokerage(b.data.id);
-              if (!s.ok) warnings.push(`Гэрээг батлуулахаар илгээж чадсангүй: ${s.error}`);
-              else submitted = true;
-            }
-          }
-        }
-      }
-
       // Хадгалагдсан — утсан дээрх ноорогийг устгана (дараалалд шилжсэн зураг үлдэнэ).
       await draft.discard();
       rememberDistrict();
@@ -682,31 +599,32 @@ function StaffFormInner(props: InnerProps) {
         meta: {
           photos,
           restored: draft.restoredAt !== null,
-          contract: wantContract,
-          submitted,
+          contract: thenContract,
           duplicates: duplicates.length,
           replayed: !!data.replayed,
         },
       });
 
       toast.success(`${code} ноорог бүртгэгдлээ`, {
-        description: submitted ? "Зуучлалын гэрээ батлуулахаар илгээгдлээ." : undefined,
+        description: thenContract ? "Одоо PMC-ийн тамга, гарын үсэгтэй гэрээгээ PDF-ээр бүртгэнэ үү." : undefined,
       });
       if (warnings.length) {
         toast.error("Зарим зүйл хадгалагдсангүй", { description: warnings.join(" "), durationMs: 0 });
       }
+      const next = thenContract ? paths.property(id, "agreement", { sheet: "contract" }) : `${paths.propertyEdit(id)}?created=1`;
       if (duplicates.length) {
         // Давхардал: хөрөнгө хадгалагдсан — мэдэгдлийг харуулж, агент өөрөө үргэлжлүүлнэ.
-        setSaved({ id, code, duplicates });
+        setSaved({ id, code, duplicates, next, thenContract });
         window.requestAnimationFrame(() => document.getElementById("staff-saved")?.scrollIntoView({ block: "start" }));
         return;
       }
-      router.replace(`${paths.propertyEdit(id)}?created=1`);
+      router.replace(next);
     } catch (e) {
       console.error("StaffForm create:", e);
       setServerError("Хадгалахад алдаа гарлаа. Дахин оролдоно уу.");
     } finally {
       setSaving(false);
+      setCreateAction(null);
       setStep(null);
     }
   }
@@ -763,33 +681,6 @@ function StaffFormInner(props: InnerProps) {
     } finally {
       setSaving(false);
       setStep(null);
-    }
-  }
-
-  async function addDocs(files: File[], fromCamera: boolean) {
-    setDocBusy(true);
-    try {
-      const problems: string[] = [];
-      const next = [...docs];
-      for (const raw of files) {
-        let file = raw;
-        if (fromCamera) {
-          // Камерын хуудас: 2480px, JPEG 0.85 (бага хэмжээ, уншигдахуйц).
-          try {
-            const p = await prepareDocPage(raw);
-            file = new File([p.file], `Гэрээний хуудас ${next.length + 1}.jpg`, { type: "image/jpeg" });
-          } catch {
-            file = raw;
-          }
-        }
-        const e = validateDocFile(file, limits, next.length);
-        if (e) problems.push(e);
-        else next.push({ id: newLocalId(), file });
-      }
-      setDocErrors(problems);
-      setDocs(next);
-    } finally {
-      setDocBusy(false);
     }
   }
 
@@ -1566,67 +1457,14 @@ function StaffFormInner(props: InnerProps) {
         </div>
       </FormSection>
 
-      {/* 8. Шинэ хөрөнгөд: зуучлалын гэрээ */}
+      {/* 8. Шинэ хөрөнгөд: зуучлалын гэрээ — хадгалсны дараа картаас (PDF) бүртгэнэ */}
       {!isEdit ? (
-        <FormSection
-          id="staff-brokerage-new"
-          title="Зуучлалын гэрээ"
-          icon={FileSignature}
-          locked
-          description="Заавал биш — дараа нь картаас нэмж болно. Батлагдмагц хөрөнгө Staff-д идэвхтэй болно."
-        >
-          <BrokerageFields
-            idPrefix="sfb"
-            value={brokerage}
-            onChange={(v) => {
-              setBrokerage(v);
-              setBErrors({});
-            }}
-            owner={brokerageOwner}
-            onOwnerChange={(o) => {
-              setBOwnerTouched(true);
-              setBOwner(o);
-            }}
-            ownerNote={
-              !bOwnerTouched
-                ? priv.owner
-                  ? "Хөрөнгийн эзэнтэй ижил."
-                  : "Дээрх «Эзэн» хэсэгт сонгосон эзэн энд орно."
-                : undefined
-            }
-            requireOwner={settings["brokerage.require_owner"]}
-            staff={staff}
-            responsibleStaff={staff.filter((s) =>
-              brokerageResponsibleAllowed(responsibleCtx, [form.listing_agent_id, form.contract_agent_id, form.photo_agent_id])({
-                id: s.profile_id,
-                teamId: s.team_id,
-              })
-            )}
-            me={me}
-            errors={bErrors}
-            disabled={busy}
-          />
-          <DocList
-            items={docs.map((d) => ({ id: d.id, name: d.file.name, size: d.file.size }))}
-            disabled={busy}
-            canAdd={docs.length < limits.maxDocsPerContract}
-            busyText={docBusy ? "Боловсруулж байна…" : null}
-            onAdd={(files) => void addDocs(files, false)}
-            onCamera={(files) => void addDocs(files, true)}
-            onRemove={(item) => setDocs((list) => list.filter((d) => d.id !== item.id))}
-            hint={`PDF, JPEG, PNG, WebP, ≤${limits.maxDocMb} МБ. ${
-              settings["brokerage.require_file"] ? "Батлуулахад дор хаяж нэг файл заавал." : ""
-            } Файлыг утсан дээр хадгалахгүй — хөрөнгийг хадгалахад шууд хуулагдана.`}
-          />
-          {docErrors.length ? (
-            <FormAlert tone="warn">
-              <ul className="list-inside list-disc space-y-0.5">
-                {docErrors.map((e, i) => (
-                  <li key={i}>{e}</li>
-                ))}
-              </ul>
-            </FormAlert>
-          ) : null}
+        <FormSection id="staff-brokerage-new" title="Зуучлалын гэрээ" icon={FileSignature}>
+          <p className="text-sm text-muted">
+            Гэрээг (PMC тамгатай PDF) хөрөнгийг хадгалсны дараа бүртгэнэ. «Хадгалаад гэрээ бүртгэх»-ийг дарвал хадгалаад шууд «Гэрээ
+            бүртгэх» цонх нээгдэнэ — гэрээгээ скан хийж нэг PDF болгоно. Бүртгэмэгц (батлуулахгүй), хөрөнгийн мэдээлэл бүрэн бол
+            хөрөнгө Staff-д идэвхтэй болно.
+          </p>
         </FormSection>
       ) : null}
 
@@ -1641,8 +1479,8 @@ function StaffFormInner(props: InnerProps) {
             duplicates={saved.duplicates}
             onArchived={() => router.replace(paths.staff())}
           />
-          <Button type="button" size="lg" className="w-full sm:w-auto" onClick={() => router.replace(`${paths.propertyEdit(saved.id)}?created=1`)}>
-            Хөрөнгө рүү үргэлжлүүлэх
+          <Button type="button" size="lg" className="w-full sm:w-auto" onClick={() => router.replace(saved.next)}>
+            {saved.thenContract ? "Гэрээ бүртгэх рүү үргэлжлүүлэх" : "Хөрөнгө рүү үргэлжлүүлэх"}
           </Button>
         </div>
       ) : null}
@@ -1673,22 +1511,32 @@ function StaffFormInner(props: InnerProps) {
                   <Button
                     type="button"
                     size="lg"
-                    variant={hasContractInput ? "outline" : "primary"}
                     onClick={() => void onCreate(false)}
                     disabled={busy || processing}
+                    aria-busy={saving && createAction === "draft"}
                   >
-                    {saving ? "Хадгалж байна…" : SAVE_DRAFT_LABEL}
+                    {saving && createAction === "draft" ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" aria-hidden /> Хадгалж байна…
+                      </>
+                    ) : (
+                      SAVE_DRAFT_LABEL
+                    )}
                   </Button>
                   <Button
                     type="button"
                     size="lg"
-                    variant={hasContractInput ? "primary" : "outline"}
+                    variant="outline"
                     onClick={() => void onCreate(true)}
-                    disabled={busy || processing || !hasContractInput}
-                    title={hasContractInput ? undefined : "Эхлээд зуучлалын гэрээний мэдээллийг бөглөнө үү"}
+                    disabled={busy || processing}
+                    aria-busy={saving && createAction === "contract"}
                   >
-                    <Send className="size-4" aria-hidden />
-                    Хадгалаад гэрээг батлуулахаар илгээх
+                    {saving && createAction === "contract" ? (
+                      <Loader2 className="size-4 animate-spin" aria-hidden />
+                    ) : (
+                      <FileSignature className="size-4" aria-hidden />
+                    )}
+                    {saving && createAction === "contract" ? "Хадгалж байна…" : "Хадгалаад гэрээ бүртгэх"}
                   </Button>
                 </>
               )}

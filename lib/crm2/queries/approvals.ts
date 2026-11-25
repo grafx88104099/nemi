@@ -1,67 +1,16 @@
 import { crm2Client } from "@/lib/crm2/server";
 import { getStaffNameMap } from "@/lib/crm2/queries/lookups";
 import { parseRequestCalls, requestCallPropertyIds, requestTargetLabel, type RequestCallView } from "@/lib/crm2/approvals-view";
-import type {
-  Crm2BrokerageRow,
-  Crm2PropertyCategory,
-  Crm2PropertyStatus,
-  Crm2RequestRow,
-} from "@/lib/crm2/types";
+import type { Crm2PropertyStatus, Crm2RequestRow } from "@/lib/crm2/types";
 
 /**
- * Батлах хүлээгдэж буй зүйлс: илгээсэн зуучлалын гэрээ ба агентын хүсэлт
- * (хөрөнгийн төлөв, хэлцэл/харилцагч шилжүүлэх). RLS-ээр харагдсан мөр бүрд
- * DB-ийн эрхийн функцээр (crm2_brokerage_approver + crm2_self_ok,
- * crm2_can_decide_request) `canDecide` тооцно. Өөрийн хүсэлт `mine`.
+ * Батлах хүлээгдэж буй агентын хүсэлт (хөрөнгийн төлөв, хэлцэл/харилцагч шилжүүлэх). RLS-ээр харагдсан
+ * мөр бүрд DB-ийн эрхийн функцээр (crm2_can_decide_request) `canDecide` тооцно. Өөрийн хүсэлт `mine`.
+ * Зуучлалын гэрээг 20261125000100-аас батлахгүй (агент PMC тамгатай PDF-ээр бүртгэнэ) — энд орохгүй.
  */
-
-const PENDING_BROKERAGE_SELECT =
-  "id, number, property_id, owner_contact_id, start_date, end_date, commission_type, commission_value, " +
-  "commission_currency, responsible_agent_id, submitted_by, submitted_at, created_by, version, previous_id, updated_at, " +
-  "property:crm2_properties!crm2_brokerage_contracts_property_id_office_id_fkey(id, code, category, status, " +
-  "location_text, district, listing_agent_id, contract_agent_id, photo_agent_id), " +
-  "responsible:profiles!crm2_brokerage_contracts_responsible_agent_id_fkey(full_name)";
 
 const PENDING_REQUEST_SELECT =
   "id, office_id, kind, target_id, property_id, payload, reason, status, requested_by, requested_at, decided_by, decided_at, decision_note";
-
-type PropertyLite = {
-  id: string;
-  code: string;
-  category: Crm2PropertyCategory;
-  status: Crm2PropertyStatus;
-  location_text: string | null;
-  district: string | null;
-  listing_agent_id: string | null;
-  contract_agent_id: string | null;
-  photo_agent_id: string | null;
-};
-
-export type PendingBrokerage = Pick<
-  Crm2BrokerageRow,
-  | "id"
-  | "number"
-  | "property_id"
-  | "owner_contact_id"
-  | "start_date"
-  | "end_date"
-  | "commission_type"
-  | "commission_value"
-  | "commission_currency"
-  | "responsible_agent_id"
-  | "submitted_by"
-  | "submitted_at"
-  | "created_by"
-  | "version"
-  | "previous_id"
-  | "updated_at"
-> & {
-  property: PropertyLite | null;
-  responsible: { full_name: string | null } | null;
-  submittedByName: string | null;
-  /** Батлах/татгалзах эрхтэй (өөрийгөө батлах дүрэм орсон). */
-  canDecide: boolean;
-};
 
 export type PendingRequest = Crm2RequestRow & {
   canDecide: boolean;
@@ -82,7 +31,6 @@ export type PendingRequest = Crm2RequestRow & {
 };
 
 export type PendingApprovals = {
-  brokerage: PendingBrokerage[];
   requests: PendingRequest[];
   /** Миний шийдвэрлэх ёстой тоо (цэсний тэмдэгт). */
   toDecide: number;
@@ -105,48 +53,14 @@ export async function listPendingApprovals(): Promise<PendingApprovals> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { brokerage: [], requests: [], toDecide: 0, error: false };
+  if (!user) return { requests: [], toDecide: 0, error: false };
   const me = user.id;
 
-  const [contractsRes, requestsRes, names] = await Promise.all([
-    supabase
-      .from("crm2_brokerage_contracts")
-      .select(PENDING_BROKERAGE_SELECT)
-      .eq("status", "pending")
-      .order("submitted_at", { ascending: true })
-      .limit(200),
+  const [requestsRes, names] = await Promise.all([
     supabase.from("crm2_requests").select(PENDING_REQUEST_SELECT).eq("status", "pending").order("requested_at", { ascending: true }).limit(200),
     getStaffNameMap(),
   ]);
-  if (contractsRes.error) console.error("crm2 pending brokerage:", contractsRes.error.message);
   if (requestsRes.error) console.error("crm2 pending requests:", requestsRes.error.message);
-
-  // ── Гэрээ ──
-  type ContractRaw = Omit<PendingBrokerage, "submittedByName" | "canDecide">;
-  const contracts = (contractsRes.data ?? []) as unknown as ContractRaw[];
-  const approverBy = new Map<string, boolean>();
-  await Promise.all(
-    [...new Set(contracts.map((c) => c.responsible_agent_id))].map(async (rid) => {
-      approverBy.set(rid, await boolOf(supabase.rpc("crm2_brokerage_approver", { p_responsible: rid }), "brokerage_approver"));
-    })
-  );
-  const brokerage: PendingBrokerage[] = await Promise.all(
-    contracts.map(async (c) => {
-      let canDecide = false;
-      if (approverBy.get(c.responsible_agent_id)) {
-        const involved = [
-          c.responsible_agent_id,
-          c.submitted_by,
-          c.created_by,
-          c.property?.listing_agent_id,
-          c.property?.contract_agent_id,
-          c.property?.photo_agent_id,
-        ].filter((x): x is string => !!x);
-        canDecide = await boolOf(supabase.rpc("crm2_self_ok", { p_involved: involved }), "self_ok");
-      }
-      return { ...c, submittedByName: c.submitted_by ? (names[c.submitted_by] ?? null) : null, canDecide };
-    })
-  );
 
   // ── Хүсэлт ──
   const reqs = (requestsRes.data ?? []) as Crm2RequestRow[];
@@ -206,6 +120,6 @@ export async function listPendingApprovals(): Promise<PendingApprovals> {
     };
   });
 
-  const toDecide = brokerage.filter((b) => b.canDecide).length + requests.filter((r) => r.canDecide).length;
-  return { brokerage, requests, toDecide, error: !!(contractsRes.error || requestsRes.error) };
+  const toDecide = requests.filter((r) => r.canDecide).length;
+  return { requests, toDecide, error: !!requestsRes.error };
 }

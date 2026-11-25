@@ -49,7 +49,6 @@ export async function StaffFormScreen({
   }
 
   const canReassign = ctx.isManager || ctx.isTeamLead;
-  const responsibleCtx = { profileId: ctx.profileId, isManager: ctx.isManager, isTeamLead: ctx.isTeamLead, teamId: ctx.teamId };
 
   // ── Шинэ ──────────────────────────────────────────────────────────────────
   if (!propertyId) {
@@ -71,8 +70,8 @@ export async function StaffFormScreen({
             {quickAddEnabled(settings, ctx.profileId) ? <QuickAddLink panel={panel} /> : null}
           </div>
           <p className="text-sm text-muted">
-            Хадгалахад ноорог болж бүртгэгдэнэ; бөглөсөн бүхэн утсан дээр автоматаар хадгалагдана. Зуучлалын гэрээ батлагдмагц
-            Staff-ийн идэвхтэй санд орно.
+            Хадгалахад ноорог болж бүртгэгдэнэ; бөглөсөн бүхэн утсан дээр автоматаар хадгалагдана. Гэрээг картаас (PMC тамгатай
+            PDF) бүртгэмэгц, хөрөнгийн мэдээлэл бүрэн бол Staff-ийн идэвхтэй санд орно.
           </p>
           {sharedNotice ? (
             <p role="status" className="rounded-2xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
@@ -88,7 +87,6 @@ export async function StaffFormScreen({
           settings={settings}
           staff={staff}
           canReassign={canReassign}
-          responsibleCtx={responsibleCtx}
         />
       </Frame>
     );
@@ -154,7 +152,6 @@ export async function StaffFormScreen({
           settings={settings}
           staff={staff}
           canReassign={canReassign}
-          responsibleCtx={responsibleCtx}
           property={prop}
           private={detail.private}
           canEditPrivate={detail.can.viewPrivate}
@@ -169,13 +166,16 @@ export async function StaffFormScreen({
           profileId={ctx.profileId}
         />
 
-        {/* Зуучлалын гэрээ энд засагдахгүй — картын «Гэрээ» доод цонх (урьдчилан бөглөсөн, 2 алхам). */}
+        {/* Зуучлалын гэрээ энд засагдахгүй — картын «Гэрээ бүртгэх» доод цонх (PMC тамгатай PDF). */}
         <Link
           href={p.property(prop.id, "info", { sheet: "contract" })}
           className="flex min-h-11 items-center gap-2 rounded-2xl border border-line bg-surface px-3 py-2 text-sm font-semibold text-brand-700 hover:border-line-strong sm:px-4"
         >
           <FileSignature className="size-4 shrink-0" aria-hidden />
-          Гэрээг картын «Гэрээ» хэсгээс засна
+          {/* Бүртгэх ноорог алга, хүчинтэй гэрээ байгаа бол цонх зөвхөн харуулна. */}
+          {!detail.brokerage.some((c) => c.status === "draft") && detail.brokerage.some((c) => c.status === "active")
+            ? "Бүртгэгдсэн гэрээг картаас харах"
+            : "Гэрээг картаас (PDF) бүртгэнэ"}
         </Link>
       </div>
     </Frame>

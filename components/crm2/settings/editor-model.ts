@@ -1,14 +1,8 @@
-import {
-  COMMISSION_DEFAULT_RE,
-  parseCommissionDefault,
-  suspiciousCommission,
-  type CommissionDefaultKind,
-} from "@/lib/crm2/commission-defaults";
 import { foldSearchText } from "@/lib/search/fold";
 
 /**
- * Тохиргооны засварлагчдын цэвэр логик (staff сонгогч, шимтгэлийн анхдагч,
- * ангиллын тайлбар, мөрийн тэмдэглэл). React, сервер хамаарахгүй — vitest-ээр шалгана.
+ * Тохиргооны засварлагчдын цэвэр логик (staff сонгогч, ангиллын тайлбар, мөрийн тэмдэглэл).
+ * React, сервер хамаарахгүй — vitest-ээр шалгана.
  * Эцсийн шалгалт validateSettingValue (settings-policies) ба crm2_set_setting-д.
  */
 
@@ -54,78 +48,6 @@ export function toggleStaffId(list: readonly string[], id: string, maxItems: num
   if (list.some((x) => x.toLowerCase() === key)) return list.filter((x) => x.toLowerCase() !== key);
   if (list.length >= maxItems) return [...list];
   return [...list, key];
-}
-
-// ── Шимтгэлийн анхдагч (brokerage.default_commission) ─────────────────────
-
-export type CommissionRowKind = CommissionDefaultKind | "";
-export type CommissionRow = { kind: CommissionRowKind; text: string };
-
-const KINDS: readonly CommissionDefaultKind[] = ["percent", "rent_x", "fixed"];
-
-/** Хадгалсан (эсвэл засаж буй) '<төрөл>:<утга>' → мөр. Хоосон/буруу төрөл → бөглөхгүй. */
-export function readCommissionRow(raw: unknown): CommissionRow {
-  if (typeof raw !== "string") return { kind: "", text: "" };
-  const i = raw.indexOf(":");
-  const kind = (i < 0 ? raw : raw.slice(0, i)).trim() as CommissionDefaultKind;
-  if (!KINDS.includes(kind)) return { kind: "", text: "" };
-  return { kind, text: i < 0 ? "" : raw.slice(i + 1) };
-}
-
-/** Утасны гарын «2,5», «500 000» → «2.5», «500000». */
-export function cleanCommissionText(text: string): string {
-  return text.replace(/[\s ]/g, "").replace(/,/g, ".");
-}
-
-/** Нэг ангиллын мөрийг шинэчилнэ. Төрөлгүй бол тухайн ангиллыг хасна (= урьдчилан бөглөхгүй). */
-export function writeCommissionRow(
-  map: Readonly<Record<string, unknown>>,
-  category: string,
-  row: CommissionRow
-): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(map)) if (typeof v === "string" && k !== category) out[k] = v;
-  if (row.kind) out[category] = `${row.kind}:${cleanCommissionText(row.text)}`;
-  return out;
-}
-
-/** Мөрийн алдаа (null = зөв эсвэл бөглөхгүй). DB-ийн дүрэмтэй ижил. */
-export function commissionRowError(row: CommissionRow): string | null {
-  if (!row.kind) return null;
-  const text = cleanCommissionText(row.text);
-  if (!text) return "Утгаа оруулна уу.";
-  if (!/^\d+(\.\d+)?$/.test(text)) return "Зөвхөн тоо оруулна уу.";
-  if (!COMMISSION_DEFAULT_RE.test(`${row.kind}:${text}`)) return "Бутархай хэсэг 2 оронтой хүртэл байна.";
-  const value = Number(text);
-  if (row.kind === "percent" && value > 100) return "Хувь 100-аас ихгүй.";
-  if (row.kind === "rent_x" && (value < 0.1 || value > 12)) return "0.1–12 дахин хооронд байна.";
-  return null;
-}
-
-const fmtThousands = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-
-/** Агентын гэрээнд юу бөглөгдөхийг нэг мөрөөр (null = бөглөхгүй эсвэл утга буруу). */
-export function commissionRowPreview(row: CommissionRow): string | null {
-  if (!row.kind || commissionRowError(row)) return null;
-  const d = parseCommissionDefault(`${row.kind}:${cleanCommissionText(row.text)}`);
-  if (!d) return null;
-  if (d.kind === "percent") return `Гэрээнд үнийн ${d.value}% гэж бөглөнө`;
-  if (d.kind === "rent_x") {
-    return `Төгрөгийн сарын нийт түрээсийг ${d.value}-аар үржүүлж тогтмол дүнгээр бөглөнө; бусад үнэд бөглөхгүй`;
-  }
-  return `Гэрээнд тогтмол ${fmtThousands(d.value)} ₮ гэж бөглөнө`;
-}
-
-/** Сэжигтэй утгын сануулга (хувь ≥ 50, түрээсэд 100%). */
-export function commissionRowWarning(row: CommissionRow, category: string): string | null {
-  if (row.kind !== "percent" || commissionRowError(row)) return null;
-  return suspiciousCommission("percent", Number(cleanCommissionText(row.text)), category);
-}
-
-/** Ангилалд санал болгох төрлүүд: худалдахад «сарын түрээсийн N дахин» утгагүй (одоо сонгосон бол үлдээнэ). */
-export function commissionKindsFor(category: string, current: CommissionRowKind): CommissionDefaultKind[] {
-  if (category !== "sale") return [...KINDS];
-  return KINDS.filter((k) => k !== "rent_x" || current === "rent_x");
 }
 
 // ── Ангиллын тайлбар (property.category_hints) ────────────────────────────
@@ -191,12 +113,6 @@ export function settingNotes(key: string, values: NoteValues, opts: { aiKeyConfi
       } else {
         notes.push({ tone: "info", text: "Сервер дээр AI-ийн түлхүүр тохируулсан." });
       }
-      break;
-    case "brokerage.default_commission":
-      notes.push({
-        tone: "warn",
-        text: "Урьдчилан бөглөсөн утга бүрийг агент гэрээн дээр «Зөв» гэж баталгаажуулна; баталгаажуулаагүй бол гэрээг батлуулахаар илгээх боломжгүй.",
-      });
       break;
   }
   return notes;

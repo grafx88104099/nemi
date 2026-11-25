@@ -16,7 +16,7 @@ function StaffHint() {
     <div className="mt-4 rounded-xl border border-brand-200 bg-brand-50 p-4 text-sm text-ink">
       <p className="font-semibold">Энэ бол гэрээгүй шууд зар.</p>
       <p className="mt-1 text-muted">
-        Хөрөнгийг Staff-д нэг удаа бүртгэвэл зуучлалын гэрээ батлагдмагц «Зар» хэсгээс нийтэлнэ — зураг нь
+        Хөрөнгийг Staff-д нэг удаа бүртгээд PMC тамгатай гэрээгээ PDF-ээр бүртгэмэгц «Зар» хэсгээс нийтэлнэ — зураг нь
         тамгатай, үнэ, төлөв нь Staff-аас автоматаар шинэчлэгдэнэ, дахин бичих шаардлагагүй.
       </p>
       <Link href={STAFF_NEW_HREF} className="mt-2 inline-flex min-h-11 items-center font-semibold text-brand-700 hover:underline">

@@ -83,7 +83,7 @@ export function crm2Paths(panel: Crm2Panel) {
     reports: () => `${base}/reports`,
     settings: () => `${base}/settings`,
     calendar: () => `${base}/calendar`,
-    /** Батлах хүлээгдэж буй гэрээ, хүсэлт (crm2_my_context.can_approve). */
+    /** Батлах хүлээгдэж буй хүсэлт (crm2_my_context.can_approve). Гэрээг 20261125000100-аас батлахгүй. */
     approvals: () => `${base}/approvals`,
     staffShare: STAFF_SHARE_PATH,
   };
