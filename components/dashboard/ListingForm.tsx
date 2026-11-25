@@ -119,7 +119,7 @@ export function ListingForm({
       if (a > 0 && n > 0) setPerM2Text(String(Math.round(n / a)));
     }
   }
-  const sel = "h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none";
+  const sel = "h-11 w-full rounded-xl border border-line bg-surface px-3 text-base focus:border-brand-500 focus:outline-none sm:text-sm";
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -259,7 +259,7 @@ export function ListingForm({
 
       <Field label="Тайлбар">
         <textarea
-          className="min-h-24 w-full rounded-xl border border-line bg-surface p-3 text-sm focus:border-brand-500 focus:outline-none"
+          className="min-h-24 w-full rounded-xl border border-line bg-surface p-3 text-base focus:border-brand-500 focus:outline-none sm:text-sm"
           value={f.description}
           onChange={(e) => set("description", e.target.value)}
         />

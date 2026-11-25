@@ -9,7 +9,8 @@ export const Input = React.forwardRef<
   <input
     ref={ref}
     className={cn(
-      "h-11 w-full rounded-xl border border-line bg-surface px-3.5 text-sm text-ink",
+      // Утсанд 16px: iOS Safari 16px-ээс жижиг талбарт фокуслахад хуудсыг томруулдаг.
+      "h-11 w-full rounded-xl border border-line bg-surface px-3.5 text-base text-ink sm:text-sm",
       "placeholder:text-subtle focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20",
       "disabled:opacity-50",
       className

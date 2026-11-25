@@ -216,9 +216,14 @@ export async function MyWorkView({ panel }: { panel: Crm2Panel }) {
               )}
             </CardBody>
           </Card>
-          <p className="mt-3 text-xs text-muted">
-            Эргэж залгах, гэрээ сунгах сануулга ба хүлээлгийн үйлчлүүлэгчийн жагсаалт дараагийн шатанд нэмэгдэнэ.
-          </p>
+          {/* Хүлээлгийн жагсаалт ажиллаж байгаа (өмнө «дараагийн шатанд» гэж буруу бичигдсэн байв). */}
+          <Link
+            href={paths.waitlist()}
+            className="mt-3 inline-flex min-h-11 items-center gap-1 rounded-lg text-sm font-medium text-brand-700 hover:underline"
+          >
+            Хүлээлгийн үйлчлүүлэгчид
+            <ChevronRight className="size-4" aria-hidden />
+          </Link>
         </aside>
       </div>
     </div>

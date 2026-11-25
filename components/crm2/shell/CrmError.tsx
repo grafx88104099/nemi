@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { RotateCw, TriangleAlert } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonClasses } from "@/components/ui/button";
 
 /**
  * CRM-ийн хуудсыг ачаалах үеийн гэнэтийн алдаа (crm/error.tsx, хоёр панелд).
@@ -14,10 +15,13 @@ export function CrmError({
   error,
   reset,
   unstable_retry,
+  home,
 }: {
   error: Error & { digest?: string };
   reset: () => void;
   unstable_retry?: () => void;
+  /** Панелийн нүүр (CRM-ээс гадуурх панелийн хуудсанд) — нийтийн сайт руу биш. */
+  home?: { href: string; label: string } | null;
 }) {
   React.useEffect(() => {
     console.error("CRM:", error);
@@ -32,9 +36,16 @@ export function CrmError({
         <h1 className="mt-3 text-lg font-bold text-ink">Ачаалахад алдаа гарлаа</h1>
         <p className="mt-1 text-sm text-muted">Мэдээллийг уншиж чадсангүй. Сүлжээгээ шалгаад дахин оролдоно уу.</p>
         {error.digest ? <p className="mt-2 font-mono text-xs text-subtle">Код: {error.digest}</p> : null}
-        <Button type="button" className="mt-4" onClick={() => (unstable_retry ?? reset)()}>
-          <RotateCw className="size-4" aria-hidden /> Дахин оролдох
-        </Button>
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-center">
+          <Button type="button" onClick={() => (unstable_retry ?? reset)()}>
+            <RotateCw className="size-4" aria-hidden /> Дахин оролдох
+          </Button>
+          {home ? (
+            <Link href={home.href} className={buttonClasses("outline", "md")}>
+              {home.label}
+            </Link>
+          ) : null}
+        </div>
       </div>
     </div>
   );

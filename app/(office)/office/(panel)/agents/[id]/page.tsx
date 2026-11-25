@@ -93,7 +93,8 @@ export default async function OfficeAgentManagePage({
             {status === "active" && (
               <div className="flex flex-wrap items-center gap-2">
                 <VerifyToggle kind="agent" id={id} initial={agent.verified as boolean} />
-                <DeactivateAgentButton agentId={id} />
+                {/* Өөрийгөө идэвхгүй болгохгүй (DB ч хориглоно) — CRM-ийн эрхээ алдахаас сэргийлнэ. */}
+                {!isSelf && <DeactivateAgentButton agentId={id} />}
                 {!isSelf && <RemoveAgentButton agentId={id} agentName={agent.display_name as string} redirectTo="/office/agents" />}
               </div>
             )}

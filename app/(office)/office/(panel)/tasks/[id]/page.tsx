@@ -19,7 +19,7 @@ export default async function OfficeTaskDetailPage({
   if (!task) notFound();
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-8">
       <TaskDetailView task={task} assignees={assignees} projects={projects} basePath="/office/tasks" />
     </div>
   );

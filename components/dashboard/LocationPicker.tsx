@@ -220,7 +220,7 @@ export function LocationPicker({
           aria-controls="loc-listbox"
           aria-autocomplete="list"
           aria-activedescendant={activeIdx >= 0 ? `loc-opt-${activeIdx}` : undefined}
-          className="h-11 w-full rounded-xl border border-line bg-surface pl-9 pr-9 text-sm focus:border-brand-500 focus:outline-none"
+          className="h-11 w-full rounded-xl border border-line bg-surface pl-9 pr-9 text-base focus:border-brand-500 focus:outline-none sm:text-sm"
         />
         {loading && <Loader2 className="absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted" />}
         {suggestions.length > 0 && (

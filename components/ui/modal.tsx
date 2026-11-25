@@ -98,7 +98,10 @@ export function Modal({
             <X className="size-4" />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
+        {/* Утсанд цонх доторх гар хийцийн талбар ч 16px (iOS Safari фокуслахад томруулахгүй). */}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain max-sm:[&_input]:text-base max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base">
+          {children}
+        </div>
         {footer ? <div className="shrink-0">{footer}</div> : null}
       </div>
     </div>

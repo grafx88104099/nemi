@@ -24,9 +24,27 @@ export type OffboardingBlockers = {
   opportunities?: number;
   /** Идэвхтэй/ноорог Staff хөрөнгө дээрх үүрэг (листлэгч, гэрээ, зураг). */
   property_roles?: number;
+  /** Хүний хариуцсан идэвхтэй харилцагч (migration 20261125000310-аас; түүнээс өмнө ирэхгүй). */
+  contacts?: number;
+  /** Хүнд оноогдсон нээлттэй CRM ажил. */
+  open_tasks?: number;
+  /** Хүний гаргасан, эсвэл түүнд/түүнээс шилжүүлэх шийдвэрлээгүй хүсэлт. */
+  pending_requests?: number;
   had_ownership?: boolean;
   approved_act?: boolean;
 };
+
+/**
+ * Хүлээлцэх зүйлс (0-ээс их нь л): «харилцагч 3», «нээлттэй ажил 1» …
+ * Хэлцэл/хөрөнгийн үүргийг offboardingBlockMessage тусад нь (үргэлж) хэлнэ.
+ */
+export function handoverExtras(b: OffboardingBlockers): string[] {
+  const out: string[] = [];
+  if ((b.contacts ?? 0) > 0) out.push(`хариуцсан харилцагч ${b.contacts}`);
+  if ((b.open_tasks ?? 0) > 0) out.push(`нээлттэй ажил ${b.open_tasks}`);
+  if ((b.pending_requests ?? 0) > 0) out.push(`шийдвэрлээгүй хүсэлт ${b.pending_requests}`);
+  return out;
+}
 
 const CHECK_ERR = "CRM-ийн хүлээлцэх төлөвийг шалгаж чадсангүй. Дахин оролдоно уу.";
 
@@ -54,8 +72,20 @@ export async function getOffboardingBlockers(
   }
 }
 
-/** Нэвтрэлт хаах / идэвхгүй болгох / устгахаас өмнөх хориг (null = болно). */
-export function offboardingBlockMessage(b: OffboardingBlockers, action: "disable" | "delete"): string | null {
+/**
+ * Нэвтрэлт хаах / идэвхгүй болгох / устгахаас өмнөх хориг (null = болно).
+ *
+ * `includeHandover` — харилцагч, нээлттэй ажил, шийдвэрлээгүй хүсэлтийг ч хориг болгоно. ЗӨВХӨН CRM-ийн
+ * «Идэвхгүй болгох»-д (deactivateStaff — хүлээлцэлтийн эцсийн алхам). Нэвтрэлт хаах (ban), оффисын
+ * «Идэвхгүй» нь хамгаалалтын яаралтай алхам (ажлаас гарсан, утсаа гээсэн): бөөнөөр шилжүүлэх хэрэгсэлгүй
+ * үед харилцагч бүрийг нэг нэгээр шилжүүлэх хүртэл хувийн мэдээлэлд хандах эрх үлдээхгүйн тулд эдгээрт
+ * зөвхөн хэлцэл / хөрөнгийн үүргийг (DB-ийн crm_staff_deactivate_guard-тай ижил) шалгана.
+ */
+export function offboardingBlockMessage(
+  b: OffboardingBlockers,
+  action: "disable" | "delete",
+  opts: { includeHandover?: boolean } = {}
+): string | null {
   if (!b.has_staff) return null;
   if (action === "delete") {
     return "Энэ ажилтан CRM-д бүртгэлтэй — Staff хэлцэл, түүх хадгалагдах ёстой тул бүрэн устгахгүй. CRM-ээс идэвхгүй болгоод нэвтрэлтийг хаана уу.";
@@ -63,15 +93,45 @@ export function offboardingBlockMessage(b: OffboardingBlockers, action: "disable
   const legacy = b.leads ?? 0;
   const deals = b.opportunities ?? 0;
   const roles = b.property_roles ?? 0;
-  if (legacy + deals + roles > 0) {
-    const parts = [`нээлттэй Staff хэлцэл ${deals}`, `Staff хөрөнгийн үүрэг ${roles}`];
+  // Харилцагч, нээлттэй ажил, хүлээгдэж буй хүсэлт — зөвхөн CRM-ийн «Идэвхгүй болгох»-д хориг.
+  const extras = opts.includeHandover ? handoverExtras(b) : [];
+  if (legacy + deals + roles > 0 || extras.length > 0) {
+    const parts = [`нээлттэй Staff хэлцэл ${deals}`, `Staff хөрөнгийн үүрэг ${roles}`, ...extras];
     if (legacy > 0) parts.push(`хуучин CRM-ийн нээлттэй бичлэг ${legacy}`);
-    return `Хүлээлцэх дуусаагүй — ${parts.join(", ")}. Хэлцлийг өөр агентад шилжүүлж, хөрөнгийн үүрэгт агентыг сольсны дараа дахин оролдоно уу.`;
+    const hint =
+      extras.length > 0
+        ? "Хэлцэл, харилцагчийг өөр агентад шилжүүлж, хөрөнгийн үүрэгт агентыг сольж, ажил, хүсэлтийг шийдвэрлэсний дараа дахин оролдоно уу."
+        : "Хэлцлийг өөр агентад шилжүүлж, хөрөнгийн үүрэгт агентыг сольсны дараа дахин оролдоно уу.";
+    return `Хүлээлцэх дуусаагүй — ${parts.join(", ")}. ${hint}`;
   }
   if (b.is_active && b.had_ownership && !b.approved_act) {
     return "Батлагдсан хүлээлцэх акт шаардлагатай — CRM-ийн удирдлагад хандана уу.";
   }
   return null;
+}
+
+/** «Гарах урсгал»-ын хүлээлцэх даалгаврын гарчиг — хэнийх болохыг нэрээр нь. */
+export function handoverTaskTitle(name: string): string {
+  const n = name.trim() || "ажилтан";
+  return `Хүлээлцэх: ${n.length > 80 ? `${n.slice(0, 79)}…` : n} — гарах урсгал`;
+}
+
+/** Хүлээлцэх даалгаврын тайлбар: юуг шилжүүлэх (тоо мэдэгдэж байвал), хаана хийх. */
+export function handoverTaskDescription(name: string, b: OffboardingBlockers | null): string {
+  const n = name.trim() || "Ажилтан";
+  const lines = [`${n} гарах урсгалд орлоо.`];
+  if (b && b.has_staff) {
+    const parts = [
+      `нээлттэй Staff хэлцэл ${b.opportunities ?? 0}`,
+      `Staff хөрөнгийн үүрэг ${b.property_roles ?? 0}`,
+      ...handoverExtras(b),
+    ];
+    lines.push(`Шилжүүлэх: ${parts.join(", ")}.`);
+  } else {
+    lines.push("Нээлттэй хэлцэл, хөрөнгийн үүрэг, харилцагч, нээлттэй ажлыг нь өөр агентад шилжүүлнэ.");
+  }
+  lines.push("Дууссаны дараа: /office/crm/settings/staff → «Идэвхгүй болгох».");
+  return lines.join("\n");
 }
 
 /** Тухайн өдөр (YYYY-MM-DD) чөлөөтэй эсэх — DB crm_staff_on_leave()-тэй ижил. */

@@ -67,6 +67,7 @@ export function ListingsMap({ filters = {} }: { filters?: ListingFilters }) {
   const [ready, setReady] = useState(false);
   const [count, setCount] = useState<number | null>(null);
   const [near, setNear] = useState(false);
+  const [failed, setFailed] = useState(false);
   // Объект бүр шинэ байдаг тул шүүлтийг утгаар нь харьцуулна.
   const argsKey = JSON.stringify(rpcArgs(filters));
 
@@ -105,11 +106,19 @@ export function ListingsMap({ filters = {} }: { filters?: ListingFilters }) {
     async (around?: { lng: number; lat: number }) => {
       const supabase = createClient();
       const args = JSON.parse(argsKey) as ReturnType<typeof rpcArgs>;
-      const { data } = await supabase.rpc("listings_map_search", {
+      const { data, error } = await supabase.rpc("listings_map_search", {
         ...args,
         ...(around ? { p_lng: around.lng, p_lat: around.lat, p_m: NEAR_M } : {}),
       });
+      // Сүлжээ/DB алдаа → «зар алга» биш: өмнөх цэгүүд хэвээр, алдааг харуулна.
+      if (error) {
+        console.error("listings_map_search:", error.message);
+        setFailed(true);
+        return false;
+      }
+      setFailed(false);
       render((data ?? []) as Pin[]);
+      return true;
     },
     [argsKey, render]
   );
@@ -152,8 +161,8 @@ export function ListingsMap({ filters = {} }: { filters?: ListingFilters }) {
     if (!ready) return;
     let stale = false;
     (async () => {
-      await load();
-      if (!stale) setNear(false);
+      const ok = await load();
+      if (!stale && ok) setNear(false);
     })();
     return () => {
       stale = true;
@@ -163,13 +172,11 @@ export function ListingsMap({ filters = {} }: { filters?: ListingFilters }) {
   async function searchNearCenter() {
     const c = mapRef.current?.getCenter();
     if (!c) return;
-    await load({ lng: c.lng(), lat: c.lat() });
-    setNear(true);
+    if (await load({ lng: c.lng(), lat: c.lat() })) setNear(true);
   }
 
   async function reset() {
-    await load();
-    setNear(false);
+    if (await load()) setNear(false);
   }
 
   if (!KEY) {
@@ -195,12 +202,24 @@ export function ListingsMap({ filters = {} }: { filters?: ListingFilters }) {
             Бүх бүсийг харах
           </button>
         )}
-        {count != null && (
+        {count != null && !failed && (
           <span className="text-sm text-muted tabular-nums" aria-live="polite">
             {near ? `Энэ хавьд ${count} зар` : `${count} зар`}
           </span>
         )}
       </div>
+      {failed ? (
+        <div role="alert" className="flex flex-wrap items-center gap-2 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-800">
+          <span>Сүлжээний алдаа — зарын цэгийг ачаалж чадсангүй.</span>
+          <button
+            type="button"
+            onClick={() => void (near ? searchNearCenter() : reset())}
+            className="min-h-11 rounded-lg px-2 font-semibold underline"
+          >
+            Дахин оролдох
+          </button>
+        </div>
+      ) : null}
       <div ref={ref} className="h-[70vh] w-full overflow-hidden rounded-2xl border border-line" />
     </div>
   );

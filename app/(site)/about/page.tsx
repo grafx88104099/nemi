@@ -1,5 +1,14 @@
+import type { Metadata } from "next";
+
 import { getPlatformStats } from "@/lib/platform-stats";
 import { aboutStatItems } from "@/lib/platform-stats-core";
+import { withBrand } from "@/lib/seo/site";
+
+export const metadata: Metadata = {
+  title: withBrand("Бидний тухай"),
+  description: "Нэми — Улаанбаатарын үл хөдлөхийн зах зээлийг ил тод, баталгаатай болгох платформ.",
+  alternates: { canonical: "/about" },
+};
 
 export default async function AboutPage() {
   // БОДИТ тоо (footer, ProofStrip-тэй ижил босго). Алдаа эсвэл бүгд босгоос доош → мөр нуугдана.
@@ -12,10 +21,10 @@ export default async function AboutPage() {
         <p>
           Нэми бол Монголын үл хөдлөх хөрөнгийн зах зээлийг ил тод, баталгаатай
           болгох зорилготой платформ. Бид худалдан авагч, агент, оффисуудыг нэг
-          дороос холбож, AI технологиор зөв шийдвэр гаргахад туслана.
+          дороос холбож, зөв шийдвэр гаргахад нь туслана.
         </p>
         <p>
-          Зар бүр баталгаажуулалт дамждаг, агент бүр үнэлгээтэй, үнэ бүр ил тод.
+          Зар бүр баталгаажуулалт дамждаг, агент бүр оффист харьяалагддаг, үнэ бүр ил тод.
           Манай зорилго — Монголд гэр худалдан авах, зарах үйл явцыг хамгийн
           найдвартай туршлага болгох.
         </p>

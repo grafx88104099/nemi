@@ -6,6 +6,12 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CRM_ROLES, type CrmRole } from "@/lib/constants-crm";
+import {
+  getOffboardingBlockers,
+  handoverTaskDescription,
+  handoverTaskTitle,
+  offboardingBlockMessage,
+} from "@/lib/crm2/offboarding";
 
 /**
  * CRM ажилтны удирдлага (§1.1). Бичих эрх: sysadmin (RLS давхар шалгана;
@@ -55,6 +61,20 @@ function revalidateStaffPaths() {
   revalidatePath("/office/crm");
   revalidatePath("/office/crm/settings");
   revalidatePath("/office/crm/settings/staff");
+}
+
+/** Ажилтны харагдах нэр (агентын нэр → профайлын нэр). Алдаа гарвал хоосон — үйлдлийг унагахгүй. */
+async function staffDisplayName(profileId: string): Promise<string> {
+  try {
+    const admin = createAdminClient();
+    const [{ data: agent }, { data: profile }] = await Promise.all([
+      admin.from("agents").select("display_name").eq("profile_id", profileId).limit(1).maybeSingle(),
+      admin.from("profiles").select("full_name").eq("id", profileId).maybeSingle(),
+    ]);
+    return agent?.display_name ?? profile?.full_name ?? "";
+  } catch {
+    return "";
+  }
 }
 
 /** Мэдэгдэл — admin client, алдаа үндсэн үйлдлийг унагахгүй. */
@@ -176,11 +196,12 @@ export async function startOffboarding(staffId: string): Promise<{ ok: boolean; 
 
   const { data: staff } = await supabase
     .from("crm_staff")
-    .select("id, profile_id, offboarding")
+    .select("id, profile_id, offboarding, is_active")
     .eq("id", staffId)
     .eq("office_id", ctx.officeId)
     .maybeSingle();
   if (!staff) return { ok: false, error: "Ажилтан олдсонгүй." };
+  if (!staff.is_active) return { ok: false, error: "Ажилтан аль хэдийн идэвхгүй." };
   if (staff.offboarding) return { ok: false, error: "Гарах урсгал аль хэдийн эхэлсэн." };
 
   const { error } = await supabase
@@ -193,13 +214,16 @@ export async function startOffboarding(staffId: string): Promise<{ ok: boolean; 
     return { ok: false, error: SAVE_ERR };
   }
 
-  // Хүлээлцэх даалгавар — tasks модулиар.
+  // Хүлээлцэх даалгавар — tasks модулиар. Гарч буй хүний нэр, юуг шилжүүлэхийг заана
+  // (өмнө нь ерөнхий «Гарах ажилтны хүлээлцэх» — хэнийх болох нь тодорхойгүй байв).
+  const name = await staffDisplayName(staff.profile_id);
+  const blockers = await getOffboardingBlockers(createAdminClient(), staff.profile_id);
   const { error: taskError } = await supabase.from("tasks").insert({
     office_id: ctx.officeId,
     created_by: ctx.userId,
     responsible_id: ctx.userId,
-    title: "Гарах ажилтны хүлээлцэх",
-    description: "Гарах төлөвт орсон ажилтны нээлттэй Staff хэлцлийг өөр агентад шилжүүлж, Staff хөрөнгийн үүрэгт агентыг солино.",
+    title: handoverTaskTitle(name),
+    description: handoverTaskDescription(name, "error" in blockers ? null : blockers),
     priority: "high",
   });
   // даалгавар амжилтгүй ч offboarding төлөв хадгалагдсан
@@ -222,6 +246,21 @@ export async function deactivateStaff(staffId: string): Promise<{ ok: boolean; e
     return { ok: false, error: "Танд ажилтан идэвхгүй болгох эрх алга." };
   }
   if (!ctx.officeId) return { ok: false, error: "Та оффист харьяалагдаагүй байна." };
+
+  // Хүлээлцэх шалгалт: DB guard хэлцэл, хөрөнгийн үүргийг л хардаг тул харилцагч,
+  // нээлттэй ажил, шийдвэрлээгүй хүсэлтийг энд (ижил RPC-ийн тоогоор) хориглоно.
+  const { data: target } = await supabase
+    .from("crm_staff")
+    .select("profile_id, is_active")
+    .eq("id", staffId)
+    .eq("office_id", ctx.officeId)
+    .maybeSingle();
+  if (!target) return { ok: false, error: "Бүртгэл олдсонгүй эсвэл танд эрх алга." };
+  if (target.is_active) {
+    const b = await getOffboardingBlockers(createAdminClient(), target.profile_id);
+    const blocked = "error" in b ? b.error : offboardingBlockMessage(b, "disable", { includeHandover: true });
+    if (blocked) return { ok: false, error: blocked };
+  }
 
   const { error, count } = await supabase
     .from("crm_staff")

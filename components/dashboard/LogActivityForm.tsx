@@ -32,7 +32,7 @@ export function LogActivityForm({ leadId, projectId }: { leadId?: string; projec
     setOccurredAt(localNow());
   }, []);
 
-  const sel = "h-10 w-full rounded-xl border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none";
+  const sel = "h-11 w-full rounded-xl border border-line bg-surface px-3 text-base focus:border-brand-500 focus:outline-none sm:h-10 sm:text-sm";
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -100,7 +100,7 @@ export function LogActivityForm({ leadId, projectId }: { leadId?: string; projec
       <label className="block space-y-1">
         <span className="text-xs font-medium text-muted">Товч агуулга</span>
         <textarea
-          className="min-h-20 w-full rounded-xl border border-line bg-surface p-3 text-sm focus:border-brand-500 focus:outline-none"
+          className="min-h-20 w-full rounded-xl border border-line bg-surface p-3 text-base focus:border-brand-500 focus:outline-none sm:text-sm"
           value={summary}
           onChange={(e) => setSummary(e.target.value)}
           placeholder="Ярианы товч агуулга, чухал зүйлс…"
@@ -110,7 +110,7 @@ export function LogActivityForm({ leadId, projectId }: { leadId?: string; projec
       <label className="block space-y-1">
         <span className="text-xs font-medium text-muted">Дараагийн алхам / үр дүн (заавал биш)</span>
         <input
-          className="h-10 w-full rounded-xl border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none"
+          className="h-11 w-full rounded-xl border border-line bg-surface px-3 text-base focus:border-brand-500 focus:outline-none sm:h-10 sm:text-sm"
           value={outcome}
           onChange={(e) => setOutcome(e.target.value)}
           placeholder="ж: Маргааш үзлэг товлоно"

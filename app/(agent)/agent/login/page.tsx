@@ -22,7 +22,8 @@ export default async function AgentLoginPage({
   } = await supabase.auth.getUser();
   if (user) {
     const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-    if (profile?.role === "agent" || profile?.role === "admin") redirect(dest);
+    // Оффисын админыг ч нэвтрүүлдэг (AgentLoginForm) — нэвтэрсэн бол маягт дээр гацаахгүй.
+    if (profile?.role === "agent" || profile?.role === "admin" || profile?.role === "office_admin") redirect(dest);
   }
 
   return (

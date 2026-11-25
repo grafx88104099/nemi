@@ -1,3 +1,13 @@
+import type { Metadata } from "next";
+
+import { withBrand } from "@/lib/seo/site";
+
+export const metadata: Metadata = {
+  title: withBrand("Үйлчилгээний нөхцөл"),
+  description: "Нэми платформыг ашиглах нөхцөл: хэрэглэгчийн үүрэг, хариуцлагын хязгаарлалт.",
+  alternates: { canonical: "/terms" },
+};
+
 export default function TermsPage() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-12">

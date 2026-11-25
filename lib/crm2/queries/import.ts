@@ -38,7 +38,18 @@ export function listingObjectPath(
   return path;
 }
 
-export type SniffedImage = { mime: "image/jpeg" | "image/png" | "image/webp"; ext: "jpg" | "png" | "webp" };
+/**
+ * Баталгаажсан объектын замаас (listingObjectPath) нийтийн URL-ийг СЕРВЕР талд дахин угсарна — хост нь
+ * зөвхөн NEXT_PUBLIC_SUPABASE_URL (хэрэглэгчийн өгсөн URL-ыг fetch хийхгүй). Замын сегмент бүрийг
+ * encode хийнэ (SAFE_PATH_RE аль хэдийн хязгаарласан ч). Буруу бол null.
+ */
+export function listingPublicObjectUrl(supabaseUrl: string | null | undefined, path: string): string | null {
+  const prefix = listingsPublicPrefix(supabaseUrl);
+  if (!prefix || !path || path.length > 500 || !SAFE_PATH_RE.test(path)) return null;
+  return prefix + path.split("/").map(encodeURIComponent).join("/");
+}
+
+export type SniffedImage ={ mime: "image/jpeg" | "image/png" | "image/webp"; ext: "jpg" | "png" | "webp" };
 
 /** Файлын эхний байтаар (magic bytes) JPEG / PNG / WebP эсэхийг тогтооно; бусад бол null. */
 export function sniffImage(bytes: Uint8Array): SniffedImage | null {

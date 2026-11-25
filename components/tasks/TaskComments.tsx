@@ -53,7 +53,7 @@ export function TaskComments({ taskId, comments }: { taskId: string; comments: T
           value={body}
           onChange={(e) => setBody(e.target.value)}
           placeholder="Сэтгэгдэл бичих…"
-          className="min-h-16 w-full rounded-xl border border-line bg-surface p-3 text-sm focus:border-brand-500 focus:outline-none"
+          className="min-h-16 w-full rounded-xl border border-line bg-surface p-3 text-base focus:border-brand-500 focus:outline-none sm:text-sm"
         />
         {err && <p className="text-sm text-danger">{err}</p>}
         <div className="flex justify-end">

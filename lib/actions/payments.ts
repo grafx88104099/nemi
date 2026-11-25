@@ -3,8 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createInvoice } from "@/lib/qpay/client";
-
-const PREMIER_PRICE = 99_000;
+import { PREMIER_PRICE } from "@/lib/qpay/payments";
 
 /** Нэвтэрсэн агентад Premier-ийн QPay нэхэмжлэх үүсгэнэ. */
 export async function createPremierInvoice(): Promise<{

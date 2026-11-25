@@ -15,7 +15,8 @@ export const Select = React.forwardRef<
     <select
       ref={ref}
       className={cn(
-        "h-11 w-full appearance-none rounded-xl border border-line bg-surface pl-3.5 pr-9 text-sm text-ink",
+        // Утсанд 16px (iOS томруулахгүй).
+        "h-11 w-full appearance-none rounded-xl border border-line bg-surface pl-3.5 pr-9 text-base text-ink sm:text-sm",
         "focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20",
         "disabled:opacity-50"
       )}

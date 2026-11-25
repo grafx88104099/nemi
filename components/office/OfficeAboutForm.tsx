@@ -66,7 +66,7 @@ export function OfficeAboutForm({
     });
   }
 
-  const ta = "w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20";
+  const ta = "w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:text-sm";
 
   return (
     <div className="grid gap-8 lg:grid-cols-2">

@@ -51,7 +51,7 @@ export default async function ListingsPage({
   // ss-г redirect дамжуулан хадгална — эс бөгөөс чөлөөт текстэй хадгалсан хайлт «үзсэн» болохгүй.
   if (smart.changed) redirect(withSavedSearchParam(filtersHref("/listings", smart.filters, { withSort: true }), ss));
 
-  const [{ listings, total, page, pageSize }, aiSort, facets] = await Promise.all([
+  const [{ listings, total, page, pageSize, error: loadFailed }, aiSort, facets] = await Promise.all([
     getListings(filters),
     hasAiScores().catch(() => false),
     getListingFacets(filters),
@@ -96,11 +96,23 @@ export default async function ListingsPage({
         <SearchFilterBar base="/listings" f={filters} facets={facets} showSort aiSort={aiSort} />
       </div>
 
-      <p className="mt-4 text-sm text-muted">{total} зар олдлоо</p>
+      {loadFailed ? null : <p className="mt-4 text-sm text-muted">{total} зар олдлоо</p>}
       {/* R08c: дүрмээр таниагүй чөлөөт текст — сонголттой AI тайлбар (унтраастай бол харагдахгүй). */}
       {aiSearchEnabled() && shouldTryAi(filters.q) ? <AiSearchForm f={filters} /> : null}
 
-      {listings.length === 0 ? (
+      {loadFailed ? (
+        // DB/сүлжээний алдаа — «Тохирох зар олдсонгүй» гэж худал хэлэхгүй.
+        <div role="alert" className="mt-6 rounded-2xl border border-line bg-surface p-6 text-center">
+          <p className="text-lg font-bold text-ink">Сүлжээний алдаа</p>
+          <p className="mt-1 text-sm text-muted">Зарыг ачаалж чадсангүй. Сүлжээгээ шалгаад дахин оролдоно уу.</p>
+          <Link
+            href={pageHref(page)}
+            className="mt-4 inline-flex min-h-11 items-center rounded-xl border border-line-strong bg-surface px-5 text-sm font-semibold text-ink hover:bg-surface-2"
+          >
+            Дахин оролдох
+          </Link>
+        </div>
+      ) : listings.length === 0 ? (
         <div className="py-14 text-center">
           {/* eslint-disable-next-line @next/next/no-img-element -- статик SVG (brand), next/image хэрэггүй */}
           <img

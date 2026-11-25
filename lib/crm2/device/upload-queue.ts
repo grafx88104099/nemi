@@ -5,7 +5,8 @@
  * - enqueue() мөрийг IDB-д бичсэний ДАРАА буцна — дуудагч ноорогоо устгахаас өмнө
  *   blob-ын эзэмшлийг авна (ноорог устгах/цэвэрлэх нь дараалалд заагдсан blob-д хүрэхгүй).
  * - Хөрөнгө хараахан үүсээгүй бол «waiting_property»; bindProperty(clientKey, id) суллана.
- * - Нэг удаад нэг файл; бичлэг Wi-Fi хүлээнэ; backoff 2/5/15/60 с; offline үед зогсоно.
+ * - Нэг удаад нэг файл; бичлэг Wi-Fi хүлээнэ (сүлжээ тодорхойгүй — iPhone — бол жижиг бичлэгийг шууд,
+ *   томыг «Одоо илгээх»-ээр); backoff 2/5/15/60 с; offline үед зогсоно.
  * - Гэрээний баримтыг vault-аар битүүмжилж хадгална, амжилттай хуулсны дараа шууд устгана.
  * - Алдаатай мөрийг хэзээ ч автоматаар хаяхгүй (retry / remove).
  */
@@ -90,23 +91,59 @@ export function backoffDelay(attempts: number): number {
   return BACKOFF_MS[Math.min(attempts, BACKOFF_MS.length) - 1];
 }
 
-export function initialStatus(target: QueueTarget, isVideo: boolean, wifi: boolean): QueueStatus {
+/**
+ * Сүлжээ: Wi-Fi/кабель, мобайл дата, эсвэл тодорхойгүй. iPhone (Safari, суулгасан апп) Network
+ * Information API-гүй тул ҮРГЭЛЖ «unknown» — өмнө нь мобайл гэж тооцогдож бичлэг хэзээ ч автоматаар явдаггүй байв.
+ */
+export type NetKind = "wifi" | "cellular" | "unknown";
+
+/** Сүлжээ тодорхойгүй үед үүнээс бага бичлэгийг асуулгүй илгээнэ (богино клип). */
+export const AUTO_VIDEO_MAX_BYTES = 15 * 1024 * 1024;
+
+/** Бичлэгийг хэрэглэгчээс асуулгүй одоо илгээж болох эсэх. Мобайл датад — үгүй. */
+export function videoMayAutoSend(bytes: number, net: NetKind): boolean {
+  if (net === "wifi") return true;
+  if (net === "unknown") return bytes > 0 && bytes <= AUTO_VIDEO_MAX_BYTES;
+  return false;
+}
+
+/**
+ * Маягтын «Wi-Fi хүлээх» сонголтын шошго — бодит дүрэмтэй тааруулна. Сүлжээ тодорхойгүй (iPhone) үед
+ * сонголттой ч жижиг бичлэг (≤15 МБ) шууд явдаг тул «бүгдийг Wi-Fi хүлээнэ» гэж амлахгүй.
+ */
+export function waitWifiLabel(net: NetKind): string {
+  if (net === "unknown") return `${Math.round(AUTO_VIDEO_MAX_BYTES / (1024 * 1024))} МБ-аас томыг Wi-Fi-д хүлээх`;
+  return "Wi-Fi холбогдтол хүлээх";
+}
+
+/** allowCellular — хэрэглэгч бичлэгийг Wi-Fi хүлээлгүй илгээхийг сонгосон. */
+export function initialStatus(
+  target: QueueTarget,
+  isVideo: boolean,
+  net: NetKind,
+  bytes = 0,
+  allowCellular = false
+): QueueStatus {
   if (target.kind === "media" && !target.propertyId) return "waiting_property";
-  if (isVideo && !wifi) return "waiting_wifi";
+  if (isVideo && !allowCellular && !videoMayAutoSend(bytes, net)) return "waiting_wifi";
   return "queued";
+}
+
+function mayUploadNow(i: Pick<QueueItem, "isVideo" | "bytes" | "allowCellular">, net: NetKind): boolean {
+  return !i.isVideo || !!i.allowCellular || videoMayAutoSend(i.bytes, net);
 }
 
 /** Дараагийн хуулах мөр (хуучин нь эхэнд). */
 export function pickNext(
   items: QueueItem[],
-  ctx: { now: number; wifi: boolean; profileId: string | null }
+  ctx: { now: number; net: NetKind; profileId: string | null }
 ): QueueItem | null {
   const ready = items
     .filter((i) => !ctx.profileId || i.profileId === ctx.profileId)
     .filter(
       (i) =>
-        (i.status === "queued" && i.nextAt <= ctx.now && (!i.isVideo || ctx.wifi || i.allowCellular)) ||
-        (i.status === "waiting_wifi" && (ctx.wifi || i.allowCellular))
+        (i.status === "queued" && i.nextAt <= ctx.now && mayUploadNow(i, ctx.net)) ||
+        (i.status === "waiting_wifi" && mayUploadNow(i, ctx.net))
     )
     .sort((a, b) => a.createdAt - b.createdAt);
   return ready[0] ?? null;
@@ -139,11 +176,11 @@ export function isPermanentUploadFailure(res: Crm2Result<unknown>): boolean {
 /** Дараалалд нэмэхэд гэрээ PDF биш (enqueue → Error('not_pdf')). */
 export const NOT_PDF_ERROR = "not_pdf";
 
-export function bindItems(items: QueueItem[], clientKey: string, propertyId: string, wifi: boolean, now: number): QueueItem[] {
+export function bindItems(items: QueueItem[], clientKey: string, propertyId: string, net: NetKind, now: number): QueueItem[] {
   return items.map((i) => {
     if (i.target.kind !== "media" || i.target.clientKey !== clientKey || i.status !== "waiting_property") return i;
     const target = { ...i.target, propertyId };
-    return { ...i, target, status: initialStatus(target, i.isVideo, wifi), nextAt: now, updatedAt: now };
+    return { ...i, target, status: initialStatus(target, i.isVideo, net, i.bytes, !!i.allowCellular), nextAt: now, updatedAt: now };
   });
 }
 
@@ -195,26 +232,31 @@ export function isOnline(): boolean {
   return typeof navigator === "undefined" ? true : navigator.onLine !== false;
 }
 
-/** Wi-Fi (эсвэл тодорхойгүй үед мобайл биш төхөөрөмж) эсэх. */
-export function isWifiLike(): boolean {
-  if (typeof navigator === "undefined") return true;
-  const n = navigator as Navigator & {
-    connection?: { type?: string; saveData?: boolean };
-    userAgentData?: { mobile?: boolean };
-  };
-  const type = n.connection?.type;
-  if (type === "wifi" || type === "ethernet") return true;
-  if (type === "cellular" || type === "bluetooth" || type === "wimax") return false;
-  if (n.connection?.saveData) return false;
-  const mobile = n.userAgentData?.mobile ?? /Mobi|Android|iPhone|iPad|iPod/i.test(n.userAgent ?? "");
-  return !mobile;
+type NavigatorLike = {
+  connection?: { type?: string; saveData?: boolean } | null;
+  userAgentData?: { mobile?: boolean } | null;
+  userAgent?: string;
+};
+
+/**
+ * Сүлжээний төрөл. Network Information API-ийн `type` (Android Chrome) байвал түүгээр; дата хэмнэх
+ * горимд — мобайл. API байхгүй: утас/таблет (iPhone Safari) — «unknown», компьютер — Wi-Fi гэж тооцно.
+ */
+export function connectionKind(nav: NavigatorLike | null | undefined = typeof navigator === "undefined" ? null : navigator): NetKind {
+  if (!nav) return "wifi";
+  const type = nav.connection?.type;
+  if (type === "wifi" || type === "ethernet") return "wifi";
+  if (type === "cellular" || type === "bluetooth" || type === "wimax") return "cellular";
+  if (nav.connection?.saveData) return "cellular";
+  const mobile = nav.userAgentData?.mobile ?? /Mobi|Android|iPhone|iPad|iPod/i.test(nav.userAgent ?? "");
+  return mobile ? "unknown" : "wifi";
 }
 
 type Env = {
   uploaders: Uploaders;
   now: () => number;
   online: () => boolean;
-  wifi: () => boolean;
+  net: () => NetKind;
   setTimer: (fn: () => void, ms: number) => unknown;
   clearTimer: (t: unknown) => void;
 };
@@ -223,7 +265,7 @@ const defaultEnv: Env = {
   uploaders: defaultUploaders,
   now: () => Date.now(),
   online: isOnline,
-  wifi: isWifiLike,
+  net: () => connectionKind(),
   setTimer: (fn, ms) => setTimeout(fn, ms),
   clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>),
 };
@@ -311,6 +353,8 @@ export type EnqueueInput = {
   /** … эсвэл шинэ файл (гэрээний PDF г.м.). */
   blob?: Blob;
   name?: string;
+  /** Бичлэгийг Wi-Fi хүлээлгүй илгээх (формын «Wi-Fi холбогдтол хүлээх»-ийг болиулсан). */
+  allowCellular?: boolean;
 };
 
 /** Дараалалд нэмнэ. IDB-д бичигдсэний дараа буцна (эзэмшил шилжсэн). */
@@ -368,12 +412,13 @@ export async function enqueue(input: EnqueueInput): Promise<QueueItem> {
   if (!blobKey) throw new Error("no_blob");
 
   const isVideo = type.startsWith("video/");
+  const allowCellular = isVideo && input.allowCellular === true;
   const item: QueueItem = {
     id: newId(),
     blobKey,
     profileId: input.profileId,
     target: input.target,
-    status: initialStatus(input.target, isVideo, env.wifi()),
+    status: initialStatus(input.target, isVideo, env.net(), bytes, allowCellular),
     attempts: 0,
     error: null,
     name,
@@ -384,6 +429,7 @@ export async function enqueue(input: EnqueueInput): Promise<QueueItem> {
     createdAt: now,
     updatedAt: now,
     nextAt: now,
+    ...(allowCellular ? { allowCellular: true } : {}),
   };
   await persist(item);
   setItems([...items, item]);
@@ -394,7 +440,7 @@ export async function enqueue(input: EnqueueInput): Promise<QueueItem> {
 /** Хөрөнгө үүссэний дараа «waiting_property» мөрүүдийг суллана. */
 export async function bindProperty(clientKey: string, propertyId: string): Promise<number> {
   await ensureLoaded();
-  const next = bindItems(items, clientKey, propertyId, env.wifi(), env.now());
+  const next = bindItems(items, clientKey, propertyId, env.net(), env.now());
   const changed = next.filter((n, i) => n !== items[i]);
   for (const c of changed) await persist(c);
   setItems(next);
@@ -510,7 +556,7 @@ async function loop(): Promise<void> {
   await ensureLoaded();
   for (;;) {
     if (!env.online()) return;
-    const next = pickNext(items, { now: env.now(), wifi: env.wifi(), profileId: currentProfile });
+    const next = pickNext(items, { now: env.now(), net: env.net(), profileId: currentProfile });
     if (!next) break;
     await uploadOne(next);
   }
@@ -536,6 +582,13 @@ function kick(): void {
 
 let onlineHandler: (() => void) | null = null;
 
+type ConnectionEvents = { addEventListener?: (t: "change", fn: () => void) => void; removeEventListener?: (t: "change", fn: () => void) => void };
+
+function netConnection(): ConnectionEvents | null {
+  if (typeof navigator === "undefined") return null;
+  return (navigator as Navigator & { connection?: ConnectionEvents }).connection ?? null;
+}
+
 /**
  * Дарааллыг эхлүүлнэ (давтан дуудахад аюулгүй). Shell mount бүрт ба 'online' үед.
  * profileId өгвөл зөвхөн тэр хэрэглэгчийн мөрийг хуулна.
@@ -546,6 +599,8 @@ export function startQueue(profileId?: string | null): Promise<void> {
   if (typeof window !== "undefined" && !onlineHandler) {
     onlineHandler = () => kick();
     window.addEventListener("online", onlineHandler);
+    // Мобайл датагаас Wi-Fi руу шилжихэд хүлээж буй бичлэгийг шууд илгээнэ (Android Chrome).
+    netConnection()?.addEventListener?.("change", onlineHandler);
   }
   kick();
   return running ?? Promise.resolve();
@@ -610,6 +665,25 @@ export function useUploadQueue(propertyId?: string | null): {
     [all, propertyId]
   );
   return { items: filtered, retry, remove };
+}
+
+function subscribeNet(cb: () => void) {
+  const c = netConnection();
+  c?.addEventListener?.("change", cb);
+  window.addEventListener("online", cb);
+  window.addEventListener("offline", cb);
+  return () => {
+    c?.removeEventListener?.("change", cb);
+    window.removeEventListener("online", cb);
+    window.removeEventListener("offline", cb);
+  };
+}
+const getNetSnapshot = () => env.net();
+const getNetServerSnapshot = (): NetKind => "unknown";
+
+/** Одоогийн сүлжээний төрөл (бичлэгийн хүлээлтийн бичвэрт). */
+export function useNetKind(): NetKind {
+  return useSyncExternalStore(subscribeNet, getNetSnapshot, getNetServerSnapshot);
 }
 
 /** Глобал тэмдэгт: хүлээгдэж буй ба алдаатай мөрийн тоо. */

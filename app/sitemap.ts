@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 
-import { NEWS } from "@/lib/news";
+import { articleIndexable, NEWS } from "@/lib/news";
+import { hasAiScores } from "@/lib/queries";
 import { getSitemapRows } from "@/lib/queries-seo";
 import { absUrl } from "@/lib/seo/site";
 
@@ -14,7 +15,9 @@ const STATIC: [string, Entry["changeFrequency"], number][] = [
   ["/listings", "hourly", 0.9],
   ["/map", "daily", 0.6],
   ["/agents", "weekly", 0.6],
-  ...(["/home-loans", "/rent/afford", "/sell", "/my-home", "/ai", "/news", "/about", "/contact", "/help", "/partners"].map(
+  ["/offices", "weekly", 0.5],
+  // /ai — доорх: AI оноо бодит зарт гарсан үед л (тэр болтол хуудас noindex).
+  ...(["/home-loans", "/rent/afford", "/sell", "/my-home", "/news", "/about", "/contact", "/help", "/partners"].map(
     (p) => [p, "monthly", 0.4] as [string, Entry["changeFrequency"], number]
   )),
   ["/privacy", "yearly", 0.2],
@@ -33,8 +36,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority,
   }));
 
-  for (const a of NEWS) {
+  const aiLive = await hasAiScores().catch(() => false);
+  // AI-ийн нийтлэл — AI оноо ажиллаж эхэлтэл гаргахгүй (/ai-тай ижил хаалга).
+  for (const a of NEWS.filter((n) => articleIndexable(n, aiLive))) {
     out.push({ url: absUrl(`/news/${a.slug}`), lastModified: a.date, changeFrequency: "yearly", priority: 0.3 });
+  }
+
+  if (aiLive) {
+    out.push({ url: absUrl("/ai"), changeFrequency: "monthly", priority: 0.4 });
   }
 
   try {

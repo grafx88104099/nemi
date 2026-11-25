@@ -1,8 +1,75 @@
 import { describe, expect, it } from "vitest";
 
-import { getOffboardingBlockers, isOnLeave, leaveSchema, offboardingBlockMessage } from "@/lib/crm2/offboarding";
+import {
+  getOffboardingBlockers,
+  handoverExtras,
+  handoverTaskDescription,
+  handoverTaskTitle,
+  isOnLeave,
+  leaveSchema,
+  offboardingBlockMessage,
+} from "@/lib/crm2/offboarding";
 
 const UUID_A = "11111111-1111-4111-8111-111111111111";
+
+describe("хүлээлцэх шалгалт — харилцагч, нээлттэй ажил, хүсэлт", () => {
+  const base = { has_staff: true, is_active: true, leads: 0, opportunities: 0, property_roles: 0, approved_act: true };
+
+  const crm = { includeHandover: true };
+
+  it("CRM-ийн «Идэвхгүй болгох»: хэлцэл/үүрэггүй ч хариуцсан харилцагчтай бол болохгүй", () => {
+    const msg = offboardingBlockMessage({ ...base, contacts: 3 }, "disable", crm);
+    expect(msg).toMatch(/хариуцсан харилцагч 3/);
+    expect(msg).toMatch(/Хүлээлцэх дуусаагүй/);
+  });
+
+  it("CRM-ийн «Идэвхгүй болгох»: нээлттэй ажил, шийдвэрлээгүй хүсэлт ч хориг", () => {
+    expect(offboardingBlockMessage({ ...base, open_tasks: 2 }, "disable", crm)).toMatch(/нээлттэй ажил 2/);
+    expect(offboardingBlockMessage({ ...base, pending_requests: 1 }, "disable", crm)).toMatch(/шийдвэрлээгүй хүсэлт 1/);
+  });
+
+  it("Нэвтрэлт хаах / оффисын «Идэвхгүй» (анхдагч): зөвхөн харилцагч, ажил, хүсэлттэй бол ХОРИГЛОХГҮЙ", () => {
+    // setAgentLoginEnabled(false), setAgentStatus('rejected') — хамгаалалтын яаралтай алхам.
+    expect(offboardingBlockMessage({ ...base, contacts: 3, open_tasks: 2, pending_requests: 1 }, "disable")).toBeNull();
+    // Хэлцэл / хөрөнгийн үүрэг (DB guard-тай ижил) хэвээр хориг; харилцагчийг мессежид нэмэхгүй.
+    const msg = offboardingBlockMessage({ ...base, opportunities: 1, contacts: 3 }, "disable");
+    expect(msg).toMatch(/нээлттэй Staff хэлцэл 1/);
+    expect(msg).not.toMatch(/харилцагч/);
+  });
+
+  it("бүгд 0 (эсвэл хуучин DB — түлхүүргүй) бол саадгүй", () => {
+    expect(offboardingBlockMessage({ ...base, contacts: 0, open_tasks: 0, pending_requests: 0 }, "disable", crm)).toBeNull();
+    expect(offboardingBlockMessage(base, "disable", crm)).toBeNull();
+  });
+
+  it("handoverExtras зөвхөн 0-ээс их зүйлсийг", () => {
+    expect(handoverExtras({ has_staff: true, contacts: 1, open_tasks: 0, pending_requests: 4 })).toEqual([
+      "хариуцсан харилцагч 1",
+      "шийдвэрлээгүй хүсэлт 4",
+    ]);
+    expect(handoverExtras({ has_staff: true })).toEqual([]);
+  });
+
+  it("хүлээлцэх даалгавар гарч буй хүний нэр, шилжүүлэх тоог агуулна", () => {
+    expect(handoverTaskTitle("Бат-Эрдэнэ")).toBe("Хүлээлцэх: Бат-Эрдэнэ — гарах урсгал");
+    expect(handoverTaskTitle("  ")).toBe("Хүлээлцэх: ажилтан — гарах урсгал");
+    expect(handoverTaskTitle("А".repeat(200)).length).toBeLessThan(110);
+
+    const d = handoverTaskDescription("Бат-Эрдэнэ", {
+      has_staff: true,
+      opportunities: 2,
+      property_roles: 5,
+      contacts: 3,
+      open_tasks: 0,
+      pending_requests: 1,
+    });
+    expect(d).toMatch(/^Бат-Эрдэнэ гарах урсгалд орлоо\./);
+    expect(d).toMatch(/нээлттэй Staff хэлцэл 2, Staff хөрөнгийн үүрэг 5, хариуцсан харилцагч 3, шийдвэрлээгүй хүсэлт 1/);
+    expect(d).toMatch(/\/office\/crm\/settings\/staff/);
+    // Тоо уншиж чадаагүй бол ерөнхий заавар.
+    expect(handoverTaskDescription("Бат", null)).toMatch(/өөр агентад шилжүүлнэ/);
+  });
+});
 
 describe("гарах ажилтны хориг", () => {
   it("CRM-гүй агентыг хаах/устгахад саадгүй", () => {

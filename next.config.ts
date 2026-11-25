@@ -12,6 +12,13 @@ import { CRM_REDIRECTS } from "./lib/crm-redirects";
 const NEXT_DEFAULT_HTML_LIMITED_BOTS =
   "[\\w-]+-Google|Google-[\\w-]+|Chrome-Lighthouse|Slurp|DuckDuckBot|baiduspider|yandex|sogou|bitlybot|tumblr|vkShare|quora link preview|redditbot|ia_archiver|Bingbot|BingPreview|applebot|facebookexternalhit|facebookcatalog|Twitterbot|LinkedInBot|Slackbot|Discordbot|WhatsApp|SkypeUriPreview|Yeti|googleweblight";
 
+const SECURITY_HEADERS = [
+  { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+];
+
 const nextConfig: NextConfig = {
   // Шэйрийн preview bot-ууд metadata-г <head>-д хүлээж авна (streaming биш).
   htmlLimitedBots: new RegExp(`${NEXT_DEFAULT_HTML_LIMITED_BOTS}|Viber`, "i"),
@@ -27,9 +34,17 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [...CRM_REDIRECTS, { source: "/your-rental", destination: "/me", permanent: false }];
   },
+  // Бүх хуудас: clickjacking-аас (өөр сайт iframe-д оруулахгүй; өөрийн домэйн болно), MIME
+  // таахгүй, referrer-т зөвхөн origin. Энэ нь гадагш ачаалах (Supabase, Google Maps, зураг)
+  // нөөцийг хязгаарлахгүй — зөвхөн манай хариунд. Ижил түлхүүрийг доорх /sw.js мөр дарна
+  // (Next: «the last header key will override the first») — тиймээс энэ мөр ЭХЭНД.
   // CRM PWA: service worker-ийг кэшлэхгүй (шинэ хувилбар шууд үйлчилнэ), зөвхөн өөрийн домэйны скрипт.
   async headers() {
     return [
+      {
+        source: "/:path*",
+        headers: SECURITY_HEADERS,
+      },
       {
         source: "/sw.js",
         headers: [

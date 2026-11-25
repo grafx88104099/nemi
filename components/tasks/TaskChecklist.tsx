@@ -82,13 +82,13 @@ export function TaskChecklist({ taskId, items }: { taskId: string; items: TaskCh
           onChange={(e) => setLabel(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && add()}
           placeholder="Алхам нэмэх…"
-          className="h-9 w-full rounded-xl border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none"
+          className="h-11 w-full rounded-xl border border-line bg-surface px-3 text-base focus:border-brand-500 focus:outline-none sm:h-9 sm:text-sm"
         />
         <button
           type="button"
           onClick={add}
           disabled={pending || !label.trim()}
-          className="inline-flex h-9 shrink-0 items-center gap-1 rounded-xl border border-line px-3 text-sm font-medium text-ink hover:bg-surface-2 disabled:opacity-50"
+          className="inline-flex h-11 shrink-0 sm:h-9 items-center gap-1 rounded-xl border border-line px-3 text-sm font-medium text-ink hover:bg-surface-2 disabled:opacity-50"
         >
           {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />} Нэмэх
         </button>

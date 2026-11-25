@@ -78,7 +78,8 @@ export function CalendarHeader({
       <div className="flex min-w-0 flex-1 basis-64 items-center gap-1.5">
         {navigation ? (
           <>
-            <Button type="button" variant="outline" size="sm" onClick={onToday} title="Өнөөдөр (t)">
+            {/* Утсанд 44px хүрэх талбай (touch / size-11), sm-ээс дээш өмнөх шигээ нягт. */}
+            <Button type="button" variant="outline" size="touch" onClick={onToday} title="Өнөөдөр (t)">
               Өнөөдөр
             </Button>
             <button
@@ -86,7 +87,7 @@ export function CalendarHeader({
               onClick={() => onShift(-1)}
               aria-label="Өмнөх"
               title="Өмнөх (← эсвэл k)"
-              className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface-2 hover:text-ink"
+              className="inline-flex size-11 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface-2 hover:text-ink sm:size-9"
             >
               <ChevronLeft className="size-5" aria-hidden />
             </button>
@@ -95,7 +96,7 @@ export function CalendarHeader({
               onClick={() => onShift(1)}
               aria-label="Дараах"
               title="Дараах (→ эсвэл j)"
-              className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface-2 hover:text-ink"
+              className="inline-flex size-11 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface-2 hover:text-ink sm:size-9"
             >
               <ChevronRight className="size-5" aria-hidden />
             </button>
@@ -108,7 +109,7 @@ export function CalendarHeader({
               onClick={(e) => onTitleClick(rectOf(e.currentTarget))}
               aria-haspopup="dialog"
               title="Огноо сонгох"
-              className="inline-flex max-w-full items-center gap-1 rounded-lg px-1 py-0.5 text-left hover:bg-surface-2"
+              className="inline-flex min-h-11 max-w-full items-center gap-1 rounded-lg px-1 py-0.5 text-left hover:bg-surface-2 sm:min-h-0"
             >
               <span className="truncate">{titleText}</span>
               <ChevronDown className="size-4 shrink-0 text-muted" aria-hidden />
@@ -135,7 +136,7 @@ export function CalendarHeader({
                 aria-pressed={activeView ? v === activeView : undefined}
                 title={`${CALENDAR_VIEW_LABEL[v]} (${VIEW_KEY[v]})`}
                 className={cn(
-                  "min-h-8 min-w-0 flex-1 truncate rounded-lg px-1.5 text-xs font-semibold text-muted transition hover:text-ink sm:flex-none sm:px-2.5 sm:text-sm",
+                  "min-h-11 min-w-0 flex-1 truncate rounded-lg px-1.5 text-xs font-semibold text-muted transition hover:text-ink sm:min-h-8 sm:flex-none sm:px-2.5 sm:text-sm",
                   activeClass(v)
                 )}
               >

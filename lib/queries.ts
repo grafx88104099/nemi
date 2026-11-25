@@ -123,12 +123,15 @@ export async function getListings(f: ListingFilters = {}) {
   // Ижил үнэтэй/оноотой зар хуудас хооронд үсрэхгүй байх тогтвортой эрэмбэ.
   query = query.order("created_at", { ascending: false }).order("id", { ascending: true });
 
-  const { data, count } = await query.range(from, from + pageSize - 1);
+  const { data, count, error } = await query.range(from, from + pageSize - 1);
+  // error: true — DB/сүлжээний алдаа («0 зар олдлоо» гэж худал хэлэхгүй; хуудас алдааг харуулна).
+  if (error) console.error("getListings:", error.message);
   return {
     listings: (data ?? []) as unknown as ListingCardData[],
     total: count ?? 0,
     page,
     pageSize,
+    error: !!error,
   };
 }
 
@@ -288,6 +291,28 @@ export async function getOffices(): Promise<OfficeListItem[]> {
   return (data ?? []) as unknown as OfficeListItem[];
 }
 
+export type OfficeDirectoryItem = OfficeListItem & {
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+};
+
+/**
+ * /offices ба /contact — түдгэлзээгүй оффисууд, холбоо барих мэдээлэлтэй
+ * (оффисын нийтийн профайлд аль хэдийн харагддаг phone/email/address л).
+ */
+export async function getOfficeDirectory(): Promise<OfficeDirectoryItem[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("offices")
+    .select("id, name, logo, logo_url, color, verified, agents_count, listings_count, specialties, phone, email, address")
+    .is("suspended_at", null)
+    .order("verified", { ascending: false })
+    .order("agents_count", { ascending: false });
+  if (error) console.error("getOfficeDirectory:", error.message);
+  return (data ?? []) as unknown as OfficeDirectoryItem[];
+}
+
 export type OfficeProfile = {
   id: string;
   name: string;
@@ -325,9 +350,44 @@ export async function getOfficeProfile(id: string): Promise<OfficeProfile | null
   return (data as unknown as OfficeProfile) ?? null;
 }
 
-export async function getAgentById(id: string) {
+/** Агентын нийтийн профайл (getAgentById-ийн select-тэй ижил багана). */
+export type AgentProfile = {
+  id: string;
+  display_name: string;
+  phone: string | null;
+  avatar: string | null;
+  avatar_url: string | null;
+  rating: number | null;
+  reviews_count: number;
+  years: number | null;
+  sold: number;
+  listings_count: number;
+  verified: boolean;
+  premier: boolean;
+  response_time: string | null;
+  languages: string[];
+  areas: string[];
+  specialty: string | null;
+  bio: string | null;
+  sub_ratings: Record<string, number> | null;
+  office: { name: string; color: string | null } | null;
+};
+
+/**
+ * Агентын профайл. Зарыг шинээс нь эрэмбэлж, `listingsLimit`-ээр хязгаарлана
+ * (null = бүгд); `listingsTotal` нь идэвхтэй зарын нийт тоо («Бүх N зар» холбоост).
+ */
+export async function getAgentById(id: string, { listingsLimit = null }: { listingsLimit?: number | null } = {}) {
   const supabase = await createClient();
-  const [{ data: agent }, { data: listings }, { data: reviews }] = await Promise.all([
+  let listingsQuery = supabase
+    .from("listings")
+    .select(CARD_SELECT, { count: "exact" })
+    .eq("agent_id", id)
+    .eq("status", "active")
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: true });
+  if (listingsLimit != null) listingsQuery = listingsQuery.limit(listingsLimit);
+  const [{ data: agent }, { data: listings, count: listingsTotal }, { data: reviews }] = await Promise.all([
     supabase
       .from("agents")
       // profile_id/legacy_id зэрэг дотоод талбар оруулахгүй; оффисоос зөвхөн name,color
@@ -338,16 +398,18 @@ export async function getAgentById(id: string) {
       )
       .eq("id", id)
       .maybeSingle(),
-    supabase.from("listings").select(CARD_SELECT).eq("agent_id", id).eq("status", "active"),
+    listingsQuery,
     supabase
       .from("reviews")
       .select("*")
       .eq("agent_id", id)
       .order("created_at", { ascending: false }),
   ]);
+  const rows = (listings ?? []) as unknown as ListingCardData[];
   return {
-    agent: agent as (Record<string, unknown> & { office: Record<string, unknown> | null }) | null,
-    listings: (listings ?? []) as unknown as ListingCardData[],
+    agent: (agent as unknown as AgentProfile | null) ?? null,
+    listings: rows,
+    listingsTotal: listingsTotal ?? rows.length,
     reviews: (reviews ?? []) as Array<{
       id: string;
       author_name: string | null;

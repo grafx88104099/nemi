@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Calculator, MapPinned, Sparkles, type LucideIcon } from "lucide-react";
+import { Calculator, Home, MapPinned, type LucideIcon } from "lucide-react";
 
 import { fmtPriceShort } from "@/lib/format";
 import { CITY_DISTRICTS, type PlatformStats } from "@/lib/platform-stats-core";
@@ -16,7 +16,7 @@ function Icon({ icon: I }: { icon: LucideIcon }) {
 }
 
 /**
- * «Ухаалаг хэрэгслүүд»: AI үнэлгээ, 8%-ийн тооцоолуур, дүүргийн м² медиан (текст
+ * «Ухаалаг хэрэгслүүд»: гэрийн үнэлгээ (м² дундаж), 8%-ийн тооцоолуур, дүүргийн м² медиан (текст
  * жагсаалт; chart v2-т үгүй). Медиан нь ЗАРЫН үнэ (гүйлгээ биш), n≥5 орон сууцны худалдаа.
  */
 export function SmartTools({ stats }: { stats: PlatformStats | null }) {
@@ -32,9 +32,10 @@ export function SmartTools({ stats }: { stats: PlatformStats | null }) {
       <ul className="mt-5 grid gap-3 md:grid-cols-3">
         <li>
           <Link href="/my-home" className={CARD}>
-            <Icon icon={Sparkles} />
-            <span className="font-bold text-ink">AI үнэлгээ</span>
-            <span className="text-sm text-muted">Байрныхаа зах зээлийн үнийг үнэгүй мэдэх</span>
+            {/* /my-home нь зарын м² дундаж үнээр тооцдог (AI биш) — «AI» гэж амлахгүй. */}
+            <Icon icon={Home} />
+            <span className="font-bold text-ink">Гэрийн үнэлгээ</span>
+            <span className="text-sm text-muted">Дүүргийн зарын м² дундаж үнээр байрныхаа ойролцоо үнийг үнэгүй тооцох</span>
           </Link>
         </li>
         <li>

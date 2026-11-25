@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { cronAuthError } from "@/lib/crm/cron-auth";
 import { aiValuationEnabled, valuateAndStore } from "@/lib/ai/valuate-listing";
 
 /**
@@ -9,21 +10,15 @@ import { aiValuationEnabled, valuateAndStore } from "@/lib/ai/valuate-listing";
  * Шинэ/засварласан зарыг хадгалах үед аль хэдийн үнэлдэг тул энэ нь зөвхөн
  * хуучин заруудыг гүйцээх ба түлхүүр шинээр тохируулсны дараа хэрэгтэй.
  *
- * Хамгаалалт: CRON_SECRET тохируулсан бол Vercel Cron-ийн
- * `Authorization: Bearer <CRON_SECRET>` эсвэл ?key=<CRON_SECRET> шаардана.
+ * Хамгаалалт: cronAuthError — зөвхөн Vercel Cron-ийн `Authorization: Bearer <CRON_SECRET>`,
+ * deploy орчинд нууц тохируулаагүй бол хаалттай (AI зардал).
  */
 // Hobby багцын хязгаарт багтаана: 4 зэрэг × богино хүсэлт.
 export const maxDuration = 60;
 
 export async function GET(request: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const key = new URL(request.url).searchParams.get("key");
-    const bearer = request.headers.get("authorization");
-    if (key !== secret && bearer !== `Bearer ${secret}`) {
-      return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
-    }
-  }
+  const denied = cronAuthError(request);
+  if (denied) return NextResponse.json({ ok: false, error: denied.error }, { status: denied.status });
   if (!aiValuationEnabled()) {
     return NextResponse.json({ ok: true, skipped: "ANTHROPIC_API_KEY тохируулаагүй" });
   }

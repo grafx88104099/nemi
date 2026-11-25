@@ -1045,6 +1045,45 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["crm_staff_removals"]["Insert"]>;
         Relationships: [];
       };
+      // 20261125000200: оффисын админы агент удирдах үйлдлийн аудит (RPC ба service role бичнэ)
+      office_agent_audit: {
+        Row: {
+          id: string;
+          office_id: string | null;
+          agent_id: string | null;
+          target_profile_id: string | null;
+          actor_id: string | null;
+          action:
+            | "approve"
+            | "reject"
+            | "deactivate"
+            | "reactivate"
+            | "temp_password"
+            | "provision_login"
+            | "login_disabled"
+            | "login_enabled";
+          crm_before: boolean | null;
+          crm_after: boolean | null;
+          ok: boolean;
+          detail: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          office_id?: string | null;
+          agent_id?: string | null;
+          target_profile_id?: string | null;
+          actor_id?: string | null;
+          action: Database["public"]["Tables"]["office_agent_audit"]["Row"]["action"];
+          crm_before?: boolean | null;
+          crm_after?: boolean | null;
+          ok?: boolean;
+          detail?: Json;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["office_agent_audit"]["Insert"]>;
+        Relationships: [];
+      };
       crm_lookups: {
         Row: {
           id: string;
@@ -5911,6 +5950,12 @@ export type Database = {
       office_agent_removal_check: { Args: { p_agent: string }; Returns: Json };
       office_remove_agent: {
         Args: { p_agent: string; p_listings: string | null; p_target: string | null; p_confirm: string };
+        Returns: Json;
+      };
+      // 20261125000200: агентын төлөв ↔ CRM (crm_staff) нэг транзакцид; QPay давталтгүй бүртгэл
+      office_set_agent_status: { Args: { p_agent: string; p_status: "active" | "rejected" }; Returns: Json };
+      qpay_record_payment: {
+        Args: { p_sub: string; p_invoice: string; p_payment_id: string; p_amount: number; p_min_amount: number };
         Returns: Json;
       };
       crm_decide_export_request: {

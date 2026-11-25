@@ -164,7 +164,8 @@ export function SuggestInput({
         onBlur={() => setOpen(false)}
         onKeyDown={onKeyDown}
         className={cn(
-          "h-11 w-full rounded-xl border bg-surface px-3.5 pr-9 text-sm text-ink placeholder:text-subtle",
+          // Утсанд 16px (iOS томруулахгүй).
+          "h-11 w-full rounded-xl border bg-surface px-3.5 pr-9 text-base text-ink placeholder:text-subtle sm:text-sm",
           "focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50",
           invalid ? "border-danger" : "border-line",
           inputClassName

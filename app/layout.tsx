@@ -38,10 +38,11 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
   title: "Нэми — Баталгаатай үл хөдлөхийн платформ",
   description:
-    "Худалдан авагч, агент, оффисуудыг AI-аар нэгтгэсэн баталгаатай үл хөдлөхийн платформ.",
+    "Улаанбаатарын худалдах, түрээсийн үл хөдлөх хөрөнгийн баталгаатай зар, агент, оффисууд нэг дор.",
   applicationName: SITE_NAME,
   openGraph: { ...ogBase(), images: [ROOT_OG_IMAGE] },
-  twitter: { card: "summary" },
+  // ROOT_OG_IMAGE нь 1200×630 тул том карт.
+  twitter: { card: "summary_large_image" },
   ...(process.env.FB_APP_ID ? { facebook: { appId: process.env.FB_APP_ID } } : {}),
   ...(process.env.GOOGLE_SITE_VERIFICATION
     ? { verification: { google: process.env.GOOGLE_SITE_VERIFICATION } }

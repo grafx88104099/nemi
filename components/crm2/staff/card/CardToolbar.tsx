@@ -59,6 +59,12 @@ export function CardToolbar({
   const router = useRouter();
   const paths = crm2Paths(panel);
   const [callOpen, setCallOpen] = React.useState(autoCall && canWork);
+  // Карт аль хэдийн нээлттэй үед утасны хурдан цэсний «Дуудлага» ?call=1 нэмж ирнэ (компонент дахин mount болохгүй).
+  const [prevAutoCall, setPrevAutoCall] = React.useState(autoCall);
+  if (autoCall !== prevAutoCall) {
+    setPrevAutoCall(autoCall);
+    if (autoCall && canWork) setCallOpen(true);
+  }
   const [callPrefill, setCallPrefill] = React.useState<CallPrefill | null>(null);
   const [statusOpen, setStatusOpen] = React.useState(false);
   const [verifyOpen, setVerifyOpen] = React.useState(false);
@@ -70,6 +76,16 @@ export function CardToolbar({
   function openCall(prefill: CallPrefill | null) {
     setCallPrefill(prefill);
     setCallOpen(true);
+  }
+
+  function closeCall() {
+    setCallOpen(false);
+    // ?call=1-ийг хасна: дахин «Дуудлага» дарахад цонх нээгдэнэ, хуудас сэргээхэд дахин нээгдэхгүй.
+    if (autoCall) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("call");
+      router.replace(`${url.pathname}${url.search}`, { scroll: false });
+    }
   }
 
   return (
@@ -143,7 +159,7 @@ export function CardToolbar({
 
       <CallDialog
         open={callOpen}
-        onClose={() => setCallOpen(false)}
+        onClose={closeCall}
         panel={panel}
         propertyId={propertyId}
         propertyCode={propertyCode}

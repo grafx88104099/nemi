@@ -18,7 +18,12 @@ export function AgentModRow({
   const router = useRouter();
 
   function approve(s: "active" | "rejected") {
-    startTransition(async () => { await setAgentStatus(id, s); setSt(s); router.refresh(); });
+    startTransition(async () => {
+      const res = await setAgentStatus(id, s);
+      if ("error" in res) { alert(res.error); return; }
+      setSt(s);
+      router.refresh();
+    });
   }
 
   return (

@@ -1,7 +1,17 @@
 "use server";
 
+import { createHash } from "node:crypto";
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { expirePublicListings } from "@/lib/listings-cache";
+import { clientKey } from "@/lib/window-limiter";
+import {
+  OWNER_REQUEST_IP_MAX,
+  OWNER_REQUEST_IP_WINDOW_SECONDS,
+  OWNER_REQUEST_OFFICE_DAILY_CAP,
+  ownerRequestIpKey,
+  splitHoneypot,
+} from "@/lib/owner-request-guard";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -152,11 +162,18 @@ export async function deleteOwnerListing(id: string): Promise<{ ok: boolean; err
 
 /**
  * Оффист зуучлуулах хүсэлт. Нэвтрэхгүйгээр ч илгээж болно (эзэнд саад
- * багатай) — тиймээс серверээс (service role) оруулж, нэг утаснаас 24 цагт
- * 3-аас олон хүсэлт хүлээж авахгүй.
+ * багатай) — тиймээс серверээс (service role) оруулна. Спамын хамгаалалт
+ * (lib/owner-request-guard.ts): honeypot талбар, IP-ээр цагт 5 (давстай hash,
+ * rate_limit_hit), оффист 24 цагт 30, нэг утаснаас 24 цагт 3. Оффисын админд
+ * очих мэдэгдлийг DB цагт нэг болгож нэгтгэнэ (owner_requests_notify).
  */
-export async function submitOwnerRequest(raw: OwnerRequestInput): Promise<{ ok: boolean; error?: string }> {
-  const parsed = validateOwnerRequest(raw);
+export async function submitOwnerRequest(
+  raw: OwnerRequestInput & { website?: string }
+): Promise<{ ok: boolean; error?: string }> {
+  const { trap, rest } = splitHoneypot(raw);
+  // Бот: чимээгүй «амжилттай» (юу ч хадгалахгүй, мэдэгдэл явахгүй).
+  if (trap) return { ok: true };
+  const parsed = validateOwnerRequest(rest);
   if ("error" in parsed) return { ok: false, error: parsed.error };
   const input = parsed.data;
 
@@ -165,6 +182,21 @@ export async function submitOwnerRequest(raw: OwnerRequestInput): Promise<{ ok: 
     data: { user },
   } = await supabase.auth.getUser();
   const admin = createAdminClient();
+
+  // IP-ээр (түүхий IP хадгалахгүй — давстай sha256). RPC алдаа гарвал утас/оффисын хязгаар үлдэнэ.
+  const h = await headers();
+  const ipHash = createHash("sha256")
+    .update(`${process.env.RATE_LIMIT_SALT ?? ""}:${clientKey((name) => h.get(name))}`)
+    .digest("hex");
+  const { data: allowed, error: rlErr } = await admin.rpc("rate_limit_hit", {
+    p_key: ownerRequestIpKey(ipHash),
+    p_window_seconds: OWNER_REQUEST_IP_WINDOW_SECONDS,
+    p_max: OWNER_REQUEST_IP_MAX,
+  });
+  if (rlErr) console.error("submitOwnerRequest rate_limit_hit:", rlErr.message);
+  else if (allowed === false) {
+    return { ok: false, error: "Хэт олон хүсэлт илгээлээ. Түр хүлээгээд дахин оролдоно уу." };
+  }
 
   const { data: office } = await admin
     .from("offices")
@@ -183,6 +215,14 @@ export async function submitOwnerRequest(raw: OwnerRequestInput): Promise<{ ok: 
     .gte("created_at", since);
   if ((count ?? 0) >= 3) {
     return { ok: false, error: "Энэ дугаараас өнөөдөр хангалттай хүсэлт ирсэн байна. Оффис тантай удахгүй холбогдоно." };
+  }
+  const { count: officeCount } = await admin
+    .from("owner_requests")
+    .select("id", { count: "exact", head: true })
+    .eq("office_id", office.id)
+    .gte("created_at", since);
+  if ((officeCount ?? 0) >= OWNER_REQUEST_OFFICE_DAILY_CAP) {
+    return { ok: false, error: "Оффис өнөөдөр олон хүсэлт хүлээн авсан байна. Маргааш дахин оролдоно уу, эсвэл оффис руу шууд залгана уу." };
   }
 
   const { error } = await admin

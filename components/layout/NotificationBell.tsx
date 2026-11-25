@@ -6,7 +6,8 @@ import { Bell } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { markNotificationsRead } from "@/lib/actions/notifications";
-import { panelLink } from "@/lib/crm/notify";
+// CRM1-ийн хуучин холбоосыг CRM2 руу, оффисын панельд /office/crm руу тааруулна.
+import { notificationHref } from "@/lib/crm/notify";
 
 type Note = {
   id: string;
@@ -87,23 +88,31 @@ export function NotificationBell({ initial, panel }: { initial: Note[]; panel?: 
 
   return (
     <div className="relative" ref={ref}>
-      <button onClick={toggle} className="relative rounded-lg p-2 text-ink hover:bg-surface-2" aria-label="Мэдэгдэл">
+      {/* 44px хүрэх талбай (өмнө 36px). */}
+      <button
+        onClick={toggle}
+        className="relative inline-flex size-11 items-center justify-center rounded-lg text-ink hover:bg-surface-2"
+        aria-label="Мэдэгдэл"
+        aria-expanded={open}
+      >
         <Bell className="size-5" />
         {unread > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-brand-500 text-[10px] font-bold text-white">
+          <span className="absolute right-0.5 top-0.5 flex size-4 items-center justify-center rounded-full bg-brand-500 text-[10px] font-bold text-white">
             {unread > 9 ? "9+" : unread}
           </span>
         )}
       </button>
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-xl border border-line bg-surface shadow-lg">
+        // Утсанд (sm-ээс доош) дэлгэцийн хоёр захад бэхэлсэн самбар: хонхонд наасан 320px самбар 375px-д
+        // зүүн тийш ~10px дэлгэцээс гардаг байв. Дээд зай = толгой (≤64px) + iOS safe-area.
+        <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-xl border border-line bg-surface shadow-lg max-sm:fixed max-sm:inset-x-2 max-sm:top-[calc(env(safe-area-inset-top)+4.25rem)] max-sm:mt-0 max-sm:w-auto">
           <div className="border-b border-line px-4 py-2.5 text-sm font-semibold text-ink">Мэдэгдэл</div>
-          <div className="max-h-96 overflow-y-auto">
+          <div className="max-h-96 overflow-y-auto overscroll-contain max-sm:max-h-[calc(100dvh-env(safe-area-inset-top)-9rem)]">
             {notes.length === 0 && <p className="p-6 text-center text-sm text-muted">Мэдэгдэл алга.</p>}
             {notes.slice(0, 15).map((n) => (
               <Link
                 key={n.id}
-                href={n.link ? (panel === "office" ? panelLink(n.link, "office_admin") : n.link) : "#"}
+                href={notificationHref(n.link, n.type, panel) ?? "#"}
                 onClick={() => setOpen(false)}
                 className="block border-b border-line px-4 py-2.5 last:border-0 hover:bg-surface-2"
               >

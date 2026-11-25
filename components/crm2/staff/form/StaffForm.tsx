@@ -95,7 +95,7 @@ import {
   type PropertyFormState,
 } from "./form-model";
 import { OwnerPicker } from "./OwnerPicker";
-import { EMPTY_MEDIA_QUEUE, MediaQueue, queueCoverId, type MediaQueueValue, type QueuedFile } from "./MediaQueue";
+import { EMPTY_MEDIA_QUEUE, MediaQueue, queueCoverId, queueWaitsWifi, type MediaQueueValue, type QueuedFile } from "./MediaQueue";
 import { PinField } from "./PinField";
 import { PriceField } from "./PriceField";
 import { SuggestInput } from "./SuggestInput";
@@ -498,6 +498,8 @@ function StaffFormInner(props: InnerProps) {
             sortOrder: i,
             isCover: f.id === cover,
           },
+          // «Wi-Fi холбогдтол хүлээх»-ийг болиулсан бичлэг — шууд илгээнэ (өмнө нь сонголт үл тоогддог байв).
+          allowCellular: f.kind === "video" && !queueWaitsWifi(f),
         });
         ids.push(item.id);
       } catch {

@@ -1,8 +1,16 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { NEWS } from "@/lib/news";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { withBrand } from "@/lib/seo/site";
+
+export const metadata: Metadata = {
+  title: withBrand("Мэдээ ба зах зээлийн судалгаа"),
+  description: "Улаанбаатарын үл хөдлөхийн зах зээл, орон сууцны зээлийн мэдээ, дүн шинжилгээ.",
+  alternates: { canonical: "/news" },
+};
 
 export default function NewsPage() {
   return (

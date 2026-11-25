@@ -3,6 +3,8 @@
  * Env: QPAY_USERNAME, QPAY_PASSWORD, QPAY_INVOICE_CODE.
  * Тохируулаагүй бол { error: 'no_creds' } буцаана.
  */
+import { summarizePaidRows } from "@/lib/qpay/payments";
+
 const BASE = process.env.QPAY_BASE_URL || "https://merchant.qpay.mn/v2";
 
 function creds() {
@@ -69,8 +71,13 @@ export async function createInvoice(params: {
   };
 }
 
-/** Төлбөр шалгах (webhook баталгаажуулалт). */
-export async function checkPayment(invoiceId: string): Promise<{ paid: boolean; amount?: number; error?: string }> {
+/**
+ * Төлбөр шалгах (webhook баталгаажуулалт) — QPay-ийн серверээс, callback-ийн өгөгдөлд итгэхгүй.
+ * Зөвхөн PAID мөр тоологдоно (summarizePaidRows); paymentId — давталтын түлхүүр.
+ */
+export async function checkPayment(
+  invoiceId: string
+): Promise<{ paid: boolean; amount?: number; paymentId?: string | null; error?: string }> {
   const c = creds();
   if (!c) return { paid: false, error: "no_creds" };
   const token = await getToken(c.u, c.p);
@@ -86,8 +93,6 @@ export async function checkPayment(invoiceId: string): Promise<{ paid: boolean; 
     }),
   });
   if (!res.ok) return { paid: false, error: `check_${res.status}` };
-  const data = await res.json();
-  const rows = data?.rows ?? [];
-  const paidSum = rows.reduce((s: number, r: { payment_amount?: number }) => s + Number(r.payment_amount ?? 0), 0);
-  return { paid: paidSum > 0, amount: paidSum };
+  const { paid, amount, paymentId } = summarizePaidRows(await res.json());
+  return { paid, amount, paymentId };
 }

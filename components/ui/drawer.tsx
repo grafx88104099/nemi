@@ -79,7 +79,8 @@ export function Drawer({
         aria-labelledby={titleId}
         tabIndex={-1}
         className={cn(
-          "relative flex h-full w-full flex-col border-l border-line bg-surface shadow-xl outline-none",
+          // viewportFit "cover" (панель, нийтийн сайт): гарчиг/хаах товч статус мөр, notch-ийн доор орохгүй.
+          "relative flex h-full w-full flex-col border-l border-line bg-surface pb-[env(safe-area-inset-bottom)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)] shadow-xl outline-none",
           widthClassName
         )}
       >
@@ -97,7 +98,10 @@ export function Drawer({
             <X className="size-4" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-5">{children}</div>
+        {/* Утсанд drawer доторх гар хийцийн талбар ч 16px (iOS Safari фокуслахад томруулахгүй). */}
+        <div className="flex-1 overflow-y-auto p-5 max-sm:[&_input]:text-base max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base">
+          {children}
+        </div>
         {footer ? <div className="shrink-0 border-t border-line p-4">{footer}</div> : null}
       </div>
     </div>

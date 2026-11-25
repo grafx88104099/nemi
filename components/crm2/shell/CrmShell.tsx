@@ -43,8 +43,9 @@ export async function CrmShell({
         </div>
       </div>
       {ctx.canWork && ctx.profileId ? <CrmDeviceSync panel={panel} profileId={ctx.profileId} /> : null}
-      {/* Утсанд доод хурдан цэсний ард агуулга хаагдахгүй байх зай. */}
-      <div className={cn("min-w-0 flex-1", ctx.canWork && "pb-20 md:pb-0")}>{children}</div>
+      {/* Утсанд доод хурдан цэсний ард агуулга хаагдахгүй байх зай: цэс (~57px) + iPhone-ийн доод
+          зурвас (safe-area, суулгасан апп-д ~34px). */}
+      <div className={cn("min-w-0 flex-1", ctx.canWork && "pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-0")}>{children}</div>
       {ctx.canWork ? <CrmQuickBar panel={panel} teamChatId={teamChatId} /> : null}
     </div>
   );

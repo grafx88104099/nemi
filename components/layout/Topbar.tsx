@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Plus, Heart, User } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/user";
+import { getCrmStaffContext } from "@/lib/queries-crm-core";
 import { Logo } from "@/components/brand/Logo";
 import { ButtonLink } from "@/components/ui/button";
 import { UserMenu } from "@/components/layout/UserMenu";
@@ -19,9 +21,8 @@ import { formatPhone } from "@/lib/crm2/phone";
  */
 export async function Topbar({ site = false }: { site?: boolean } = {}) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Нэг хүсэлтэд нэг удаа (layout, хуудас мөн ашиглана).
+  const user = await getAuthUser();
 
   let profile: { full_name: string | null; role: string; avatar_url: string | null } | null = null;
   let notes: {
@@ -34,8 +35,9 @@ export async function Topbar({ site = false }: { site?: boolean } = {}) {
     created_at: string;
   }[] = [];
   let unreadMessages = 0;
+  let crmStaff = false;
   if (user) {
-    const [{ data: p }, { data: n }, { count }] = await Promise.all([
+    const [{ data: p }, { data: n }, { count }, crm] = await Promise.all([
       supabase.from("profiles").select("full_name, role, avatar_url").eq("id", user.id).single(),
       supabase
         .from("notifications")
@@ -50,22 +52,28 @@ export async function Topbar({ site = false }: { site?: boolean } = {}) {
             .eq("type", "message")
             .is("read_at", null)
         : Promise.resolve({ count: 0 as number | null }),
+      // Агентын самбар: CRM ажилтны лого CRM руу (layout-тай нэг уншилт — cache).
+      site ? Promise.resolve(null) : getCrmStaffContext(),
     ]);
     profile = p;
     notes = n ?? [];
     unreadMessages = count ?? 0;
+    crmStaff = !!crm;
   }
   const sellHref = profile?.role === "agent" || profile?.role === "office_admin" ? "/agent/listings" : "/sell";
+  // Утсанд суулгасан апп (start_url /agent/crm) хаягийн мөргүй — лого нийтийн нүүр рүү гаргаж апп-аас
+  // «төөрүүлдэг» байсан. CRM ажилтанд CRM-ийн эхлэл, бусдад өмнөх шигээ нүүр хуудас.
+  const panelHome = crmStaff ? "/agent/crm" : "/";
 
   return (
     <>
       {/* Сайт: цул цөцгий фон (blur-гүй — гүйлгэхэд GPU ачаалалгүй), iOS notch-ийн дээд зай.
-          Агентын самбар (site=false) өмнөхтэй яг ижил. */}
+          Агентын самбар (site=false): мөн дээд зай — layout нь viewportFit "cover" идэвхжүүлдэг. */}
       <header
         className={
           site
             ? "sticky top-0 z-40 border-b border-line bg-bg pt-[env(safe-area-inset-top)]"
-            : "sticky top-0 z-40 border-b border-line bg-surface/90 backdrop-blur"
+            : "sticky top-0 z-40 border-b border-line bg-surface/90 pt-[env(safe-area-inset-top)] backdrop-blur"
         }
       >
         <div className={site ? "mx-auto flex h-14 max-w-7xl items-center gap-6 px-4 md:h-16" : "mx-auto flex h-16 max-w-7xl items-center gap-6 px-4"}>
@@ -81,7 +89,7 @@ export async function Topbar({ site = false }: { site?: boolean } = {}) {
               </span>
             </div>
           ) : (
-            <Link href="/" className="shrink-0">
+            <Link href={panelHome} aria-label={crmStaff ? "Нэми — CRM" : "Нэми — нүүр хуудас"} className="shrink-0">
               <Logo color="#0F172A" className="h-7 w-auto" />
             </Link>
           )}

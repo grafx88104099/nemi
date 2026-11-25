@@ -186,6 +186,23 @@
   background-color: var(--color-brand-hover);
 }
 
+/* iOS Safari 16px-ээс жижиг талбарт фокуслахад хуудсыг томруулдаг. Талбарууд утсанд `text-base sm:text-sm`
+   боловч 640px-ээс (iPhone хэвтээ 667–932px, iPad) 14px болж томруулалт буцдаг; цонхны биеийн
+   `max-sm:[&_input]:text-base` хамгаалалт ч хэвтээд үйлчлэхгүй. Зөвхөн iOS WebKit-д (-webkit-touch-callout
+   нь зөвхөн iOS-д) мэдрэгчтэй дэлгэцэнд текст талбарыг 16px болгоно — ширээний, Android-ын харагдац
+   хэвээр. Том (text-lg …) талбарыг багасгахгүй. Давхаргагүй тул text-sm utility-г дарна. */
+@supports (-webkit-touch-callout: none) {
+  @media (pointer: coarse) {
+    :is(
+        input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="button"], [type="submit"], [type="reset"], [type="image"]),
+        select,
+        textarea
+      ):not([class*="text-lg"], [class*="text-xl"], [class*="text-2xl"], [class*="text-3xl"], [class*="text-4xl"], [class*="text-5xl"]) {
+      font-size: 16px;
+    }
+  }
+}
+
 @media (forced-colors: active) {
   .ub-skyline {
     display: none;

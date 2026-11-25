@@ -12,6 +12,7 @@ import { ListingCard } from "@/components/listings/ListingCard";
 import { isFavorited } from "@/lib/queries-user";
 import { recordView } from "@/lib/actions/viewings";
 import { fmtMNT, relativeDate, fmtDate, isFresh } from "@/lib/format";
+import { isStaleListing } from "@/lib/listing-freshness";
 import { rentTermCode, rentTermLabel } from "@/lib/constants";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -82,6 +83,8 @@ export default async function ListingDetailPage({
 
   const agent = l.agent as Record<string, unknown> | null;
   const office = (agent?.office ?? null) as Record<string, unknown> | null;
+  const stale = isStaleListing(l.created_at as string | null);
+  const askWho = agent ? "агентаас" : "зар оруулагчаас";
   // Үндсэн зураг эхэнд, дараа нь агентын тогтоосон дарааллаар.
   const photos = (l.photos ?? []).length
     ? [...l.photos]
@@ -129,21 +132,27 @@ export default async function ListingDetailPage({
                 <Badge tone="brand"><Sparkles /> Шинэ</Badge>
               ) : null}
             </div>
-            <h1 className="mt-3 text-3xl font-extrabold text-ink">
+            {/* SEO: h1 = зарын гарчиг; үнэ нь том, гэхдээ гарчиг биш. */}
+            <p className="mt-3 text-3xl font-extrabold text-ink">
               {fmtMNT(l.price as number)}
               {isRent && <span className="text-xl font-medium text-muted">/сар</span>}
-            </h1>
-            <p className="mt-1 text-lg text-ink">{l.title as string}</p>
+            </p>
+            <h1 className="mt-1 break-words text-lg font-semibold text-ink">{l.title as string}</h1>
             <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
               <span className="flex items-center gap-1">
-                <MapPin className="size-4" /> {l.district as string}
+                <MapPin className="size-4" aria-hidden /> {l.district as string}
               </span>
               {l.created_at ? (
                 <span className="flex items-center gap-1" title={fmtDate(l.created_at as string)}>
-                  <Clock className="size-4" /> {relativeDate(l.created_at as string)} нийтэлсэн
+                  <Clock className="size-4" aria-hidden /> {relativeDate(l.created_at as string)} нийтэлсэн
                 </span>
               ) : null}
             </div>
+            {stale ? (
+              <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                Энэ зар 2 сараас өмнө нийтлэгдсэн. Одоо ч боломжтой эсэхийг {askWho} лавлана уу.
+              </p>
+            ) : null}
           </div>
 
           <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
@@ -187,7 +196,8 @@ export default async function ListingDetailPage({
           {l.description ? (
             <div>
               <h2 className="mb-2 text-lg font-bold text-ink">Тайлбар</h2>
-              <p className="text-muted">{l.description as string}</p>
+              {/* Агентын мөр таслалтыг хадгална; React текст хэвээр (HTML тайлахгүй — XSS-гүй). */}
+              <p className="whitespace-pre-line break-words text-muted">{l.description as string}</p>
             </div>
           ) : null}
 
@@ -222,14 +232,20 @@ export default async function ListingDetailPage({
             </div>
           )}
 
-          {point && (
-            <div>
-              <h2 className="mb-2 flex items-center gap-1.5 text-lg font-bold text-ink">
-                <MapPin className="size-5 text-brand-600" /> Байршил
-              </h2>
+          <div>
+            <h2 className="mb-2 flex items-center gap-1.5 text-lg font-bold text-ink">
+              <MapPin className="size-5 text-brand-600" aria-hidden /> Байршил
+            </h2>
+            {point ? (
               <ListingLocationMap lat={point.lat} lng={point.lng} />
-            </div>
-          )}
+            ) : (
+              // Пингүй зар: хоосон зай/алдаа биш — дүүргийг хэлж, агентаас лавлуулна.
+              <p className="rounded-xl bg-surface-2 p-4 text-sm text-muted">
+                {l.district ? `${l.district as string} дүүрэг. ` : ""}
+                Яг байршлыг газрын зураг дээр тэмдэглээгүй — {askWho} лавлана уу.
+              </p>
+            )}
+          </div>
 
           <div className="rounded-xl bg-surface-2 p-4 text-sm text-muted">
             м² үнэ: <b className="text-ink">{l.price_per_m2 ? fmtMNT(l.price_per_m2 as number) : "—"}</b>

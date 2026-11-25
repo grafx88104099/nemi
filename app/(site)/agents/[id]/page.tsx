@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ShieldCheck, Star, Sparkles, Phone, Clock } from "lucide-react";
 
 import { getAgentById } from "@/lib/queries";
+import { AGENT_PROFILE_LISTINGS, agentStats } from "@/lib/agent-stats";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
@@ -22,21 +23,31 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function AgentProfilePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ zar?: string | string[] }>;
 }) {
-  const { id } = await params;
-  const { agent, listings, reviews } = await getAgentById(id);
+  const [{ id }, sp] = await Promise.all([params, searchParams]);
+  // «Бүх N зар» — ?zar=all үед бүх идэвхтэй зар (canonical нь /agents/<id> хэвээр).
+  const showAll = sp.zar === "all";
+  const { agent, listings, listingsTotal, reviews } = await getAgentById(id, {
+    listingsLimit: showAll ? null : AGENT_PROFILE_LISTINGS,
+  });
   if (!agent) notFound();
 
-  const office = (agent.office ?? null) as Record<string, unknown> | null;
-  const sub = (agent.sub_ratings ?? {}) as Record<string, number>;
+  const office = agent.office;
+  const stats = agentStats(agent);
+  const sub = agent.sub_ratings ?? {};
   const subLabels: Record<string, string> = {
     knowledge: "Мэдлэг",
     process: "Үйл явц",
     response: "Хариу",
     negotiation: "Хэлэлцээ",
   };
+  // Дор хаяж нэг дэд үнэлгээтэй үед л (хоосон «—» дөрвөн нүд харуулахгүй).
+  const hasSub = Object.keys(subLabels).some((k) => typeof sub[k] === "number");
+  const subtitle = [office?.name, agent.specialty].filter(Boolean).join(" · ");
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
@@ -48,30 +59,39 @@ export default async function AgentProfilePage({
           <Card>
             <CardBody className="flex flex-col gap-4 sm:flex-row sm:items-center">
               <Avatar
-                initials={(agent.avatar as string) ?? "NA"}
-                src={agent.avatar_url as string | null}
-                color={(office?.color as string) ?? "#C2410C"}
+                initials={agent.avatar ?? "NA"}
+                src={agent.avatar_url}
+                color={office?.color ?? "#C2410C"}
                 size="lg"
                 className="size-20 text-2xl"
               />
-              <div className="flex-1">
+              <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-2xl font-extrabold text-ink">{agent.display_name as string}</h1>
+                  <h1 className="break-words text-2xl font-extrabold text-ink">{agent.display_name}</h1>
                   {agent.verified ? <Badge tone="green"><ShieldCheck /> Баталгаатай</Badge> : null}
                   {agent.premier ? <Badge tone="brand"><Sparkles /> Premier</Badge> : null}
                 </div>
-                <p className="text-muted">{(office?.name as string) ?? ""} · {(agent.specialty as string) ?? ""}</p>
-                <div className="mt-2 flex flex-wrap gap-4 text-sm">
-                  <span className="flex items-center gap-1">
-                    <Star className="size-4 fill-amber-400 text-amber-400" />
-                    <b className="text-ink">{agent.rating as number}</b>
-                    <span className="text-muted">({agent.reviews_count as number} сэтгэгдэл)</span>
-                  </span>
-                  <span className="text-muted"><b className="text-ink">{agent.sold as number}</b> зарсан</span>
-                  <span className="text-muted"><b className="text-ink">{agent.years as number}</b> жил туршлага</span>
+                {subtitle ? <p className="text-muted">{subtitle}</p> : null}
+                {/* Хоосон/0 утгыг харуулахгүй (lib/agent-stats) — «0 зарсан», « жил» гэж бичихгүй. */}
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                  {stats.rating ? (
+                    <span className="flex items-center gap-1">
+                      <Star className="size-4 fill-amber-400 text-amber-400" aria-hidden />
+                      <b className="text-ink">{stats.rating.value}</b>
+                      <span className="text-muted">({stats.rating.reviews} сэтгэгдэл)</span>
+                    </span>
+                  ) : (
+                    <span className="text-muted">Сэтгэгдэл алга</span>
+                  )}
+                  {stats.sold ? (
+                    <span className="text-muted"><b className="text-ink">{stats.sold}</b> зарсан</span>
+                  ) : null}
+                  {stats.years ? (
+                    <span className="text-muted"><b className="text-ink">{stats.years}</b> жил туршлага</span>
+                  ) : null}
                   {agent.response_time ? (
                     <span className="flex items-center gap-1 text-muted">
-                      <Clock className="size-4" /> {agent.response_time as string}
+                      <Clock className="size-4" aria-hidden /> {agent.response_time}
                     </span>
                   ) : null}
                 </div>
@@ -82,12 +102,13 @@ export default async function AgentProfilePage({
           {agent.bio ? (
             <div>
               <h2 className="mb-2 text-lg font-bold text-ink">Танилцуулга</h2>
-              <p className="text-muted">{agent.bio as string}</p>
+              {/* Агентын бичсэн мөр таслалтыг хадгална (текст хэвээр — HTML тайлахгүй). */}
+              <p className="whitespace-pre-line break-words text-muted">{agent.bio}</p>
             </div>
           ) : null}
 
           {/* Sub ratings */}
-          {Object.keys(sub).length > 0 && (
+          {hasSub && (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {Object.entries(subLabels).map(([k, label]) => (
                 <div key={k} className="rounded-xl bg-surface-2 p-3 text-center">
@@ -101,10 +122,21 @@ export default async function AgentProfilePage({
           {/* Listings */}
           {listings.length > 0 && (
             <div>
-              <h2 className="mb-3 text-lg font-bold text-ink">Идэвхтэй зарууд ({listings.length})</h2>
+              <h2 className="mb-3 text-lg font-bold text-ink">Идэвхтэй зарууд ({listingsTotal})</h2>
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 {listings.map((l) => <ListingCard key={l.id} l={l} />)}
               </div>
+              {listingsTotal > listings.length ? (
+                <div className="mt-5 text-center">
+                  <Link
+                    href={`/agents/${id}?zar=all`}
+                    scroll={false}
+                    className="inline-flex min-h-11 items-center rounded-xl border border-line-strong bg-surface px-5 text-sm font-semibold text-ink hover:bg-surface-2"
+                  >
+                    Бүх {listingsTotal} зарыг харах
+                  </Link>
+                </div>
+              ) : null}
             </div>
           )}
 
@@ -128,7 +160,7 @@ export default async function AgentProfilePage({
                         </div>
                       </div>
                       <div className="text-xs text-muted">{r.area} · {r.deal_type} · {r.created_at?.slice(0, 10)}</div>
-                      <p className="text-sm text-muted">{r.text}</p>
+                      <p className="whitespace-pre-line break-words text-sm text-muted">{r.text}</p>
                     </CardBody>
                   </Card>
                 ))}
@@ -144,13 +176,13 @@ export default async function AgentProfilePage({
               <StartAgentChatButton agentId={id} />
               {agent.phone ? (
                 <a href={`tel:${agent.phone}`} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-line text-sm font-semibold text-ink hover:bg-surface-2">
-                  <Phone className="size-4" /> {agent.phone as string}
+                  <Phone className="size-4" /> {agent.phone}
                 </a>
               ) : null}
-              {(agent.languages as string[])?.length > 0 && (
+              {agent.languages?.length > 0 && (
                 <div className="pt-2 text-sm">
                   <div className="text-muted">Хэл</div>
-                  <div className="font-medium text-ink">{(agent.languages as string[]).join(", ")}</div>
+                  <div className="font-medium text-ink">{agent.languages.join(", ")}</div>
                 </div>
               )}
             </CardBody>

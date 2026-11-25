@@ -155,7 +155,8 @@ export function FilterSearch({
             set({ [name]: value.trim() || null });
           }
         }}
-        className="h-11 w-full rounded-xl border border-line bg-surface pl-9 pr-11 text-sm text-ink placeholder:text-subtle focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 [&::-webkit-search-cancel-button]:hidden"
+        // Утсанд 16px (iOS томруулахгүй).
+        className="h-11 w-full rounded-xl border border-line bg-surface pl-9 pr-11 text-base text-ink placeholder:text-subtle focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:text-sm [&::-webkit-search-cancel-button]:hidden"
       />
       {value ? (
         <button

@@ -1,17 +1,40 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 
 const KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 const MAP_ID = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID;
 
-/** Зарын байршлыг харуулах статик газрын зураг (нэг тэмдэглэгээ). */
+/**
+ * Зарын байршлыг харуулах газрын зураг (нэг тэмдэглэгээ).
+ * Утсанд хуудасны доод хэсэгт байдаг тул Maps JS API-г (их хэмжээний скрипт,
+ * dynamic map load-ын төлбөр) хэсэг дэлгэцэнд ойртох үед л ачаална.
+ */
 export function ListingLocationMap({ lat, lng }: { lat: number; lng: number }) {
   const ref = useRef<HTMLDivElement>(null);
+  // IntersectionObserver-гүй (хуучин) хөтөчид шууд ачаална. Тэмдэглэгээ ижил тул hydration зөрөхгүй.
+  const [visible, setVisible] = useState(() => typeof IntersectionObserver === "undefined");
+
+  // Дэлгэцэнд 300px ойртоход нэг удаа «харагдсан» болно.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !KEY || visible) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setVisible(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: "300px 0px" }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [visible]);
 
   useEffect(() => {
-    if (!ref.current || !KEY) return;
+    if (!visible || !ref.current || !KEY) return;
     let cancelled = false;
     let marker: google.maps.marker.AdvancedMarkerElement | null = null;
     setOptions({ key: KEY, v: "weekly" });
@@ -38,8 +61,14 @@ export function ListingLocationMap({ lat, lng }: { lat: number; lng: number }) {
       cancelled = true;
       if (marker) marker.map = null;
     };
-  }, [lat, lng]);
+  }, [visible, lat, lng]);
 
   if (!KEY) return null;
-  return <div ref={ref} className="h-64 w-full overflow-hidden rounded-xl border border-line" />;
+  return (
+    <div
+      ref={ref}
+      aria-label="Зарын байршлын газрын зураг"
+      className="h-64 w-full overflow-hidden rounded-xl border border-line bg-surface-2"
+    />
+  );
 }

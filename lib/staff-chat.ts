@@ -122,3 +122,41 @@ export function staffChatHref(panel: "agent" | "office", chatId?: string | null)
   const base = panel === "office" ? "/office/chat" : "/agent/chat";
   return chatId ? `${base}/${chatId}` : base;
 }
+
+type BackClick = { button: number; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean };
+
+/**
+ * Утасны чатын «буцах» сум: өмнөх дэлгэц рүү (CRM-ийн карт, хурдан цэсний «Багийн чат» г.м.) түүхээр
+ * буцах эсэх. Суулгасан апп-д хөтчийн «буцах» байхгүй тул жагсаалт руу шилжвэл агент ажиллаж байсан
+ * дэлгэцээ алддаг байв. Түүхээр зөвхөн апп ДОТРООС ирсэн үед буцна: хуудсыг (document) ачаалсан зам
+ * (`entryPath`) нь одоогийн чат биш бол чат руу Нэми дотор (client navigation) шилжсэн гэсэн үг. Чат өөрөө
+ * ачааллын хуудас бол (Google, Messenger, push мэдэгдэл, хуудас сэргээх) өмнөх түүх Нэмигийнх биш байж
+ * болно — холбоосын href (чатын жагсаалт). Шинэ цонхоор нээх (Ctrl/⌘) үед ч href.
+ */
+export function chatBackUsesHistory(
+  nav: { historyLength: number; entryPath: string | null; currentPath: string },
+  click: BackClick
+): boolean {
+  if (click.button !== 0 || click.metaKey || click.ctrlKey || click.shiftKey || click.altKey) return false;
+  if (nav.historyLength <= 1 || !nav.entryPath) return false;
+  return trimSlash(nav.entryPath) !== trimSlash(nav.currentPath);
+}
+
+function trimSlash(p: string): string {
+  return p.replace(/\/+$/, "") || "/";
+}
+
+/**
+ * Хөтчийн энэ хуудсыг (document) ачаалсан URL-ийн зам — Next-ийн client navigation шинэ бичлэг үүсгэдэггүй
+ * (Navigation Timing). Тодорхойгүй бол null (→ түүхээр буцахгүй).
+ */
+export function documentEntryPath(): string | null {
+  if (typeof performance === "undefined" || typeof performance.getEntriesByType !== "function") return null;
+  const nav = performance.getEntriesByType("navigation")[0] as { name?: string } | undefined;
+  if (!nav?.name) return null;
+  try {
+    return new URL(nav.name).pathname;
+  } catch {
+    return null;
+  }
+}

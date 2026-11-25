@@ -9,9 +9,9 @@ import { AUTH_ERROR, NO_ACCESS_ERROR, dbErrorField, fail, ok, zodErrorText } fro
 import { importListingSchema } from "@/lib/crm2/schemas";
 import {
   IMPORT_PHOTO_TIMEOUT_MS,
-  LISTINGS_BUCKET,
   listImportableListings as listImportableQuery,
   listingObjectPath,
+  listingPublicObjectUrl,
   sniffImage,
   type ImportableListing,
 } from "@/lib/crm2/queries/import";
@@ -20,7 +20,9 @@ import type { Crm2ImportListingResult, Crm2ImportPhoto, Crm2PropertyDuplicate, C
 /**
  * «Миний зараас үүсгэх» (P12, R25). Зарыг ХУУЛЖ шинэ ноорог үүсгэнэ (listing_id холбохгүй — холболт зөвхөн
  * нийтлэх үед). Зураг: RPC-ийн буцаасан url-ийг манай нийтийн listings bucket-ийн хаяг эсэхийг ЯГ шалгаад
- * объектын замаар Storage API-аар (download) татна — URL-аар fetch ХИЙХГҮЙ. Хэмжээ, magic bytes, 15 с хугацаа
+ * объектын замаас нийтийн URL-ийг СЕРВЕР талд дахин угсарч (хост = NEXT_PUBLIC_SUPABASE_URL, redirect-гүй)
+ * татна — RPC-ийн/хэрэглэгчийн URL-ыг шууд fetch ХИЙХГҮЙ. (Storage download() нь SELECT бодлого шаарддаг,
+ * 20261125000200-аас хэрэглэгч зөвхөн өөрийн файлыг жагсаана.) Хэмжээ, magic bytes, 15 с хугацаа
  * шалгаад хэрэглэгчийн session-оор crm2-media руу хуулж crm2_attach_imported_media-аар бүртгэнэ.
  * Бүртгэж чадаагүй бол хуулсан файлуудаа устгана.
  */
@@ -48,17 +50,23 @@ async function copyPhoto(
   supabase: Crm2Supabase,
   photo: Crm2ImportPhoto,
   sourcePath: string,
-  target: { officeId: string; propertyId: string; maxBytes: number },
+  target: { officeId: string; propertyId: string; maxBytes: number; supabaseUrl: string | undefined },
   deadline: number
 ): Promise<CopiedPhoto | null> {
   const remaining = deadline - Date.now();
   if (remaining <= 0) return null;
+  const url = listingPublicObjectUrl(target.supabaseUrl, sourcePath);
+  if (!url) return null;
   const signal = AbortSignal.timeout(Math.min(IMPORT_PHOTO_TIMEOUT_MS, remaining));
   try {
-    const dl = await supabase.storage.from(LISTINGS_BUCKET).download(sourcePath, {}, { signal });
-    if (dl.error || !dl.data) return null;
-    if (dl.data.size <= 0 || dl.data.size > target.maxBytes) return null;
-    const bytes = new Uint8Array(await dl.data.arrayBuffer());
+    // Нийтийн bucket-ийн URL (RLS-гүй) — storage.objects-ийн SELECT бодлого (зөвхөн өөрийн файл,
+    // 20261125000200) бусад агентын / backfill-ийн зургийг download()-оор татахыг хориглодог.
+    const res = await fetch(url, { signal, redirect: "error", cache: "no-store" });
+    if (!res.ok) return null;
+    const declared = Number(res.headers.get("content-length") ?? "0");
+    if (declared > target.maxBytes) return null;
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (bytes.byteLength <= 0 || bytes.byteLength > target.maxBytes) return null;
     const kind = sniffImage(bytes);
     if (!kind) return null;
     const storagePath = mediaPath(target.officeId, target.propertyId, randomUUID(), kind.ext);
@@ -153,7 +161,13 @@ export async function importListing(listingId: string, clientKey?: string | null
   const maxBytes = settings["media.max_image_mb"] * MB;
   const copied: CopiedPhoto[] = [];
   for (const item of batch) {
-    const c = await copyPhoto(supabase, item.photo, item.sourcePath, { officeId: ctx.officeId, propertyId, maxBytes }, deadline);
+    const c = await copyPhoto(
+      supabase,
+      item.photo,
+      item.sourcePath,
+      { officeId: ctx.officeId, propertyId, maxBytes, supabaseUrl },
+      deadline
+    );
     if (c) copied.push(c);
     else failed++;
   }

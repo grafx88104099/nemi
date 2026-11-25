@@ -7,6 +7,7 @@ import { rentTermCode } from "@/lib/constants";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { CardSaveButton } from "@/components/listings/CardSaveButton";
+import { LinkPendingOverlay } from "@/components/ui/link-pending";
 
 export type ListingCardData = {
   id: string;
@@ -144,6 +145,7 @@ export function ListingCard({
             </div>
           )}
         </div>
+        <LinkPendingOverlay />
       </Link>
       {saveable ? (
         <CardSaveButton listingId={l.id} title={l.title} className="absolute right-3 top-3 z-10" />

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/user";
 import type { ListingCardData } from "@/components/listings/ListingCard";
 import { LISTING_CARD_SELECT } from "@/lib/listing-card-select";
 
@@ -8,12 +9,11 @@ const CARD = LISTING_CARD_SELECT;
 /** queries-hub-д зориулсан alias (ижил select). */
 export const CARD_SELECT_USER = LISTING_CARD_SELECT;
 
+/** Зарын хуудас: хэрэглэгчийг Topbar, recordView-тэй НЭГ getUser-ээр хуваалцана (getAuthUser cache). */
 export async function isFavorited(listingId: string): Promise<boolean> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (!user) return false;
+  const supabase = await createClient();
   const { data } = await supabase
     .from("favorites")
     .select("listing_id")

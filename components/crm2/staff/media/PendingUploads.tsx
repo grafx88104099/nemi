@@ -2,11 +2,12 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { AlertTriangle, CloudUpload, FileText, Film, ImageIcon, Loader2, RotateCcw, Trash2, Wifi, WifiOff } from "lucide-react";
+import { AlertTriangle, CloudUpload, FileText, Film, ImageIcon, Loader2, RotateCcw, Send, Trash2, WifiOff } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/crm2/ui";
+import { buttonClasses } from "@/components/ui/button";
 import { useOnline } from "@/lib/crm2/device/network";
-import { UPLOAD_FAILED_TEXT, useUploadQueue, type QueueItem } from "@/lib/crm2/device/upload-queue";
+import { UPLOAD_FAILED_TEXT, useNetKind, useUploadQueue, type NetKind, type QueueItem } from "@/lib/crm2/device/upload-queue";
 import { fmtFileSize } from "@/lib/crm2/files";
 import { cn } from "@/lib/utils";
 
@@ -14,14 +15,15 @@ import { cn } from "@/lib/utils";
 
 type ItemLike = Pick<QueueItem, "status" | "attempts" | "error" | "isVideo" | "type" | "target">;
 
-export function queueStatusText(item: ItemLike): string {
+/** net — одоогийн сүлжээ: iPhone-д тодорхойгүй тул «Wi-Fi хүлээж байна» гэж худал хэлэхгүй. */
+export function queueStatusText(item: ItemLike, net: NetKind = "cellular"): string {
   switch (item.status) {
     case "queued":
       return item.attempts > 0 ? "Дахин оролдоно…" : "Дараалалд";
     case "waiting_property":
       return "Хөрөнгө хадгалагдахыг хүлээж байна";
     case "waiting_wifi":
-      return "Wi-Fi холбогдтол хүлээж байна";
+      return net === "unknown" ? "Сүлжээг тодорхойлж чадсангүй — одоо илгээх үү?" : "Wi-Fi холбогдтол хүлээж байна";
     case "uploading":
       return "Хуулж байна…";
     case "failed":
@@ -29,6 +31,17 @@ export function queueStatusText(item: ItemLike): string {
     case "done":
       return "Хуулагдсан";
   }
+}
+
+/** Хүлээж буй бичлэгийн товч: «Одоо илгээх (25.3 МБ)» — мобайл дата зарцуулахыг хэмжээгээр нь харуулна. */
+export function sendNowLabel(bytes: number | null | undefined): string {
+  const size = bytes ? fmtFileSize(bytes) : "";
+  return size ? `Одоо илгээх (${size})` : "Одоо илгээх";
+}
+
+/** Товчны хажуух тайлбар: iPhone Wi-Fi-г танихгүй тул хэрэглэгч өөрөө шийднэ. */
+export function waitHint(net: NetKind): string {
+  return net === "unknown" ? "Wi-Fi-д холбогдсон бол «Одоо илгээх» дарна уу" : "Эс бөгөөс Wi-Fi-д холбогдмогц өөрөө илгээнэ";
 }
 
 function isPhoto(i: ItemLike): boolean {
@@ -83,6 +96,7 @@ export function PendingUploads({
 }) {
   const { items, retry, remove } = useUploadQueue(propertyId);
   const online = useOnline();
+  const net = useNetKind();
   const [removeItem, setRemoveItem] = React.useState<QueueItem | null>(null);
 
   const badge = pendingBadgeText(items);
@@ -137,7 +151,7 @@ export function PendingUploads({
       </div>
       <ul className="divide-y divide-line" aria-live="polite">
         {visible.map((it) => (
-          <li key={it.id} className="flex min-h-14 items-center gap-2 py-1.5">
+          <li key={it.id} className="flex min-h-14 flex-wrap items-center gap-2 py-1.5">
             <span
               className={cn(
                 "inline-flex size-9 shrink-0 items-center justify-center rounded-lg",
@@ -160,7 +174,7 @@ export function PendingUploads({
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm text-ink">{it.name}</p>
               <p className={cn("truncate text-xs", it.status === "failed" ? "text-danger" : "text-muted")}>
-                {queueStatusText(it)}
+                {queueStatusText(it, net)}
                 {it.bytes ? ` · ${fmtFileSize(it.bytes)}` : ""}
               </p>
             </div>
@@ -168,11 +182,6 @@ export function PendingUploads({
               <RowBtn onClick={() => void retry(it.id)} label="Дахин оролдох">
                 <RotateCcw className="size-4" aria-hidden />
                 <span className="hidden min-[400px]:inline">Дахин оролдох</span>
-              </RowBtn>
-            ) : it.status === "waiting_wifi" ? (
-              <RowBtn onClick={() => void retry(it.id)} label="Мобайл датагаар илгээх">
-                <Wifi className="size-4" aria-hidden />
-                <span className="hidden min-[400px]:inline">Датагаар илгээх</span>
               </RowBtn>
             ) : null}
             {it.status !== "uploading" ? (
@@ -185,6 +194,16 @@ export function PendingUploads({
               >
                 <Trash2 className="size-4" aria-hidden />
               </button>
+            ) : null}
+            {it.status === "waiting_wifi" ? (
+              // Утсанд ч бичигтэй, бүтэн өргөнөөр: өмнө 400px-ээс доош зөвхөн Wi-Fi дүрс харагддаг байв.
+              <div className="flex w-full flex-wrap items-center gap-2 pl-11 sm:w-auto sm:pl-0">
+                <button type="button" onClick={() => void retry(it.id)} className={buttonClasses("primary", "md", "flex-1 sm:flex-none")}>
+                  <Send className="size-4" aria-hidden />
+                  {sendNowLabel(it.bytes)}
+                </button>
+                <span className="text-xs text-muted">{waitHint(net)}</span>
+              </div>
             ) : null}
           </li>
         ))}

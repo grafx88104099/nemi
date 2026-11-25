@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   RECENT_DRAFT_MS,
+  cardPropertyId,
+  quickBarCurrent,
+  quickCallHref,
   STALE_DRAFT_MS,
   STALE_LOG_MAX,
   deviceBadgeText,
@@ -11,6 +14,7 @@ import {
   recentDrafts,
   staleDraftsToLog,
 } from "../shell-model";
+import { crm2Paths } from "@/lib/crm2/paths";
 
 const now = Date.parse("2026-11-24T12:00:00Z");
 const d = (clientKey: string, ageMs: number, status: "editing" | "queued" = "editing", deletedAt: number | null = null) => ({
@@ -84,5 +88,35 @@ describe("logoutLossText", () => {
     expect(logoutLossText({ photos: 0, submits: 0, drafts: 2 })).toBe("Утсан дээрх дуусаагүй 2 ноорог устна");
     expect(logoutLossText({ photos: 0, submits: 0, pages: 3 })).toBe("Илгээгдээгүй 3 гэрээний хуудас устна");
     expect(logoutLossText({ photos: 2, submits: 1, drafts: 1, draftPhotos: 4 })).toBe("Илгээгдээгүй 2 зураг / 1 бүртгэл, дуусаагүй 1 ноорог (4 зураг) устна");
+  });
+});
+
+describe("хурдан цэс", () => {
+  const ID = "44444444-4444-4444-8444-444444444444";
+  it("cardPropertyId: зөвхөн хөрөнгийн картын хуудас", () => {
+    expect(cardPropertyId(`/agent/crm/staff/${ID}`, "/agent/crm")).toBe(ID);
+    expect(cardPropertyId(`/office/crm/staff/${ID}/`, "/office/crm")).toBe(ID);
+    expect(cardPropertyId("/agent/crm/staff/new", "/agent/crm")).toBeNull();
+    expect(cardPropertyId("/agent/crm/staff/incomplete", "/agent/crm")).toBeNull();
+    expect(cardPropertyId(`/agent/crm/staff/${ID}/edit`, "/agent/crm")).toBeNull();
+    expect(cardPropertyId(`/office/crm/staff/${ID}`, "/agent/crm")).toBeNull();
+    expect(cardPropertyId(null, "/agent/crm")).toBeNull();
+  });
+  it("quickCallHref: карт дээр одоогийн табаа хадгална (цонх хаахад «Үндсэн» рүү үсрэхгүй)", () => {
+    const p = crm2Paths("agent");
+    expect(quickCallHref(p, ID, "calls")).toBe(`/agent/crm/staff/${ID}?tab=calls&call=1`);
+    expect(quickCallHref(p, ID, "deals")).toBe(`/agent/crm/staff/${ID}?tab=deals&call=1`);
+    expect(quickCallHref(p, ID, null)).toBe(`/agent/crm/staff/${ID}?call=1`);
+    expect(quickCallHref(p, ID, "info")).toBe(`/agent/crm/staff/${ID}?call=1`);
+    // Буруу таб URL-д дамжихгүй.
+    expect(quickCallHref(p, ID, "x<script>")).toBe(`/agent/crm/staff/${ID}?call=1`);
+    expect(quickCallHref(crm2Paths("office"), null, "calls")).toBe("/office/crm/staff?call=1");
+  });
+  it("quickBarCurrent: хэсэг ба түүний дэд хуудас, query-г үл тооно", () => {
+    expect(quickBarCurrent("/agent/crm/contacts", "/agent/crm/contacts")).toBe(true);
+    expect(quickBarCurrent(`/agent/crm/contacts/${ID}`, "/agent/crm/contacts")).toBe(true);
+    expect(quickBarCurrent("/agent/crm/my-work", "/agent/crm/my-work?scope=me")).toBe(true);
+    expect(quickBarCurrent("/agent/crm/contacts-x", "/agent/crm/contacts")).toBe(false);
+    expect(quickBarCurrent("/agent/crm/staff", "/agent/crm/staff/new")).toBe(false);
   });
 });

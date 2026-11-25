@@ -26,12 +26,14 @@ export default async function AgentsPage({
         <div>
           <h1 className="text-3xl font-extrabold text-ink">Баталгаажсан агентууд</h1>
           <p className="mt-1 text-sm text-muted">
-            {agents.length} агент · {premier} Premier · бүгд оффист харьяалагдсан
+            {agents.length} агент{premier > 0 ? ` · ${premier} Premier` : ""} · бүгд оффист харьяалагдсан
           </p>
         </div>
         <div className="flex gap-4 text-sm">
           <span className="inline-flex items-center gap-1.5 text-muted"><ShieldCheck className="size-4 text-emerald-600" /> Баталгаатай</span>
-          <span className="inline-flex items-center gap-1.5 text-muted"><Sparkles className="size-4 text-brand-500" /> Premier</span>
+          {premier > 0 ? (
+            <span className="inline-flex items-center gap-1.5 text-muted"><Sparkles className="size-4 text-brand-500" /> Premier</span>
+          ) : null}
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { cronAuthError } from "@/lib/crm/cron-auth";
 import { sendPushToProfiles } from "@/lib/crm/push";
 import { ubToday } from "@/lib/crm2/datetime";
 import { ubParts } from "@/lib/format";
@@ -15,19 +16,15 @@ import { digestPushAllowed, digestPushBody, digestPushTarget } from "@/lib/crm2/
  * байгаа хэрэглэгчид л (хувийн сонголт, эс бөгөөс оффисын матриц). Холбоос нь апп доторх мэдэгдэлтэй ижил. Бичвэрт зөвхөн тоо (код, нэр, утас огт
  * орохгүй). Шөнө push хийхгүй: УБ-ын 09:00–20:59-ээс гадуур юу ч илгээхгүй (cron хоцорсон/дахин ажилласан ч).
  *
- * Хамгаалалт (search-alerts-тэй ижил): CRON_SECRET тохируулсан бол ?key=<secret> эсвэл
- * `Authorization: Bearer <secret>` таарах ёстой.
+ * Хамгаалалт (search-alerts-тэй ижил): cronAuthError — зөвхөн `Authorization: Bearer <CRON_SECRET>`,
+ * deploy орчинд нууц тохируулаагүй бол хаалттай.
  */
 
 const BATCH = 200;
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const secret = process.env.CRON_SECRET;
-  const bearer = request.headers.get("authorization");
-  if (secret && searchParams.get("key") !== secret && bearer !== `Bearer ${secret}`) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
-  }
+  const denied = cronAuthError(request);
+  if (denied) return NextResponse.json({ ok: false, error: denied.error }, { status: denied.status });
 
   const hour = ubParts(Date.now()).h;
   if (hour < 9 || hour >= 21) return NextResponse.json({ ok: true, skipped: "quiet_hours" });

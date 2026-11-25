@@ -4,8 +4,16 @@ import { MapPin } from "lucide-react";
 import { CategoryBadge, PropertyStatusBadge } from "@/components/crm2/ui/badges";
 import { CodeChip } from "@/components/crm2/ui/code-chip";
 import { Money } from "@/components/crm2/ui/money";
+import { ScrollFadeRow } from "@/components/crm2/ui/scroll-fade-row";
 import type { NextStep } from "@/lib/crm2/checklist";
-import { PROPERTY_TAB_LABEL, PROPERTY_TABS, crm2Paths, type Crm2Panel, type PropertyTab } from "@/lib/crm2/paths";
+import {
+  PROPERTY_TAB_LABEL,
+  PROPERTY_TAB_SHORT_LABEL,
+  PROPERTY_TABS,
+  crm2Paths,
+  type Crm2Panel,
+  type PropertyTab,
+} from "@/lib/crm2/paths";
 import type { PropertyDetail } from "@/lib/crm2/queries/properties";
 import { propertyTypeLabel, type Crm2Settings } from "@/lib/crm2/settings";
 import { cn } from "@/lib/utils";
@@ -78,7 +86,10 @@ export function CardHeader({
   );
 }
 
-/** ?tab=... холбоосон табууд (зурагны нэрээр); утсанд хэвтээ гүйлгэнэ. */
+/**
+ * ?tab=... холбоосон табууд (зурагны нэрээр); утсанд хэвтээ гүйлгэнэ — богино нэртэй, баруун талд
+ * бүдгэрэлттэй (цааш таб байгааг сануулна), идэвхтэй таб харагдах хэсэгт гүйлгэгдэнэ.
+ */
 export function CardTabsNav({
   panel,
   propertyId,
@@ -93,10 +104,11 @@ export function CardTabsNav({
   const paths = crm2Paths(panel);
   return (
     <nav aria-label="Хөрөнгийн картын хэсгүүд" className="-mx-4 border-b border-line px-4 md:mx-0 md:px-0">
-      <ul className="flex items-center gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <ScrollFadeRow as="ul" className="flex items-center gap-1" fadeFrom="from-bg" scrollKey={active}>
         {PROPERTY_TABS.map((t) => {
           const on = t === active;
           const count = counts?.[t];
+          const short = PROPERTY_TAB_SHORT_LABEL[t];
           return (
             <li key={t} className="shrink-0">
               <Link
@@ -108,13 +120,20 @@ export function CardTabsNav({
                   on ? "border-brand-500 text-brand-700" : "border-transparent text-muted hover:border-line-strong hover:text-ink"
                 )}
               >
-                {PROPERTY_TAB_LABEL[t]}
+                {short ? (
+                  <>
+                    <span className="sm:hidden">{short}</span>
+                    <span className="hidden sm:inline">{PROPERTY_TAB_LABEL[t]}</span>
+                  </>
+                ) : (
+                  PROPERTY_TAB_LABEL[t]
+                )}
                 {count ? <span className="rounded-full bg-surface-2 px-1.5 text-xs font-semibold text-muted">{count}</span> : null}
               </Link>
             </li>
           );
         })}
-      </ul>
+      </ScrollFadeRow>
     </nav>
   );
 }

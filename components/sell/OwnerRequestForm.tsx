@@ -5,6 +5,7 @@ import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
 
 import { submitOwnerRequest } from "@/lib/actions/owner-listings";
+import { OWNER_REQUEST_HONEYPOT } from "@/lib/owner-request-guard";
 import { DISTRICTS, PROPERTY_TYPES } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
@@ -25,6 +26,8 @@ export function OwnerRequestForm({
   const [pending, startTransition] = React.useTransition();
   const [err, setErr] = React.useState<string | null>(null);
   const [done, setDone] = React.useState(false);
+  // Ботын урхи (honeypot): хүнд харагдахгүй, бөглөгдвөл сервер хүсэлтийг чимээгүй хаяна.
+  const [trap, setTrap] = React.useState("");
   const [f, setF] = React.useState({
     office_id: offices[0]?.id ?? "",
     contact_name: initialName,
@@ -44,7 +47,7 @@ export function OwnerRequestForm({
     e.preventDefault();
     setErr(null);
     startTransition(async () => {
-      const r = await submitOwnerRequest(f);
+      const r = await submitOwnerRequest({ ...f, [OWNER_REQUEST_HONEYPOT]: trap });
       if (!r.ok) return setErr(r.error ?? "Алдаа гарлаа.");
       setDone(true);
     });
@@ -64,7 +67,13 @@ export function OwnerRequestForm({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-5 rounded-2xl border border-line bg-surface p-5">
+    <form onSubmit={submit} className="relative space-y-5 rounded-2xl border border-line bg-surface p-5">
+      <div aria-hidden="true" className="absolute -left-[10000px] top-0 h-px w-px overflow-hidden">
+        <label>
+          Вэбсайт
+          <input type="text" name={OWNER_REQUEST_HONEYPOT} tabIndex={-1} autoComplete="off" value={trap} onChange={(e) => setTrap(e.target.value)} />
+        </label>
+      </div>
       <Field label="Юу хийх вэ?">
         <div role="radiogroup" aria-label="Гүйлгээ" className="inline-flex rounded-xl border border-line bg-surface-2 p-1">
           {(

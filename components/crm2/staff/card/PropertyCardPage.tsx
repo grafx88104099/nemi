@@ -5,7 +5,7 @@ import { PROPERTY_TAB_LABEL, crm2Paths, isPropertyTab, type Crm2Panel, type Prop
 import { getOfferContext } from "@/lib/crm2/queries/card-tabs";
 import { buildCardChecklist } from "@/lib/crm2/queries/checklist";
 import { getStaffDirectory, getStaffNameMap } from "@/lib/crm2/queries/lookups";
-import { getProperty } from "@/lib/crm2/queries/properties";
+import { getProperty, loadPropertyDeals } from "@/lib/crm2/queries/properties";
 import { fileLimits } from "@/lib/crm2/settings";
 
 import { CardHeader, CardTabsNav } from "./CardHeader";
@@ -15,6 +15,7 @@ import { CardSheetHost } from "./sheets/CardSheetHost";
 import { OwnerPendingBanner } from "./sheets/OwnerPendingBanner";
 import { firstParam, parseOfferParams } from "./logic";
 import { Breadcrumb, PageContainer } from "./parts";
+import { propertyTabCounts } from "./tab-counts";
 import { ActivitiesTab } from "./tabs/ActivitiesTab";
 import { AgreementTab } from "./tabs/AgreementTab";
 import { DealsTab } from "./tabs/DealsTab";
@@ -50,12 +51,14 @@ export async function PropertyCardPage({
   const tab: PropertyTab = isPropertyTab(tabParam) ? tabParam : "info";
   const before = firstParam(searchParams.before);
 
-  const [detail, ctx, settings, directory, names] = await Promise.all([
+  // dealsForCounts — табын тоо (утсанд дэлгэцээс гадуурх табад агуулга байгааг сануулна).
+  const [detail, ctx, settings, directory, names, dealsForCounts] = await Promise.all([
     getProperty(propertyId),
     getCrm2Context(),
     getCrm2Settings(),
     getStaffDirectory(),
     getStaffNameMap(),
+    loadPropertyDeals(propertyId),
   ]);
 
   if (!detail) {
@@ -144,7 +147,7 @@ export async function PropertyCardPage({
           autoCall={!offer && firstParam(searchParams.call) === "1"}
         />
         <PendingRequests requests={requests} me={me} />
-        <CardTabsNav panel={panel} propertyId={p.id} active={tab} />
+        <CardTabsNav panel={panel} propertyId={p.id} active={tab} counts={propertyTabCounts(dealsForCounts)} />
         <div className="min-w-0">
           {tab === "info" ? <InfoTab detail={detail} settings={settings} panel={panel} now={now} checklist={checklist} next={next} /> : null}
           {tab === "agreement" ? (

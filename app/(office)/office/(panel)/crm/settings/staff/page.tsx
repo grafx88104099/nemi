@@ -30,6 +30,7 @@ export default async function StaffSettingsPage() {
         teams={teams}
         candidates={candidates}
         canEdit={ctx.roles.includes("sysadmin") || ctx.roles.includes("sales_director")}
+        canReactivate={ctx.roles.includes("sysadmin")}
         canManageLeave={ctx.roles.includes("sales_director")}
         today={ubDateIso()}
       />

@@ -3,7 +3,7 @@
   "buildCommand": "next build",
   "crons": [
     {
-      "path": "/api/cron/search-alerts?key=",
+      "path": "/api/cron/search-alerts",
       "schedule": "0 1 * * *"
     },
     {

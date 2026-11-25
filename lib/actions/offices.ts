@@ -7,6 +7,16 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendOfficeApproved } from "@/lib/email/resend";
 import { getOffboardingBlockers, offboardingBlockMessage } from "@/lib/crm2/offboarding";
+import {
+  agentStatusToast,
+  isMissingRpc,
+  legacyStatusNotice,
+  mapAgentStatusError,
+  parseCrmChange,
+  type AgentCrmChange,
+} from "@/lib/office/agent-status";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 async function requireRole(role: "admin" | "office_admin" | "any") {
   const supabase = await createClient();
@@ -269,12 +279,24 @@ export async function setVerified(
   return { ok: true };
 }
 
-/** Оффисын админ (эсвэл админ) агентыг батална/татгалзана. */
-export async function setAgentStatus(agentId: string, status: "active" | "rejected") {
+/**
+ * Оффисын админ (эсвэл админ) агентыг батална / татгалзана / идэвхгүй болгоно / дахин идэвхжүүлнэ.
+ *
+ * CRM-ийн эрх агентын төлөвтэй НЭГ транзакцид таарна (office_set_agent_status RPC):
+ * «Идэвхгүй» → crm_staff.is_active=false (CRM-д нэвтрэхгүй, ахлагч/багийн чат цэвэрлэгдэнэ,
+ * мэдэгдэл/сануулга ирэхгүй); «Дахин идэвхжүүлэх» → өмнөх crm_staff мөрийг сэргээнэ; CRM
+ * ашигладаг оффист «Батлах» → crm_staff (agent) нэмнэ. Эрх (панелийн админ, өөрийн оффис),
+ * аудит, агентад очих мэдэгдэл — DB талд.
+ */
+export async function setAgentStatus(
+  agentId: string,
+  status: "active" | "rejected"
+): Promise<{ ok: true; crm: AgentCrmChange; message: string } | { error: string }> {
   const ctx = await requireRole("office_admin");
-  if ("error" in ctx) return ctx;
-  // CRM-ийн хүлээлцэх шалгалт: нээлттэй Staff хэлцэл эсвэл Staff хөрөнгийн үүрэгтэй
-  // ажилтныг CRM-ээс гадуурх замаар идэвхгүй болгохгүй.
+  if ("error" in ctx) return { error: ctx.error === "auth" ? "Нэвтэрнэ үү." : "Танд энэ агентыг удирдах эрх алга." };
+  if (!UUID_RE.test(agentId) || (status !== "active" && status !== "rejected")) return { error: "Мэдээлэл буруу байна." };
+  // CRM-ийн хүлээлцэх шалгалт (дэлгэрэнгүй мессеж): нээлттэй Staff хэлцэл эсвэл Staff хөрөнгийн
+  // үүрэгтэй ажилтныг идэвхгүй болгохгүй. DB (crm_staff_deactivate_guard) ч мөн хориглоно.
   if (status === "rejected") {
     const { data: target } = await ctx.supabase.from("agents").select("profile_id").eq("id", agentId).maybeSingle();
     if (target?.profile_id) {
@@ -283,22 +305,53 @@ export async function setAgentStatus(agentId: string, status: "active" | "reject
       if (blocked) return { error: blocked };
     }
   }
-  // can_manage_agent RLS-ээр зөвхөн өөрийн оффисын агентыг өөрчилнө
-  const { error } = await ctx.supabase.from("agents").update({ status }).eq("id", agentId);
-  if (error) return { error: error.message };
-
-  const { data: agent } = await ctx.supabase.from("agents").select("profile_id, display_name").eq("id", agentId).single();
-  if (agent?.profile_id) {
-    const admin = createAdminClient();
-    await admin.from("notifications").insert({
-      user_id: agent.profile_id,
-      type: "agent",
-      title: status === "active" ? "Та баталгаажлаа" : "Хүсэлт татгалзагдсан",
-      body: status === "active" ? "Таны агентын бүртгэл идэвхжлээ." : "Агентын хүсэлт татгалзагдлаа.",
-      link: "/agent",
-    });
+  const { data, error } = await ctx.supabase.rpc("office_set_agent_status", { p_agent: agentId, p_status: status });
+  let crm: AgentCrmChange;
+  if (error && isMissingRpc(error)) {
+    // Миграц 20261125000200 тавигдаагүй (код түрүүлж deploy хийгдсэн) — хуучин зам (CRM-ийн эрхийг
+    // хөндөхгүй), оффисын админыг хориглохгүй. Миграцыг тавьсны дараа энэ салаа ажиллахгүй.
+    console.warn("office_set_agent_status алга — хуучин замаар (migration 20261125000200 тавигдаагүй)");
+    const legacy = await legacySetAgentStatus(ctx.supabase, agentId, status);
+    if ("error" in legacy) return legacy;
+    crm = "none";
+  } else if (error) {
+    console.error("office_set_agent_status:", error.message);
+    return { error: mapAgentStatusError(error.message) };
+  } else {
+    crm = parseCrmChange(data);
   }
+
   revalidatePath("/office");
+  revalidatePath("/office/agents");
+  revalidatePath(`/office/agents/${agentId}`);
+  revalidatePath("/office/crm/settings/staff");
+  revalidatePath("/admin");
+  revalidatePath("/agents");
+  revalidatePath(`/agents/${agentId}`);
   expirePublicListings(); // идэвхгүй агентын зар нүүрний «Онцлох»-оос гарна (RLS)
+  return { ok: true, crm, message: agentStatusToast(status, crm) };
+}
+
+/** RPC-гүй (миграцаас өмнөх) зам: can_manage_agent RLS-ээр төлөв + агентад мэдэгдэл. */
+async function legacySetAgentStatus(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  agentId: string,
+  status: "active" | "rejected"
+): Promise<{ ok: true } | { error: string }> {
+  const { data: before } = await supabase.from("agents").select("profile_id, status").eq("id", agentId).maybeSingle();
+  if (!before) return { error: "Агент олдсонгүй." };
+  const { data: rows, error } = await supabase.from("agents").update({ status }).eq("id", agentId).select("id");
+  if (error) {
+    console.error("setAgentStatus (legacy):", error.message);
+    return { error: mapAgentStatusError(error.message) };
+  }
+  if (!rows?.length) return { error: "Танд энэ агентыг удирдах эрх алга." };
+  if (before.profile_id && before.status !== status) {
+    const n = legacyStatusNotice(before.status as string | null, status);
+    const { error: nErr } = await createAdminClient()
+      .from("notifications")
+      .insert({ user_id: before.profile_id, type: "agent", title: n.title, body: n.body, link: "/agent" });
+    if (nErr) console.error("setAgentStatus (legacy) notify:", nErr.message);
+  }
   return { ok: true };
 }

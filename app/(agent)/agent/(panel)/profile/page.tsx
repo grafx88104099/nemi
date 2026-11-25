@@ -33,6 +33,7 @@ export default async function AgentProfilePage() {
       <Card className="mt-6">
         <CardBody>
           <AgentProfileForm
+            canUploadAvatar={agent.status === "active"}
             initial={{
               display_name: (agent.display_name as string) ?? "",
               phone: (agent.phone as string) ?? "",

@@ -18,10 +18,14 @@ import {
   type RemovalCheck,
   type TransferTarget,
 } from "@/lib/office/agent-removal";
+import { decideAccountAccess, type AccountRole } from "@/lib/office/account-guard";
+import { isMissingTable } from "@/lib/office/agent-status";
 
 /**
  * CRM-ийн хүлээлцэх шалгалт: нээлттэй Staff хэлцэл эсвэл Staff хөрөнгийн үүрэгтэй
  * ажилтны нэвтрэлтийг хаахгүй. (Бүрэн хасалтыг office_remove_agent RPC шалгана.)
+ * Харилцагч / нээлттэй ажил / хүсэлт нэвтрэлт хаахыг ХОРИГЛОХГҮЙ (includeHandover-гүй) — гарсан,
+ * утсаа гээсэн агентын хандалтыг харилцагч бүрийг шилжүүлэхийг хүлээлгүй даруй хаана.
  */
 async function crmOffboardingGuard(profileId: string): Promise<string | null> {
   const b = await getOffboardingBlockers(createAdminClient(), profileId);
@@ -49,8 +53,13 @@ async function requireOffice() {
   return { officeId: profile.office_id as string };
 }
 
-/** Дуудагч нь тухайн агентыг удирдах эрхтэй эсэхийг шалгаад admin client + agent буцаана. */
+/**
+ * Дуудагч нь тухайн агентыг удирдах эрхтэй эсэхийг шалгаад admin client + agent буцаана.
+ * DB-ийн can_manage_agent-тай ижил: оффисын админ өөрийн оффист, CRM-ийн панелийн админ
+ * (crm_is_panel_admin) байх ёстой; өөр админы бүртгэлд хүрэхгүй (decideAccountAccess).
+ */
 async function guard(agentId: string) {
+  if (!z.string().uuid().safeParse(agentId).success) return { error: "not_found" as const };
   const supabase = await createClient();
   const {
     data: { user },
@@ -62,6 +71,12 @@ async function guard(agentId: string) {
     .eq("id", user.id)
     .single();
   if (profile?.role !== "office_admin" && profile?.role !== "admin") return { error: "forbidden" as const };
+  let panelAdmin: boolean | null = null;
+  if (profile.role === "office_admin") {
+    const { data: pa, error: paErr } = await supabase.rpc("crm_is_panel_admin");
+    if (paErr) console.error("agent-account guard crm_is_panel_admin:", paErr.message);
+    panelAdmin = paErr ? null : pa === true;
+  }
 
   const admin = createAdminClient();
   const { data: agent } = await admin
@@ -70,9 +85,76 @@ async function guard(agentId: string) {
     .eq("id", agentId)
     .single();
   if (!agent) return { error: "not_found" as const };
-  // office_admin зөвхөн өөрийн оффист; admin бүгдэд
-  if (profile.role !== "admin" && agent.office_id !== profile.office_id) return { error: "forbidden" as const };
-  return { admin, agent };
+  let targetRole: AccountRole | null = null;
+  if (agent.profile_id) {
+    const { data: tp } = await admin.from("profiles").select("role").eq("id", agent.profile_id).maybeSingle();
+    targetRole = (tp?.role as AccountRole | undefined) ?? null;
+  }
+  const decision = decideAccountAccess({
+    callerId: user.id,
+    callerRole: profile.role as AccountRole,
+    callerOfficeId: (profile.office_id as string | null) ?? null,
+    callerPanelAdmin: panelAdmin,
+    agentOfficeId: (agent.office_id as string | null) ?? null,
+    targetProfileId: (agent.profile_id as string | null) ?? null,
+    targetRole,
+  });
+  if (!decision.ok) return { error: "forbidden" as const };
+  return { admin, agent, actorId: user.id };
+}
+
+type GuardCtx = Exclude<Awaited<ReturnType<typeof guard>>, { error: unknown }>;
+type AccountAuditAction = "temp_password" | "provision_login" | "login_disabled" | "login_enabled";
+const AUDIT_ERR = "Аудитын бүртгэл хийж чадсангүй — дахин оролдоно уу.";
+
+/** Аудитын хүснэгт хараахан алга (миграц тавигдаагүй) — id-гүй, үйлдлийг хориглохгүй. */
+const AUDIT_SKIPPED = "";
+
+/**
+ * Нэвтрэлтийн хэрэгслийн аудит (office_agent_audit) — үйлдлийн ӨМНӨ бичнэ: бичиж чадахгүй
+ * бол үйлдлийг хийхгүй (null; хэн, хэзээ, хэний нэвтрэлтэд хүрснийг заавал үлдээнэ). Ганц
+ * онцгой тохиолдол: хүснэгт өөрөө алга (20261125000200 тавигдаагүй, код түрүүлж deploy) — серверийн
+ * логт үлдээгээд AUDIT_SKIPPED буцаана (оффисын админы нууц үг шинэчлэх, нэвтрэлт хаах хаагдахгүй).
+ */
+async function auditStart(ctx: GuardCtx, action: AccountAuditAction, detail: Record<string, string> = {}): Promise<string | null> {
+  const { data, error } = await ctx.admin
+    .from("office_agent_audit")
+    .insert({
+      office_id: ctx.agent.office_id,
+      agent_id: ctx.agent.id,
+      target_profile_id: ctx.agent.profile_id,
+      actor_id: ctx.actorId,
+      action,
+      detail,
+    })
+    .select("id")
+    .single();
+  if (error && isMissingTable(error)) {
+    console.warn("office_agent_audit алга (migration 20261125000200 тавигдаагүй) — аудитгүй:", {
+      action,
+      agent: ctx.agent.id,
+      actor: ctx.actorId,
+    });
+    return AUDIT_SKIPPED;
+  }
+  if (error || !data) {
+    console.error("office_agent_audit insert:", error?.message);
+    return null;
+  }
+  return data.id as string;
+}
+
+async function auditFinish(ctx: GuardCtx, id: string, patch: { ok?: boolean; target?: string; error?: string }) {
+  if (!id) return; // AUDIT_SKIPPED
+  const { error } = await ctx.admin
+    .from("office_agent_audit")
+    .update({
+      ...(patch.ok === false ? { ok: false } : {}),
+      ...(patch.target ? { target_profile_id: patch.target } : {}),
+      ...(patch.error ? { detail: { error: patch.error.slice(0, 200) } } : {}),
+    })
+    .eq("id", id);
+  if (error) console.error("office_agent_audit update:", error.message);
 }
 
 function tempPassword() {
@@ -94,14 +176,32 @@ export async function getAgentAccount(agentId: string): Promise<{
   return { hasLogin: true, email: u?.email ?? null, banned };
 }
 
-/** Түр нууц үг үүсгэх — нэг удаа харуулна (агент дараа нь солино). */
+/**
+ * Түр нууц үг үүсгэх — нэг удаа харуулна (агент дараа нь солино). Аудит бичиж, агентад
+ * апп доторх мэдэгдэл очно (өөрөө хүсээгүй бол оффистоо мэдэгдэнэ).
+ */
 export async function setAgentTempPassword(agentId: string): Promise<{ password?: string; error?: string }> {
   const ctx = await guard(agentId);
   if ("error" in ctx) return ctx;
   if (!ctx.agent.profile_id) return { error: "no_account" };
+  const auditId = await auditStart(ctx, "temp_password");
+  if (auditId === null) return { error: AUDIT_ERR };
   const password = tempPassword();
   const { error } = await ctx.admin.auth.admin.updateUserById(ctx.agent.profile_id, { password });
-  if (error) return { error: error.message };
+  if (error) {
+    await auditFinish(ctx, auditId, { ok: false, error: error.message });
+    return { error: error.message };
+  }
+  if (ctx.agent.profile_id !== ctx.actorId) {
+    const { error: nErr } = await ctx.admin.from("notifications").insert({
+      user_id: ctx.agent.profile_id,
+      type: "agent",
+      title: "Нууц үг шинэчлэгдлээ",
+      body: "Оффисын админ таны нэвтрэх түр нууц үг үүсгэлээ. Та өөрөө хүсээгүй бол оффистоо даруй мэдэгдэнэ үү.",
+      link: "/agent",
+    });
+    if (nErr) console.error("setAgentTempPassword notify:", nErr.message);
+  }
   return { password };
 }
 
@@ -114,6 +214,8 @@ export async function provisionAgentLogin(
   if ("error" in ctx) return ctx;
   if (ctx.agent.profile_id) return { error: "has_account" };
   if (!email) return { error: "no_email" };
+  const auditId = await auditStart(ctx, "provision_login", { email: email.slice(0, 200) });
+  if (auditId === null) return { error: AUDIT_ERR };
 
   const password = tempPassword();
   // role metadata оруулахгүй → trigger profile-г buyer-ээр үүсгэнэ, давхар agent үүсгэхгүй.
@@ -123,8 +225,12 @@ export async function provisionAgentLogin(
     email_confirm: true,
     user_metadata: { full_name: ctx.agent.display_name },
   });
-  if (error || !data.user) return { error: error?.message ?? "create_failed" };
+  if (error || !data.user) {
+    await auditFinish(ctx, auditId, { ok: false, error: error?.message ?? "create_failed" });
+    return { error: error?.message ?? "create_failed" };
+  }
   const uid = data.user.id;
+  await auditFinish(ctx, auditId, { target: uid });
   // Шинэ профайлыг агент болгож, оффист холбоно
   await ctx.admin.from("profiles").update({ role: "agent", office_id: ctx.agent.office_id }).eq("id", uid);
   // Байгаа agent мөрийг шинэ бүртгэлд холбож, идэвхжүүлнэ
@@ -140,13 +246,19 @@ export async function setAgentLoginEnabled(agentId: string, enabled: boolean): P
   if ("error" in ctx) return { ok: false, error: ctx.error };
   if (!ctx.agent.profile_id) return { ok: false, error: "no_account" };
   if (!enabled) {
+    if (ctx.agent.profile_id === ctx.actorId) return { ok: false, error: "Өөрийн нэвтрэлтийг хааж болохгүй." };
     const blocked = await crmOffboardingGuard(ctx.agent.profile_id);
     if (blocked) return { ok: false, error: blocked };
   }
+  const auditId = await auditStart(ctx, enabled ? "login_enabled" : "login_disabled");
+  if (auditId === null) return { ok: false, error: AUDIT_ERR };
   const { error } = await ctx.admin.auth.admin.updateUserById(ctx.agent.profile_id, {
     ban_duration: enabled ? "none" : "876000h",
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    await auditFinish(ctx, auditId, { ok: false, error: error.message });
+    return { ok: false, error: error.message };
+  }
   revalidatePath(`/office/agents/${agentId}`);
   return { ok: true };
 }

@@ -9,6 +9,8 @@ import { applyWatermark, type WatermarkConfig } from "@/lib/watermark";
 const MAX_PHOTOS = 20;
 const MAX_SIZE = 8 * 1024 * 1024; // 8MB
 const ALLOWED_EXT = ["jpg", "jpeg", "png", "webp", "gif", "avif"];
+/** 'listings' bucket-ийн allowed_mime_types (20261125000200) — өөр төрлийг storage татгалзана. */
+const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"]);
 
 export function MultiPhotoUpload({
   value,
@@ -63,6 +65,14 @@ export function MultiPhotoUpload({
       }
       if (!ready.length) { setErr(problems.join("; ")); setStage("idle"); return; }
     }
+
+    // Тамгагүй замд (HEIC г.м.) bucket татгалзах файлыг эрт алгасна; тамгатай нь үргэлж JPEG.
+    ready = ready.filter((file) => {
+      if (ALLOWED_MIME.has(file.type)) return true;
+      problems.push(`${file.name}: формат дэмжигдэхгүй (JPEG, PNG, WebP)`);
+      return false;
+    });
+    if (!ready.length) { setErr(problems.join("; ")); setStage("idle"); return; }
 
     setStage("uploading");
     const supabase = createClient();

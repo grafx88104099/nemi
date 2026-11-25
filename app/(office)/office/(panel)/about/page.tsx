@@ -10,7 +10,7 @@ export default async function OfficeAboutPage() {
   const { office } = data;
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-8">
       <h1 className="text-2xl font-extrabold text-ink">Оффисын танилцуулга</h1>
       <p className="text-sm text-muted">Нийтэд харагдах танилцуулга мэдээллээ оруулна уу</p>
       <Card className="mt-6">

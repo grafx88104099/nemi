@@ -4,6 +4,8 @@
  * Хувийн өгөгдөл (утас, нэр) энд огт орохгүй — зөвхөн тоо, түлхүүр, хугацаа.
  */
 
+import { isPropertyTab, type Crm2Paths } from "@/lib/crm2/paths";
+
 /** Ноорогийн индексийн мөрөөс хэрэгтэй хэсэг (lib/crm2/device/draft-store DraftIndexEntry). */
 export type DraftLike = { clientKey: string; savedAt: number; status: "editing" | "queued"; deletedAt?: number | null };
 
@@ -79,4 +81,33 @@ export function logoutLossText(s: {
   if (!sent && !draft) return null;
   if (!sent) return `Утсан дээрх ${draft} устна`;
   return draft ? `${sent}, ${draft} устна` : `${sent} устна`;
+}
+
+// ── Утасны доод хурдан цэс ───────────────────────────────────
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Хөрөнгийн картын хуудас (`<base>/staff/<uuid>`) бол хөрөнгийн id; «new», «incomplete», дэд хуудас биш. */
+export function cardPropertyId(pathname: string | null | undefined, base: string): string | null {
+  const prefix = `${base}/staff/`;
+  const path = (pathname ?? "").replace(/\/+$/, "");
+  if (!path.startsWith(prefix)) return null;
+  const rest = path.slice(prefix.length);
+  return UUID_RE.test(rest) ? rest : null;
+}
+
+/**
+ * Хурдан цэсний «Дуудлага»: хөрөнгийн карт дээр бол ТЭР хөрөнгө + одоогийн таб (?tab=calls г.м.)
+ * хэвээр ?call=1 — цонхыг хаахад агент ажиллаж байсан табдаа үлдэнэ. Бусад үед Staff-ийн жагсаалт.
+ */
+export function quickCallHref(p: Crm2Paths, cardId: string | null, tab: string | null | undefined): string {
+  if (!cardId) return p.staff({ call: "1" });
+  return p.property(cardId, isPropertyTab(tab) ? tab : undefined, { call: "1" });
+}
+
+/** Хурдан цэсний холбоос одоогийн хуудас (эсвэл түүний дэд хуудас) эсэх — aria-current. */
+export function quickBarCurrent(pathname: string | null | undefined, href: string): boolean {
+  const path = (pathname ?? "").replace(/\/+$/, "");
+  const target = href.split("?")[0].replace(/\/+$/, "");
+  return !!target && (path === target || path.startsWith(`${target}/`));
 }

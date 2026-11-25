@@ -69,7 +69,8 @@ export function ogBase() {
   return { type: "website" as const, siteName: SITE_NAME, locale: "mn_MN" };
 }
 
-export const ROOT_OG_IMAGE = { url: "/icons/icon-512.png", width: 512, height: 512, alt: SITE_NAME };
+/** Анхдагч OG зураг 1200×630 (1.91:1 — FB/Viber-ийн том preview). Дахин үүсгэх: node scripts/gen-og-image.mjs */
+export const ROOT_OG_IMAGE = { url: "/brand/og-default.png", width: 1200, height: 630, alt: SITE_NAME };
 
 /** NEXT_PUBLIC_SUPABASE_URL-ийн host (буруу/хоосон бол null). */
 export function supabaseHost(): string | null {

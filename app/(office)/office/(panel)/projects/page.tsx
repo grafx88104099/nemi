@@ -6,7 +6,7 @@ export const metadata = { title: "Төсөл — Оффис" };
 
 export default function OfficeProjectsPage() {
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-8">
       <h1 className="text-2xl font-extrabold text-ink">Төсөл</h1>
       <p className="text-sm text-muted">Оффисын төслүүдийн удирдлага</p>
       <Card className="mt-6">

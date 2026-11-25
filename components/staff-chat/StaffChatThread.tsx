@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { AlertCircle, ArrowDown, ArrowLeft, Clock, Info, Loader2, Send } from "lucide-react";
 
@@ -14,6 +15,8 @@ import { fmtTime } from "@/lib/format";
 import { getStaffChatMessages, getStaffChatMessagesAfter, getStaffChatPeople } from "@/lib/queries-staff-chat";
 import {
   STAFF_CHAT_MAX_BODY,
+  chatBackUsesHistory,
+  documentEntryPath,
   groupMessagesByDay,
   mergeStaffMessages,
   newStaffMessageId,
@@ -56,6 +59,7 @@ export function StaffChatThread({
   initialPeople: StaffChatPerson[];
 }) {
   const { basePath } = useStaffChatShell();
+  const router = useRouter();
   const [messages, setMessages] = useState<StaffChatThreadMessage[]>(initialMessages);
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -286,12 +290,24 @@ export function StaffChatThread({
   return (
     <div
       ref={rootRef}
-      className="fixed inset-x-0 top-[var(--chat-top,0px)] z-50 flex h-[var(--chat-vh,100dvh)] min-w-0 flex-col bg-surface lg:static lg:z-auto lg:h-full lg:flex-1"
+      className="fixed inset-x-0 top-[var(--chat-top,0px)] z-50 flex h-[var(--chat-vh,100dvh)] min-w-0 flex-col bg-surface max-lg:pl-[env(safe-area-inset-left)] max-lg:pr-[env(safe-area-inset-right)] lg:static lg:z-auto lg:h-full lg:flex-1"
     >
       <header className="flex h-14 shrink-0 items-center gap-1 border-b border-line px-1 lg:gap-2 lg:px-4">
         <Link
           href={basePath}
-          aria-label="Чатын жагсаалт руу буцах"
+          onClick={(e) => {
+            // Апп доторх өмнөх дэлгэц рүү (CRM-ийн карт г.м.); түүхгүй бол чатын жагсаалт (href).
+            const nav = {
+              historyLength: window.history.length,
+              entryPath: documentEntryPath(),
+              currentPath: window.location.pathname,
+            };
+            if (chatBackUsesHistory(nav, e)) {
+              e.preventDefault();
+              router.back();
+            }
+          }}
+          aria-label="Буцах"
           className="flex size-11 shrink-0 items-center justify-center rounded-lg text-ink hover:bg-surface-2 lg:hidden"
         >
           <ArrowLeft className="size-5" />

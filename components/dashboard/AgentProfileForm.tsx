@@ -8,7 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
 import { OfficeImageUpload } from "@/components/office/OfficeImageUpload";
 
-export function AgentProfileForm({ initial }: { initial: AgentProfileInput }) {
+export function AgentProfileForm({
+  initial,
+  canUploadAvatar = true,
+}: {
+  initial: AgentProfileInput;
+  /** Батлагдаагүй (pending) агент — office-assets-д зураг оруулах эрхгүй (20261125000200). */
+  canUploadAvatar?: boolean;
+}) {
   const [f, setF] = useState<AgentProfileInput>(initial);
   const [areasText, setAreasText] = useState(initial.areas.join(", "));
   const [langText, setLangText] = useState(initial.languages.join(", "));
@@ -39,11 +46,17 @@ export function AgentProfileForm({ initial }: { initial: AgentProfileInput }) {
     });
   }
 
-  const ta = "w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20";
+  const ta = "w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 sm:text-sm";
 
   return (
     <form onSubmit={submit} className="max-w-2xl space-y-4">
-      <OfficeImageUpload label="Профайл зураг" value={f.avatar_url} onChange={(v) => set("avatar_url", v)} variant="square" />
+      <OfficeImageUpload
+        label="Профайл зураг"
+        value={f.avatar_url}
+        onChange={(v) => set("avatar_url", v)}
+        variant="square"
+        disabledHint={canUploadAvatar ? undefined : "Оффис таныг баталсны дараа профайл зураг оруулах боломжтой."}
+      />
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Нэр" htmlFor="dn">
           <Input id="dn" required value={f.display_name} onChange={(e) => set("display_name", e.target.value)} />

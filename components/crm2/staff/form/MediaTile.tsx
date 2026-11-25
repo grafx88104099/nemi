@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { connectionKind, waitWifiLabel, type NetKind } from "@/lib/crm2/device/upload-queue";
 
 // ── Цэвэр туслахууд (тестлэгдэнэ) ────────────────────────────────────────────
 
@@ -645,7 +646,12 @@ export function FilePickButton({
   );
 }
 
-/** Бичлэгийн «Wi-Fi холбогдтол хүлээх» сонголт (44px). */
+const noopSubscribe = () => () => {};
+
+/**
+ * Бичлэгийн «Wi-Fi хүлээх» сонголт (44px). Шошго нь бодит дүрэмтэй (waitWifiLabel): сүлжээ
+ * тодорхойгүй iPhone-д «15 МБ-аас томыг Wi-Fi-д хүлээх» — жижиг клип шууд явдаг тул.
+ */
 export function WaitWifiToggle({
   checked,
   onChange,
@@ -655,6 +661,8 @@ export function WaitWifiToggle({
   onChange: (next: boolean) => void;
   disabled?: boolean;
 }) {
+  // Серверт (SSR) ба hydration-д «wifi» — дараа нь төхөөрөмжийн бодит сүлжээгээр.
+  const net = React.useSyncExternalStore<NetKind>(noopSubscribe, () => connectionKind(), () => "wifi");
   return (
     <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg px-1.5 text-xs font-medium text-ink hover:bg-surface-2 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-500/40">
       <input
@@ -665,7 +673,7 @@ export function WaitWifiToggle({
         onChange={(e) => onChange(e.target.checked)}
       />
       <Wifi className="size-3.5 shrink-0 text-muted" aria-hidden />
-      Wi-Fi холбогдтол хүлээх
+      {waitWifiLabel(net)}
     </label>
   );
 }

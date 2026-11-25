@@ -78,7 +78,7 @@ export function TaskFilters({ overdueCount }: { overdueCount: number }) {
             aria-label="Миний үүрэг"
             value={role}
             onChange={(e) => setParam({ role: e.target.value === "all" ? null : e.target.value })}
-            className="h-9 rounded-xl border border-line bg-surface px-2.5 text-sm focus:border-brand-500 focus:outline-none"
+            className="h-11 rounded-xl border border-line bg-surface px-2.5 text-base focus:border-brand-500 focus:outline-none sm:h-9 sm:text-sm"
           >
             {TASK_ROLE_FILTERS.map((r) => (
               <option key={r} value={r}>{TASK_ROLE_FILTER_LABEL[r]}</option>
@@ -92,7 +92,7 @@ export function TaskFilters({ overdueCount }: { overdueCount: number }) {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Хайх…"
-              className="h-9 w-44 rounded-xl border border-line bg-surface pl-8 pr-3 text-sm focus:border-brand-500 focus:outline-none"
+              className="h-11 w-44 rounded-xl border border-line bg-surface pl-8 pr-3 text-base focus:border-brand-500 focus:outline-none sm:h-9 sm:text-sm"
             />
           </div>
         </div>

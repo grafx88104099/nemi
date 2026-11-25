@@ -80,7 +80,7 @@ export function AddAgentForm() {
             <div>
               {result.emailed && <p className="mb-1 text-xs text-muted">Нөөц линк (и-мэйл очоогүй тохиолдолд):</p>}
               <div className="flex items-center gap-2 rounded-lg border border-line bg-surface-2 p-2">
-                <input readOnly value={result.link} className="flex-1 bg-transparent text-xs outline-none" onFocus={(e) => e.target.select()} />
+                <input readOnly value={result.link} className="min-w-0 flex-1 bg-transparent text-base outline-none sm:text-xs" onFocus={(e) => e.target.select()} />
                 <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(result.link!); setCopied(true); } catch {} }} className="rounded-md p-1.5 text-brand-600 hover:bg-surface">
                   {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
                 </button>

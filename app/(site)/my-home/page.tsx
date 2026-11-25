@@ -1,8 +1,16 @@
+import type { Metadata } from "next";
 import { Home } from "lucide-react";
 
 import { Card, CardBody } from "@/components/ui/card";
 import { HomeEstimator } from "@/components/home/HomeEstimator";
 import { BackLink } from "@/components/ui/back-link";
+import { withBrand } from "@/lib/seo/site";
+
+export const metadata: Metadata = {
+  title: withBrand("Гэрийн үнэлгээ"),
+  description: "Улаанбаатар дахь гэрийнхээ зах зээлийн ойролцоо үнийг дүүрэг, талбайгаар тооцоолоорой.",
+  alternates: { canonical: "/my-home" },
+};
 
 export default function MyHomePage() {
   return (

@@ -3,13 +3,16 @@ import { ShieldCheck, Star, Sparkles } from "lucide-react";
 
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { LinkPendingOverlay } from "@/components/ui/link-pending";
 import type { AgentListItem } from "@/lib/queries";
+import { agentStats } from "@/lib/agent-stats";
 
 export function AgentCard({ a }: { a: AgentListItem }) {
+  const stats = agentStats(a);
   return (
     <Link
       href={`/agents/${a.id}`}
-      className="block rounded-2xl border border-line bg-surface p-5 shadow-sm transition hover:shadow-md"
+      className="relative block rounded-2xl border border-line bg-surface p-5 shadow-sm transition hover:shadow-md"
     >
       <div className="flex items-start gap-3">
         <Avatar initials={a.avatar ?? "NA"} src={a.avatar_url} color={a.office?.color ?? "#C2410C"} size="lg" />
@@ -19,10 +22,18 @@ export function AgentCard({ a }: { a: AgentListItem }) {
             {a.verified && <ShieldCheck className="size-4 shrink-0 text-emerald-600" />}
           </div>
           <div className="truncate text-sm text-muted">{a.office?.name}</div>
+          {/* Хоосон/0 статистикийг харуулахгүй (lib/agent-stats). */}
           <div className="mt-1 flex items-center gap-1 text-sm">
-            <Star className="size-3.5 fill-amber-400 text-amber-400" />
-            <span className="font-semibold text-ink">{a.rating ?? "—"}</span>
-            <span className="text-muted">({a.reviews_count}) · {a.sold} зарсан</span>
+            {stats.rating ? (
+              <>
+                <Star className="size-3.5 fill-amber-400 text-amber-400" aria-hidden />
+                <span className="font-semibold text-ink">{stats.rating.value}</span>
+                <span className="text-muted">({stats.rating.reviews})</span>
+              </>
+            ) : (
+              <span className="text-muted">Сэтгэгдэл алга</span>
+            )}
+            {stats.sold ? <span className="text-muted">· {stats.sold} зарсан</span> : null}
           </div>
         </div>
         {a.premier && (
@@ -41,6 +52,7 @@ export function AgentCard({ a }: { a: AgentListItem }) {
           ))}
         </div>
       )}
+      <LinkPendingOverlay />
     </Link>
   );
 }

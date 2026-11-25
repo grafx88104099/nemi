@@ -3,15 +3,18 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/user";
 import { readAttributionColumns } from "@/lib/attribution-server";
 
-/** Зар үзсэнийг тэмдэглэх (recently_viewed upsert). Нэвтрээгүй бол алгасна. */
+/**
+ * Зар үзсэнийг тэмдэглэх (recently_viewed upsert). Нэвтрээгүй бол алгасна.
+ * Зарын хуудасны render-ээс дуудагдана — хэрэглэгчийг Topbar, isFavorited-тэй
+ * НЭГ getUser-ээр хуваалцана (getAuthUser нь React cache, хүсэлт бүрт шинэ).
+ */
 export async function recordView(listingId: string) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (!user) return;
+  const supabase = await createClient();
   await supabase
     .from("recently_viewed")
     .upsert(

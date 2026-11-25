@@ -32,7 +32,7 @@ export function OwnerRequestStatus({ id, status }: { id: string; status: "new" |
           router.refresh();
         });
       }}
-      className="h-11 rounded-xl border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none"
+      className="h-11 rounded-xl border border-line bg-surface px-3 text-base focus:border-brand-500 focus:outline-none sm:text-sm"
     >
       {OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
     </select>

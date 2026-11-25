@@ -15,7 +15,8 @@ import {
 } from "@/lib/constants";
 import type { AssigneeOption } from "@/lib/queries-tasks";
 
-const sel = "h-10 w-full rounded-xl border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none";
+// Утсанд 44px (хүрэх талбай), sm-ээс 40px.
+const sel = "h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm focus:border-brand-500 focus:outline-none sm:h-10";
 
 export type TaskInitial = {
   id: string;
@@ -155,14 +156,14 @@ export function TaskFormButton({
             <button
               onClick={() => !saving && setOpen(false)}
               disabled={saving}
-              className="rounded-xl px-3 py-2 text-sm font-medium text-muted hover:bg-surface-2 disabled:opacity-50"
+              className="min-h-11 rounded-xl px-3 py-2 text-sm font-medium text-muted hover:bg-surface-2 disabled:opacity-50 sm:min-h-0"
             >
               Болих
             </button>
             <button
               onClick={save}
               disabled={saving}
-              className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50 sm:min-h-0"
             >
               {saving && <Loader2 className="size-4 animate-spin" />} Хадгалах
             </button>
@@ -184,7 +185,8 @@ export function TaskFormButton({
             />
           </label>
 
-          <div className="grid grid-cols-2 gap-3">
+          {/* Утсанд нэг багана (375px-д хоёр талбар багтахгүй), sm-ээс хоёр. */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="space-y-1">
               <span className="text-xs font-medium text-muted">Хариуцагч *</span>
               <select className={sel} value={f.responsibleId} onChange={(e) => set("responsibleId", e.target.value)}>
@@ -199,7 +201,7 @@ export function TaskFormButton({
             </label>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="space-y-1">
               <span className="text-xs font-medium text-muted">Төлөв</span>
               <select className={sel} value={f.status} onChange={(e) => set("status", e.target.value as TaskStatus)}>
@@ -218,7 +220,7 @@ export function TaskFormButton({
             </label>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="space-y-1">
               <span className="text-xs font-medium text-muted">Төсөл</span>
               <select className={sel} value={f.projectId} onChange={(e) => set("projectId", e.target.value)}>
@@ -255,7 +257,8 @@ export function TaskFormButton({
                 ))}
               </div>
             )}
-            <div className="flex gap-2">
+            {/* Утсанд хүн сонгогч бүтэн мөр, дүр + «Нэмэх» дараагийн мөрөнд. */}
+            <div className="flex flex-wrap gap-2 sm:flex-nowrap">
               <select className={sel} value={memberPick} onChange={(e) => setMemberPick(e.target.value)}>
                 <option value="">— Хүн сонгох —</option>
                 {availableMembers.map((a) => (
@@ -263,7 +266,7 @@ export function TaskFormButton({
                 ))}
               </select>
               <select
-                className="h-10 shrink-0 rounded-xl border border-line bg-surface px-2 text-sm focus:border-brand-500 focus:outline-none"
+                className="h-11 shrink-0 rounded-xl border border-line bg-surface px-2 text-sm focus:border-brand-500 focus:outline-none sm:h-10"
                 value={memberRole}
                 onChange={(e) => setMemberRole(e.target.value as TaskMemberRole)}
               >
@@ -275,7 +278,7 @@ export function TaskFormButton({
                 type="button"
                 onClick={addMember}
                 disabled={!memberPick}
-                className="h-10 shrink-0 rounded-xl border border-line px-3 text-sm font-medium text-ink hover:bg-surface disabled:opacity-50"
+                className="h-11 shrink-0 rounded-xl border border-line px-3 text-sm font-medium text-ink hover:bg-surface disabled:opacity-50 sm:h-10"
               >
                 Нэмэх
               </button>

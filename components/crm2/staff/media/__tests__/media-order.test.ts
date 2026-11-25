@@ -11,7 +11,7 @@ import {
   splitPickedFiles,
   toggleSelected,
 } from "@/components/crm2/staff/form/MediaTile";
-import { pendingBadgeText, queueStatusText, sortForList } from "@/components/crm2/staff/media/PendingUploads";
+import { pendingBadgeText, queueStatusText, sendNowLabel, sortForList, waitHint } from "@/components/crm2/staff/media/PendingUploads";
 import type { QueueItem } from "@/lib/crm2/device/upload-queue";
 
 describe("moveItem", () => {
@@ -168,10 +168,19 @@ describe("pending uploads", () => {
     expect(queueStatusText(item())).toBe("Дараалалд");
     expect(queueStatusText(item({ attempts: 2 }))).toBe("Дахин оролдоно…");
     expect(queueStatusText(item({ status: "waiting_wifi" }))).toBe("Wi-Fi холбогдтол хүлээж байна");
+    // iPhone: сүлжээг тодорхойлох боломжгүй — «Wi-Fi хүлээж байна» гэж худал хэлэхгүй.
+    expect(queueStatusText(item({ status: "waiting_wifi" }), "unknown")).toBe("Сүлжээг тодорхойлж чадсангүй — одоо илгээх үү?");
     expect(queueStatusText(item({ status: "waiting_property" }))).toMatch(/Хөрөнгө/);
     expect(queueStatusText(item({ status: "uploading" }))).toBe("Хуулж байна…");
     expect(queueStatusText(item({ status: "failed", error: "Сүлжээ" }))).toBe("Сүлжээ");
     expect(queueStatusText(item({ status: "failed" }))).toMatch(/Дахин оролдох/);
+  });
+
+  it("«Одоо илгээх» товч хэмжээгээ, тайлбар нь сүлжээгээ харуулна", () => {
+    expect(sendNowLabel(25 * 1024 * 1024)).toBe("Одоо илгээх (25.0 МБ)");
+    expect(sendNowLabel(0)).toBe("Одоо илгээх");
+    expect(waitHint("unknown")).toMatch(/Одоо илгээх/);
+    expect(waitHint("cellular")).toMatch(/Wi-Fi-д холбогдмогц/);
   });
 
   it("builds the shell badge text", () => {

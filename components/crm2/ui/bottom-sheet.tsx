@@ -220,7 +220,8 @@ function MobileSheet({
           transform: entered ? `translateY(${dragY}px)` : "translateY(100%)",
         }}
         className={cn(
-          "absolute inset-x-0 flex flex-col rounded-t-2xl border-t border-line bg-surface shadow-xl outline-none",
+          // Хэвтээ байрлалд (viewportFit "cover") notch-ийн доор орохгүй.
+          "absolute inset-x-0 flex flex-col rounded-t-2xl border-t border-line bg-surface pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] shadow-xl outline-none",
           !dragging && "motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-out"
         )}
       >
@@ -249,7 +250,11 @@ function MobileSheet({
             </button>
           </div>
         </div>
-        <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
+        {/* Утсанд sheet доторх гар хийцийн талбар ч 16px (iOS Safari фокуслахад томруулахгүй). */}
+        <div
+          ref={bodyRef}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 max-sm:[&_input]:text-base max-sm:[&_select]:text-base max-sm:[&_textarea]:text-base"
+        >
           {children}
         </div>
         {footer ? (

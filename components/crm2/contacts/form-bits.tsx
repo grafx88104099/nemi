@@ -12,7 +12,8 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTML
     <textarea
       ref={ref}
       className={cn(
-        "w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-ink",
+        // Утсанд 16px (iOS томруулахгүй).
+        "w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-base text-ink sm:text-sm",
         "placeholder:text-subtle focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50",
         className
       )}

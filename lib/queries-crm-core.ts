@@ -1,4 +1,7 @@
+import { cache } from "react";
+
 import { createClient } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/user";
 import type { Json } from "@/types/database";
 import type { CrmRole } from "@/lib/constants-crm";
 
@@ -21,13 +24,13 @@ export type CrmStaffContext = {
 /**
  * Дуудагчийн CRM контекст — идэвхтэй crm_staff мөр (байхгүй бол null →
  * «CRM-д бүртгэгдээгүй», layout guard redirect хийнэ).
+ * React cache: агентын панелийн layout, CRM layout, Topbar, хуудсууд нэг хүсэлтэд НЭГ л уншина;
+ * хэрэглэгчийг getAuthUser-ээс (мөн нэг удаа) авна.
  */
-export async function getCrmStaffContext(): Promise<CrmStaffContext | null> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export const getCrmStaffContext = cache(async (): Promise<CrmStaffContext | null> => {
+  const user = await getAuthUser();
   if (!user) return null;
+  const supabase = await createClient();
 
   const { data, error } = await supabase
     .from("crm_staff")
@@ -50,7 +53,7 @@ export async function getCrmStaffContext(): Promise<CrmStaffContext | null> {
     panelAdmin: data.panel_admin,
     offboarding: data.offboarding,
   };
-}
+});
 
 // ── Салбар, баг ───────────────────────────────────────────
 

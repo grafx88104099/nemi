@@ -5,6 +5,8 @@ export type Article = {
   date: string;
   excerpt: string;
   body: string[];
+  /** Нэмигийн AI оноо (listings.ai_score) ажиллаж байгааг тайлбарладаг — hasAiScores()-оор хаагдана. */
+  requiresAiScores?: boolean;
 };
 
 export const NEWS: Article[] = [
@@ -52,7 +54,22 @@ export const NEWS: Article[] = [
       "Нэми-ийн AI үнэлгээ нь зарын байршил, талбай, үнэ, ашиглалтын он зэрэг олон хүчин зүйлийг ижил төстэй зарнуудтай харьцуулж 0-100 онооны систем гаргадаг.",
       "Энэ нь худалдан авагчид зах зээлийн дундажтай харьцуулахад тухайн зар хэр таатай болохыг хурдан ойлгоход тусална.",
     ],
+    requiresAiScores: true,
   },
 ];
 
 export const getArticle = (slug: string) => NEWS.find((a) => a.slug === slug);
+
+/** AI оноо (hasAiScores) ажиллаагүй үед AI-ийн нийтлэлийн эхэнд гарах тэмдэглэл. */
+export const AI_NOT_LIVE_NOTE =
+  "Тэмдэглэл: AI үнэлгээ одоогоор ажиллаагүй байна — тун удахгүй. Нээгдсэний дараа оноо зарын хуудсанд харагдана.";
+
+/** Нийтлэлийн бие — AI оноо ажиллаагүй бол «тун удахгүй» тэмдэглэл эхэнд (/ai, /help-тэй ижил хаалга). */
+export function articleBody(a: Article, aiLive: boolean): string[] {
+  return a.requiresAiScores && !aiLive ? [AI_NOT_LIVE_NOTE, ...a.body] : a.body;
+}
+
+/** Хайлтын системд (sitemap, index) гаргах эсэх — AI-ийн нийтлэл зөвхөн оноо ажиллаж эхэлсний дараа. */
+export function articleIndexable(a: Article, aiLive: boolean): boolean {
+  return !a.requiresAiScores || aiLive;
+}

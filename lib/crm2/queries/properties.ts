@@ -560,14 +560,19 @@ export async function listPropertyMedia(propertyId: string): Promise<PropertyMed
 
 // ── Картын табууд (RPC — харилцагчийн нэрийг эрхгүй бол далдална) ─────────
 
-/** «Хэлцлүүд» таб: нээлттэй эхэнд, сүүлийн үйлдлээр. `error` = уншиж чадсангүй. */
-export async function loadPropertyDeals(propertyId: string): Promise<{ rows: Crm2PropertyDealItem[]; error: boolean }> {
-  if (!UUID_RE.test(propertyId)) return { rows: [], error: false };
-  const supabase = await crm2Client();
-  const { data, error } = await supabase.rpc("crm2_property_deals", { p_property: propertyId });
-  if (error) console.error("crm2_property_deals:", error.message);
-  return { rows: data ?? [], error: !!error };
-}
+/**
+ * «Хэлцлүүд» таб: нээлттэй эхэнд, сүүлийн үйлдлээр. `error` = уншиж чадсангүй.
+ * Хүсэлт бүрт нэг удаа (cache): карт табын тоонд, «Хэлцлүүд»/«Дуудлага» таб өөрсдөд нь дахин ашиглана.
+ */
+export const loadPropertyDeals = cache(
+  async (propertyId: string): Promise<{ rows: Crm2PropertyDealItem[]; error: boolean }> => {
+    if (!UUID_RE.test(propertyId)) return { rows: [], error: false };
+    const supabase = await crm2Client();
+    const { data, error } = await supabase.rpc("crm2_property_deals", { p_property: propertyId });
+    if (error) console.error("crm2_property_deals:", error.message);
+    return { rows: data ?? [], error: !!error };
+  }
+);
 
 /** loadPropertyDeals-ийн мөрүүд (алдаа гарвал хоосон). */
 export async function getPropertyDeals(propertyId: string): Promise<Crm2PropertyDealItem[]> {

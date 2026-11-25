@@ -12,7 +12,7 @@ export default async function OfficeSettingsPage() {
   const samplePhoto = await getSampleListingPhoto(data.listings.map((l) => l.id));
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-8">
       <h1 className="text-2xl font-extrabold text-ink">Оффисын тохиргоо</h1>
       <p className="text-sm text-muted">Оффисын мэдээллээ шинэчлэх</p>
       <Card className="mt-6">

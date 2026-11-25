@@ -28,12 +28,16 @@ type Draft = {
   panelAdmin: boolean;
 };
 
+/** Буцаахад хэцүү үйлдэл — баталгаажуулах цонхоор (нэр, үр дагаврыг хэлнэ). */
+type Confirm = { kind: "offboard" | "deactivate"; staff: StaffRow };
+
 export function StaffShell({
   staff,
   branches,
   teams,
   candidates,
   canEdit,
+  canReactivate,
   canManageLeave,
   today,
 }: {
@@ -42,6 +46,8 @@ export function StaffShell({
   teams: TeamRow[];
   candidates: AssigneeOption[];
   canEdit: boolean;
+  /** «Сэргээх» — reactivateStaff-ийн эрхтэй ижил (зөвхөн sysadmin). */
+  canReactivate: boolean;
   /** Чөлөө бүртгэх — Борлуулалт хариуцсан захирал. */
   canManageLeave: boolean;
   /** УБ-ын өнөөдөр (YYYY-MM-DD). */
@@ -53,11 +59,14 @@ export function StaffShell({
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [leave, setLeave] = useState<{ staffId: string; name: string; from: string; to: string; substituteId: string; note: string } | null>(null);
+  const [confirm, setConfirm] = useState<Confirm | null>(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
 
   const registered = new Set(staff.map((s) => s.profile_id));
   const addable = candidates.filter((c) => !registered.has(c.profileId));
   const branchName = (id: string | null) => branches.find((b) => b.id === id)?.name ?? "—";
   const teamName = (id: string | null) => teams.find((t) => t.id === id)?.name ?? "—";
+  const displayName = (s: StaffRow) => s.full_name ?? s.email ?? "Ажилтан";
 
   function submit() {
     if (!draft) return;
@@ -75,16 +84,42 @@ export function StaffShell({
         setError(res.error);
         return;
       }
+      toast.success(draft.id ? "Хадгаллаа" : "Ажилтан нэмэгдлээ");
       setDraft(null);
       router.refresh();
     });
   }
 
-  function act(fn: () => Promise<{ ok: boolean; error?: string }>) {
+  /** «Гарах урсгал» / «Идэвхгүй болгох» — баталгаажуулсны дараа. Алдаа цонхондоо үлдэнэ (шалтгааныг уншина). */
+  function runConfirmed() {
+    if (!confirm) return;
+    const { kind, staff: s } = confirm;
+    setConfirmError(null);
+    startTransition(async () => {
+      const res = kind === "offboard" ? await startOffboarding(s.id) : await deactivateStaff(s.id);
+      if (!res.ok) {
+        setConfirmError(res.error ?? "Алдаа гарлаа.");
+        return;
+      }
+      toast.success(
+        kind === "offboard" ? `${displayName(s)}: гарах урсгал эхэллээ` : `${displayName(s)}: идэвхгүй боллоо`
+      );
+      setConfirm(null);
+      router.refresh();
+    });
+  }
+
+  function reactivate(s: StaffRow) {
     setError(null);
     startTransition(async () => {
-      const res = await fn();
-      if (!res.ok) setError(res.error ?? "Алдаа гарлаа.");
+      const res = await reactivateStaff(s.id);
+      if (!res.ok) {
+        const msg = res.error ?? "Алдаа гарлаа.";
+        setError(msg);
+        toast.error(msg);
+        return;
+      }
+      toast.success(`${displayName(s)}: сэргээлээ`);
       router.refresh();
     });
   }
@@ -126,9 +161,122 @@ export function StaffShell({
 
   const nameOf = (profileId: string | null) => staff.find((x) => x.profile_id === profileId)?.full_name ?? "—";
 
+  function openConfirm(kind: Confirm["kind"], s: StaffRow) {
+    setConfirmError(null);
+    setConfirm({ kind, staff: s });
+  }
+
+  function statusBadge(s: StaffRow) {
+    return (
+      <>
+        {s.removed ? (
+          <Badge tone="rose">Хасагдсан</Badge>
+        ) : !s.is_active ? (
+          <Badge tone="neutral">Идэвхгүй</Badge>
+        ) : s.offboarding ? (
+          <Badge tone="amber">Гарах урсгалд</Badge>
+        ) : isOnLeave(s.on_leave_from, s.on_leave_to, today) ? (
+          <Badge tone="blue">Чөлөөтэй{s.on_leave_to ? ` · ${s.on_leave_to} хүртэл` : ""}</Badge>
+        ) : (
+          <Badge tone="green">Идэвхтэй</Badge>
+        )}
+        {s.on_leave_from && s.leave_substitute_id ? (
+          <p className="mt-1 text-xs text-subtle">Орлон: {nameOf(s.leave_substitute_id)}</p>
+        ) : null}
+      </>
+    );
+  }
+
+  function roleBadges(s: StaffRow) {
+    return (
+      <div className="flex flex-wrap gap-1">
+        {s.roles.map((r) => (
+          <Badge key={r} tone={r === "sysadmin" ? "rose" : r === "agent" ? "neutral" : "brand"}>
+            {CRM_ROLE_LABEL[r]}
+          </Badge>
+        ))}
+        {s.panel_admin ? <Badge tone="amber">Панелийн админ</Badge> : null}
+      </div>
+    );
+  }
+
+  /**
+   * Мөрийн үйлдлүүд — шошготой товч (зөвхөн icon биш), хоорондоо зайтай.
+   * Гарах урсгал / Идэвхгүй болгох нь баталгаажуулах цонх нээнэ.
+   */
+  function actions(s: StaffRow) {
+    if (s.removed) return <p className="text-xs text-subtle">Түүх хадгалагдсан</p>;
+    return (
+      <div className="flex flex-wrap gap-2 lg:justify-end">
+        <Button
+          size="touch"
+          variant="outline"
+          onClick={() =>
+            setDraft({
+              id: s.id,
+              profileId: s.profile_id,
+              branchId: s.branch_id,
+              teamId: s.team_id,
+              roles: s.roles,
+              panelAdmin: s.panel_admin,
+            })
+          }
+        >
+          <Pencil className="size-4" aria-hidden /> Засах
+        </Button>
+        {canManageLeave && s.is_active && !s.offboarding ? (
+          <Button
+            size="touch"
+            variant="outline"
+            title="Чөлөө, түр хүлээлцэх"
+            onClick={() =>
+              setLeave({
+                staffId: s.id,
+                name: displayName(s),
+                from: s.on_leave_from ?? "",
+                to: s.on_leave_to ?? "",
+                substituteId: s.leave_substitute_id ?? "",
+                note: s.leave_note ?? "",
+              })
+            }
+          >
+            <Plane className="size-4" aria-hidden /> Чөлөө
+          </Button>
+        ) : null}
+        {s.is_active && !s.offboarding ? (
+          <Button size="touch" variant="outline" disabled={pending} onClick={() => openConfirm("offboard", s)}>
+            <LogOut className="size-4" aria-hidden /> Гарах урсгал
+          </Button>
+        ) : null}
+        {s.is_active ? (
+          <Button
+            size="touch"
+            variant="outline"
+            className="text-danger"
+            disabled={pending}
+            onClick={() => openConfirm("deactivate", s)}
+          >
+            <UserMinus className="size-4" aria-hidden /> Идэвхгүй болгох
+          </Button>
+        ) : canReactivate ? (
+          <Button size="touch" variant="outline" disabled={pending} onClick={() => reactivate(s)}>
+            Сэргээх
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
+
+  const isLead = (s: StaffRow) =>
+    s.roles.includes("team_lead") || teams.some((t) => t.lead_profile_id === s.profile_id);
+
   return (
     <div className="mt-6 space-y-4">
-      {error ? <p className="text-sm text-danger">{error}</p> : null}
+      {error ? (
+        <p role="alert" className="text-sm text-danger">
+          {error}
+        </p>
+      ) : null}
 
       {canEdit ? (
         <Button
@@ -148,10 +296,41 @@ export function StaffShell({
         </Button>
       ) : null}
 
-      <Card>
+      {/* Утас, таблет (хажуу цэстэй): карт — 760px хүснэгт хажуу тийш гүйлгүүлж үйлдлийг нуудаг байсан. */}
+      <ul className="space-y-3 lg:hidden" aria-label="Ажилтнууд">
+        {staff.length === 0 ? (
+          <li>
+            <Card>
+              <CardBody className="text-center text-sm text-subtle">CRM-д ажилтан бүртгэгдээгүй байна.</CardBody>
+            </Card>
+          </li>
+        ) : null}
+        {staff.map((s) => (
+          <li key={s.id}>
+            <Card>
+              <CardBody className="space-y-3 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="break-words font-medium text-ink">{s.full_name ?? "—"}</p>
+                    {s.email ? <p className="truncate text-xs text-subtle">{s.email}</p> : null}
+                  </div>
+                  <div className="shrink-0 text-right">{statusBadge(s)}</div>
+                </div>
+                {roleBadges(s)}
+                <p className="text-sm text-muted">
+                  {branchName(s.branch_id)} / {teamName(s.team_id)}
+                </p>
+                {canEdit ? actions(s) : null}
+              </CardBody>
+            </Card>
+          </li>
+        ))}
+      </ul>
+
+      <Card className="hidden lg:block">
         <CardBody className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-line text-left text-xs text-subtle">
                   <th className="px-5 py-2.5 font-medium">Нэр</th>
@@ -174,111 +353,17 @@ export function StaffShell({
                   </tr>
                 ) : null}
                 {staff.map((s) => (
-                  <tr key={s.id} className="border-b border-line last:border-0">
+                  <tr key={s.id} className="border-b border-line align-top last:border-0">
                     <td className="px-5 py-2.5">
                       <p className="font-medium text-ink">{s.full_name ?? "—"}</p>
                       <p className="text-xs text-subtle">{s.email ?? ""}</p>
                     </td>
-                    <td className="px-5 py-2.5">
-                      <div className="flex flex-wrap gap-1">
-                        {s.roles.map((r) => (
-                          <Badge key={r} tone={r === "sysadmin" ? "rose" : r === "agent" ? "neutral" : "brand"}>
-                            {CRM_ROLE_LABEL[r]}
-                          </Badge>
-                        ))}
-                        {s.panel_admin ? <Badge tone="amber">Панелийн админ</Badge> : null}
-                      </div>
-                    </td>
+                    <td className="px-5 py-2.5">{roleBadges(s)}</td>
                     <td className="px-5 py-2.5 text-muted">
                       {branchName(s.branch_id)} / {teamName(s.team_id)}
                     </td>
-                    <td className="px-5 py-2.5">
-                      {s.removed ? (
-                        <Badge tone="rose">Хасагдсан</Badge>
-                      ) : !s.is_active ? (
-                        <Badge tone="neutral">Идэвхгүй</Badge>
-                      ) : s.offboarding ? (
-                        <Badge tone="amber">Гарах урсгалд</Badge>
-                      ) : isOnLeave(s.on_leave_from, s.on_leave_to, today) ? (
-                        <Badge tone="blue">Чөлөөтэй{s.on_leave_to ? ` · ${s.on_leave_to} хүртэл` : ""}</Badge>
-                      ) : (
-                        <Badge tone="green">Идэвхтэй</Badge>
-                      )}
-                      {s.on_leave_from && s.leave_substitute_id ? (
-                        <p className="mt-1 text-xs text-subtle">Орлон: {nameOf(s.leave_substitute_id)}</p>
-                      ) : null}
-                    </td>
-                    {canEdit && s.removed ? (
-                      <td className="px-5 py-2.5 text-right text-xs text-subtle">Түүх хадгалагдсан</td>
-                    ) : canEdit ? (
-                      <td className="px-5 py-2.5 text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            size="touch"
-                            variant="ghost"
-                            aria-label="Засах"
-                            onClick={() =>
-                              setDraft({
-                                id: s.id,
-                                profileId: s.profile_id,
-                                branchId: s.branch_id,
-                                teamId: s.team_id,
-                                roles: s.roles,
-                                panelAdmin: s.panel_admin,
-                              })
-                            }
-                          >
-                            <Pencil className="size-4" />
-                          </Button>
-                          {canManageLeave && s.is_active && !s.offboarding ? (
-                            <Button
-                              size="touch"
-                              variant="ghost"
-                              aria-label="Чөлөө"
-                              title="Чөлөө, түр хүлээлцэх"
-                              onClick={() =>
-                                setLeave({
-                                  staffId: s.id,
-                                  name: s.full_name ?? s.email ?? "",
-                                  from: s.on_leave_from ?? "",
-                                  to: s.on_leave_to ?? "",
-                                  substituteId: s.leave_substitute_id ?? "",
-                                  note: s.leave_note ?? "",
-                                })
-                              }
-                            >
-                              <Plane className="size-4" />
-                            </Button>
-                          ) : null}
-                          {s.is_active && !s.offboarding ? (
-                            <Button
-                              size="touch"
-                              variant="ghost"
-                              aria-label="Гарах урсгал эхлүүлэх"
-                              disabled={pending}
-                              onClick={() => act(() => startOffboarding(s.id))}
-                            >
-                              <LogOut className="size-4" />
-                            </Button>
-                          ) : null}
-                          {s.is_active ? (
-                            <Button
-                              size="touch"
-                              variant="ghost"
-                              aria-label="Идэвхгүй болгох"
-                              disabled={pending}
-                              onClick={() => act(() => deactivateStaff(s.id))}
-                            >
-                              <UserMinus className="size-4" />
-                            </Button>
-                          ) : (
-                            <Button size="touch" variant="ghost" disabled={pending} onClick={() => act(() => reactivateStaff(s.id))}>
-                              Сэргээх
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    ) : null}
+                    <td className="px-5 py-2.5">{statusBadge(s)}</td>
+                    {canEdit ? <td className="px-5 py-2.5 text-right">{actions(s)}</td> : null}
                   </tr>
                 ))}
               </tbody>
@@ -288,22 +373,85 @@ export function StaffShell({
       </Card>
 
       <Modal
+        open={confirm !== null}
+        onClose={() => !pending && setConfirm(null)}
+        closeOnBackdrop={!pending}
+        title={
+          confirm?.kind === "offboard"
+            ? `Гарах урсгал эхлүүлэх үү? — ${confirm ? displayName(confirm.staff) : ""}`
+            : `Идэвхгүй болгох уу? — ${confirm ? displayName(confirm.staff) : ""}`
+        }
+        footer={
+          <div className="flex flex-col-reverse gap-2 border-t border-line p-4 sm:flex-row sm:justify-end">
+            <Button variant="ghost" size="touch" disabled={pending} onClick={() => setConfirm(null)}>
+              Болих
+            </Button>
+            <Button
+              size="touch"
+              variant={confirm?.kind === "deactivate" ? "danger" : "primary"}
+              disabled={pending}
+              onClick={runConfirmed}
+            >
+              {confirm?.kind === "offboard" ? "Гарах урсгал эхлүүлэх" : "Идэвхгүй болгох"}
+            </Button>
+          </div>
+        }
+      >
+        {confirm ? (
+          <div className="space-y-3 p-4 text-sm text-ink">
+            {confirm.kind === "offboard" ? (
+              <ul className="list-disc space-y-1.5 pl-5">
+                <li>
+                  <b>{displayName(confirm.staff)}</b>-д «Таны CRM бүртгэлд гарах урсгал эхэллээ» гэсэн мэдэгдэл очно.
+                </li>
+                <li>Танд нэр бүхий хүлээлцэх даалгавар үүснэ.</li>
+                <li>
+                  Хэлцэл, харилцагч, хөрөнгийн үүрэг, нээлттэй ажлыг нь өөр агентад шилжүүлсний дараа «Идэвхгүй
+                  болгох» боломжтой.
+                </li>
+              </ul>
+            ) : (
+              <ul className="list-disc space-y-1.5 pl-5">
+                <li>
+                  <b>{displayName(confirm.staff)}</b> CRM-д нэвтрэх эрхээ алдаж, багийн чатаас хасагдана.
+                </li>
+                {isLead(confirm.staff) ? (
+                  <li>
+                    Багийн ахлагчийн эрх хасагдана — «Сэргээх» үед ахлагч <b>буцаж сэргэхгүй</b>, дахин томилно.
+                  </li>
+                ) : null}
+                <li>
+                  Нээлттэй хэлцэл, хөрөнгийн үүрэг, харилцагч, нээлттэй ажил эсвэл шийдвэрлээгүй хүсэлт үлдсэн бол
+                  идэвхгүй болгохгүй — эхлээд шилжүүлнэ.
+                </li>
+              </ul>
+            )}
+            {confirmError ? (
+              <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-danger">
+                {confirmError}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
         open={draft !== null}
         onClose={() => setDraft(null)}
         title={draft?.id ? "Ажилтан засах" : "Ажилтан нэмэх"}
         footer={
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setDraft(null)}>
+          <div className="flex flex-col-reverse gap-2 border-t border-line p-4 sm:flex-row sm:justify-end">
+            <Button variant="ghost" size="touch" onClick={() => setDraft(null)}>
               Болих
             </Button>
-            <Button onClick={submit} disabled={pending || !draft?.profileId || draft.roles.length === 0}>
+            <Button size="touch" onClick={submit} disabled={pending || !draft?.profileId || draft.roles.length === 0}>
               Хадгалах
             </Button>
           </div>
         }
       >
         {draft ? (
-          <div className="space-y-3">
+          <div className="space-y-3 p-4">
             {!draft.id ? (
               <Field label="Хэрэглэгч" htmlFor={`${fid}-user`}>
                 <Select id={`${fid}-user`} value={draft.profileId} onChange={(e) => setDraft({ ...draft, profileId: e.target.value })}>
@@ -395,18 +543,18 @@ export function StaffShell({
         onClose={() => setLeave(null)}
         title={leave ? `Чөлөө — ${leave.name}` : "Чөлөө"}
         footer={
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button variant="ghost" onClick={() => setLeave(null)}>
+          <div className="flex flex-col-reverse gap-2 border-t border-line p-4 sm:flex-row sm:justify-end">
+            <Button variant="ghost" size="touch" onClick={() => setLeave(null)}>
               Болих
             </Button>
-            <Button onClick={saveLeave} disabled={pending}>
+            <Button size="touch" onClick={saveLeave} disabled={pending}>
               Хадгалах
             </Button>
           </div>
         }
       >
         {leave ? (
-          <div className="space-y-3">
+          <div className="space-y-3 p-4">
             <p className="text-sm text-muted">
               Чөлөөний хугацаа ба орлон ажиллагчийг тэмдэглэнэ. Нээлттэй Staff хэлцлийг шилжүүлэх нь хэлцлийн хуудаснаас
               хийгдэнэ. Огноог хоосон болговол чөлөө цуцлагдана.

@@ -1,3 +1,13 @@
+import type { Metadata } from "next";
+
+import { withBrand } from "@/lib/seo/site";
+
+export const metadata: Metadata = {
+  title: withBrand("Нууцлалын бодлого"),
+  description: "Нэми ямар мэдээлэл цуглуулж, хэрхэн ашиглаж, хадгалдаг тухай.",
+  alternates: { canonical: "/privacy" },
+};
+
 export default function PrivacyPage() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-12">

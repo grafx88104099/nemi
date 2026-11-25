@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  chatBackUsesHistory,
   chatTimeLabel,
   filterStaffChats,
   groupMessagesByDay,
@@ -139,5 +140,31 @@ describe("newStaffMessageId", () => {
   it("randomUUID байхгүй үед хүчинтэй v4 UUID үүсгэнэ", () => {
     const source = { getRandomValues: <T extends ArrayBufferView>(a: T) => crypto.getRandomValues(a as never) as T };
     expect(newStaffMessageId(source as unknown as Crypto)).toMatch(UUID_V4);
+  });
+});
+
+describe("chatBackUsesHistory", () => {
+  const click = { button: 0, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false };
+  const chat = "/agent/chat/c1";
+  // Нэми дотроос (CRM-ийн карт г.м.) client navigation-оор чат руу орсон.
+  const inApp = { historyLength: 3, entryPath: "/agent/crm/staff/p1", currentPath: chat };
+  it("апп доторх түүхтэй бол өмнөх дэлгэц рүү (CRM-ийн карт г.м.)", () => {
+    expect(chatBackUsesHistory(inApp, click)).toBe(true);
+  });
+  it("түүхгүй (push мэдэгдлээс шууд нээсэн) бол чатын жагсаалт", () => {
+    expect(chatBackUsesHistory({ historyLength: 1, entryPath: chat, currentPath: chat }, click)).toBe(false);
+  });
+  it("түүхтэй ч чат өөрөө ачааллын хуудас (Google, Messenger-ээс орсон) бол — гадагш гаргахгүй", () => {
+    expect(chatBackUsesHistory({ historyLength: 4, entryPath: chat, currentPath: chat }, click)).toBe(false);
+    expect(chatBackUsesHistory({ historyLength: 4, entryPath: `${chat}/`, currentPath: chat }, click)).toBe(false);
+  });
+  it("ачааллын зам тодорхойгүй бол түүхээр буцахгүй", () => {
+    expect(chatBackUsesHistory({ ...inApp, entryPath: null }, click)).toBe(false);
+  });
+  it("Ctrl/⌘/Shift-тэй эсвэл баруун товч — хөтчийн анхдагч (шинэ цонх)", () => {
+    expect(chatBackUsesHistory(inApp, { ...click, metaKey: true })).toBe(false);
+    expect(chatBackUsesHistory(inApp, { ...click, ctrlKey: true })).toBe(false);
+    expect(chatBackUsesHistory(inApp, { ...click, shiftKey: true })).toBe(false);
+    expect(chatBackUsesHistory(inApp, { ...click, button: 1 })).toBe(false);
   });
 });

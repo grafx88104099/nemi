@@ -1,9 +1,12 @@
+import { headers } from "next/headers";
+
 import { Card, CardBody } from "@/components/ui/card";
 import { InstallPrompt } from "@/components/crm/mobile/InstallPrompt";
 import { PushToggle } from "@/components/crm/mobile/PushToggle";
 import { COMING_LATER_TEXT } from "@/lib/crm2/labels";
 import { getCrm2Context, getCrm2Settings } from "@/lib/crm2/context";
 import { isPilot, quickAddEnabled } from "@/lib/crm2/feature-flags";
+import { quickAddSettingText, sharePlatform } from "@/lib/crm2/share-help";
 
 export const metadata = { title: "Тохиргоо — CRM" };
 
@@ -19,6 +22,8 @@ export default async function AgentCrmSettingsPage() {
   const digestScope = settings?.["digest.scope"] ?? "off";
   const digest =
     !!settings && !!ctx && (digestScope === "all" || (digestScope === "pilot" && isPilot(settings, ctx.profileId)));
+  // «Хуваалцах» зөвхөн Android-д — iPhone-д хуулж буулгахыг зааварлана.
+  const platform = sharePlatform((await headers()).get("user-agent"));
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:py-6 md:px-6">
@@ -38,11 +43,7 @@ export default async function AgentCrmSettingsPage() {
             <dl className="mt-2 divide-y divide-line text-sm">
               <div className="py-2.5">
                 <dt className="text-muted">Шуурхай бүртгэл</dt>
-                <dd className="mt-0.5 font-medium text-ink">
-                  {quick
-                    ? "Танд нээлттэй — «+ Хөрөнгө» нэг дэлгэцээр бүртгэнэ. «Бүрэн форм» үргэлж нэг товшилтын зайтай."
-                    : "Бүрэн формоор бүртгэнэ. Утасны «Хуваалцах»-аар ирсэн зарын текст шуурхай бүртгэлээр нээгдэнэ."}
-                </dd>
+                <dd className="mt-0.5 font-medium text-ink">{quickAddSettingText(quick, platform)}</dd>
               </div>
               <div className="py-2.5">
                 <dt className="text-muted">Өдрийн дутуу бүртгэлийн сануулга</dt>

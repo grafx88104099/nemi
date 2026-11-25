@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-import { listingObjectPath, listingsPublicPrefix, sniffImage } from "@/lib/crm2/queries/import";
+import { listingObjectPath, listingPublicObjectUrl, listingsPublicPrefix, sniffImage } from "@/lib/crm2/queries/import";
 import { hintsFromRows, mostCommon } from "@/lib/crm2/queries/project-hints";
 import { digestPushAllowed, digestPushBody, digestPushTarget, isStaleEmptyDraft, teamFillStats } from "@/lib/crm2/queries/incomplete";
 import { aggregateStaffMetrics, median } from "@/lib/crm2/queries/metrics";
@@ -64,6 +64,22 @@ describe("listingObjectPath (R25 — URL-аар хэзээ ч татахгүй)"
     expect(listingObjectPath(`${PREFIX}a/b.jpg`, SB, "a/c.jpg")).toBeNull();
     expect(listingObjectPath(null, SB)).toBeNull();
     expect(listingObjectPath(`${PREFIX}a.jpg`, null)).toBeNull();
+  });
+});
+
+describe("listingPublicObjectUrl — татах URL-ийг сервер талд угсарна", () => {
+  it("баталгаажсан замаас манай төслийн нийтийн URL (хост = NEXT_PUBLIC_SUPABASE_URL)", () => {
+    expect(listingPublicObjectUrl(SB, "wm/a1c635f0/1700000000-0-123.jpg")).toBe(`${PREFIX}wm/a1c635f0/1700000000-0-123.jpg`);
+    expect(listingPublicObjectUrl(`${SB}/`, "a/b.webp")).toBe(`${PREFIX}a/b.webp`);
+  });
+  it("аюултай зам, буруу суурь URL → null (өөр хост руу хэзээ ч хандахгүй)", () => {
+    expect(listingPublicObjectUrl(SB, "../x.jpg")).toBeNull();
+    expect(listingPublicObjectUrl(SB, "a/../../b.jpg")).toBeNull();
+    expect(listingPublicObjectUrl(SB, "https://evil.example/x.jpg")).toBeNull();
+    expect(listingPublicObjectUrl(SB, "a?x=1")).toBeNull();
+    expect(listingPublicObjectUrl(SB, "")).toBeNull();
+    expect(listingPublicObjectUrl("http://abcd.supabase.co", "a.jpg")).toBeNull();
+    expect(listingPublicObjectUrl(undefined, "a.jpg")).toBeNull();
   });
 });
 

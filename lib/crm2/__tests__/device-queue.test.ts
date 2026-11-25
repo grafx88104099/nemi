@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { crm2Kv, memoryKv, setCrm2KvFactoryForTests } from "@/lib/crm2/device/vault";
 import { discardDraft, draftKey, getBlob, getBlobRecord, newDraft, putBlob, saveDraft, staffNewScope } from "@/lib/crm2/device/draft-store";
 import {
+  AUTO_VIDEO_MAX_BYTES,
   BACKOFF_MS,
   MAX_AUTO_ATTEMPTS,
   NOT_PDF_ERROR,
@@ -9,8 +10,10 @@ import {
   backoffDelay,
   bindProperty,
   configureQueueForTests,
+  connectionKind,
   dropWaitingFor,
   enqueue,
+  initialStatus,
   isPermanentUploadFailure,
   listQueue,
   pickNext,
@@ -18,6 +21,8 @@ import {
   retry,
   startQueue,
   summarize,
+  videoMayAutoSend,
+  waitWifiLabel,
   whenIdle,
   type QueueItem,
   type QueueTarget,
@@ -59,7 +64,7 @@ beforeEach(() => {
     uploaders,
     now: () => clock,
     online: () => true,
-    wifi: () => false,
+    net: () => "cellular",
     setTimer: () => null,
     clearTimer: () => undefined,
   });
@@ -115,9 +120,55 @@ describe("pure", () => {
   it("videos wait for Wi-Fi unless allowed", () => {
     const base = { profileId: P1, nextAt: 0, createdAt: 1 } as Partial<QueueItem>;
     const v = { ...base, id: "v", status: "waiting_wifi", isVideo: true } as QueueItem;
-    expect(pickNext([v], { now: 1, wifi: false, profileId: P1 })).toBeNull();
-    expect(pickNext([v], { now: 1, wifi: true, profileId: P1 })?.id).toBe("v");
-    expect(pickNext([{ ...v, allowCellular: true }], { now: 1, wifi: false, profileId: P1 })?.id).toBe("v");
+    expect(pickNext([v], { now: 1, net: "cellular", profileId: P1 })).toBeNull();
+    expect(pickNext([v], { now: 1, net: "wifi", profileId: P1 })?.id).toBe("v");
+    expect(pickNext([{ ...v, allowCellular: true }], { now: 1, net: "cellular", profileId: P1 })?.id).toBe("v");
+  });
+
+  it("connectionKind: iPhone (API-гүй) — тодорхойгүй, мобайл дата биш", () => {
+    const iphone = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148";
+    expect(connectionKind({ userAgent: iphone })).toBe("unknown");
+    expect(connectionKind({ userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" })).toBe("wifi");
+    expect(connectionKind({ connection: { type: "wifi" }, userAgent: "Android Mobile" })).toBe("wifi");
+    expect(connectionKind({ connection: { type: "cellular" }, userAgent: "Android Mobile" })).toBe("cellular");
+    expect(connectionKind({ connection: { saveData: true }, userAgent: "Android Mobile" })).toBe("cellular");
+    expect(connectionKind({ connection: {}, userAgentData: { mobile: true } })).toBe("unknown");
+    expect(connectionKind(null)).toBe("wifi");
+  });
+
+  it("«Wi-Fi хүлээх» шошго бодит дүрэмтэй таарна (iPhone: зөвхөн 15 МБ-аас томыг)", () => {
+    expect(waitWifiLabel("unknown")).toBe("15 МБ-аас томыг Wi-Fi-д хүлээх");
+    expect(waitWifiLabel("cellular")).toBe("Wi-Fi холбогдтол хүлээх");
+    expect(waitWifiLabel("wifi")).toBe("Wi-Fi холбогдтол хүлээх");
+    // Шошго хэлсэнтэй ижил: сонголттой (allowCellular=false) үед ч 15 МБ хүртэлх нь шууд явна.
+    const target = mediaTarget("c", PROP);
+    expect(initialStatus(target, true, "unknown", AUTO_VIDEO_MAX_BYTES, false)).toBe("queued");
+    expect(initialStatus(target, true, "unknown", AUTO_VIDEO_MAX_BYTES + 1, false)).toBe("waiting_wifi");
+  });
+
+  it("сүлжээ тодорхойгүй: жижиг бичлэг шууд, том нь асууна; мобайл датад хэзээ ч автоматаар биш", () => {
+    const small = 5 * 1024 * 1024;
+    const big = AUTO_VIDEO_MAX_BYTES + 1;
+    expect(videoMayAutoSend(small, "unknown")).toBe(true);
+    expect(videoMayAutoSend(AUTO_VIDEO_MAX_BYTES, "unknown")).toBe(true);
+    expect(videoMayAutoSend(big, "unknown")).toBe(false);
+    expect(videoMayAutoSend(0, "unknown")).toBe(false);
+    expect(videoMayAutoSend(small, "cellular")).toBe(false);
+    expect(videoMayAutoSend(big, "wifi")).toBe(true);
+
+    const target = mediaTarget("c", PROP);
+    expect(initialStatus(target, true, "unknown", small)).toBe("queued");
+    expect(initialStatus(target, true, "unknown", big)).toBe("waiting_wifi");
+    expect(initialStatus(target, true, "unknown", big, true)).toBe("queued");
+    expect(initialStatus(target, false, "cellular", big)).toBe("queued");
+
+    const base = { profileId: P1, nextAt: 0, createdAt: 1, isVideo: true, status: "waiting_wifi" } as Partial<QueueItem>;
+    const parkedSmall = { ...base, id: "s", bytes: small } as QueueItem;
+    const parkedBig = { ...base, id: "b", bytes: big } as QueueItem;
+    // Өмнөх хувилбар iPhone-д жижиг бичлэгийг ч зогсоосон — одоо суллагдана.
+    expect(pickNext([parkedSmall], { now: 1, net: "unknown", profileId: P1 })?.id).toBe("s");
+    expect(pickNext([parkedBig], { now: 1, net: "unknown", profileId: P1 })).toBeNull();
+    expect(pickNext([{ ...parkedBig, allowCellular: true }], { now: 1, net: "unknown", profileId: P1 })?.id).toBe("b");
   });
 });
 
@@ -187,8 +238,33 @@ describe("queue", () => {
     expect(rows[0].status).toBe("done");
   });
 
+  it("iPhone (сүлжээ тодорхойгүй): жижиг бичлэг өөрөө явна, том нь «Одоо илгээх» хүртэл хүлээнэ", async () => {
+    configureQueueForTests({ uploaders, now: () => clock, online: () => true, net: () => "unknown", setTimer: () => null, clearTimer: () => undefined });
+    await startQueue(P1);
+    const clip = new File([new Uint8Array(1024)], "clip.mp4", { type: "video/mp4" });
+    const big = new File([new Uint8Array(AUTO_VIDEO_MAX_BYTES + 1)], "long.mp4", { type: "video/mp4" });
+    const a = await enqueue({ profileId: P1, target: mediaTarget("c", PROP), blob: clip, name: "clip.mp4" });
+    const b = await enqueue({ profileId: P1, target: mediaTarget("c", PROP), blob: big, name: "long.mp4" });
+    expect(a.status).toBe("queued");
+    expect(b.status).toBe("waiting_wifi");
+    await whenIdle();
+    expect(calls.map((c) => c.name)).toEqual(["clip.mp4"]);
+    await retry(b.id);
+    await whenIdle();
+    expect(calls.map((c) => c.name)).toEqual(["clip.mp4", "long.mp4"]);
+  });
+
+  it("формд «Wi-Fi хүлээх»-ийг болиулсан бичлэг мобайл датад ч шууд явна", async () => {
+    await startQueue(P1);
+    const big = new File([new Uint8Array(AUTO_VIDEO_MAX_BYTES + 1)], "v.mp4", { type: "video/mp4" });
+    const item = await enqueue({ profileId: P1, target: mediaTarget("c", PROP), blob: big, name: "v.mp4", allowCellular: true });
+    expect(item).toMatchObject({ status: "queued", allowCellular: true });
+    await whenIdle();
+    expect(calls).toHaveLength(1);
+  });
+
   it("offline pauses without counting attempts", async () => {
-    configureQueueForTests({ uploaders, now: () => clock, online: () => false, wifi: () => true, setTimer: () => null, clearTimer: () => undefined });
+    configureQueueForTests({ uploaders, now: () => clock, online: () => false, net: () => "wifi", setTimer: () => null, clearTimer: () => undefined });
     await startQueue(P1);
     await enqueue({ profileId: P1, target: mediaTarget("c", PROP), blob: new File(["x"], "x.jpg", { type: "image/jpeg" }) });
     await whenIdle();
@@ -280,7 +356,7 @@ describe("queue", () => {
 
   it("sealed record holds no plaintext blob", async () => {
     // Хуулахгүйгээр (offline) хадгалсан төлвийг шалгана.
-    configureQueueForTests({ uploaders, now: () => clock, online: () => false, wifi: () => true, setTimer: () => null, clearTimer: () => undefined });
+    configureQueueForTests({ uploaders, now: () => clock, online: () => false, net: () => "wifi", setTimer: () => null, clearTimer: () => undefined });
     const item = await enqueue({
       profileId: P1,
       target: { kind: "brokerage", contractId: "k1", fileKind: "ownership", officeId: OFFICE, limits: docLimits },

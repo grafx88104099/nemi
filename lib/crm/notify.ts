@@ -54,11 +54,79 @@ function under(link: string, base: string): boolean {
 }
 
 /**
+ * CRM1 (2026-11-13-нд CRM2-оор солигдсон)-ийн мэдэгдлийн төрлүүд. Эдгээрийг одоо
+ * юу ч үүсгэдэггүй; хуучин мөрүүдийн холбоос CRM2-т байхгүй бичлэг рүү заадаг.
+ * supabase/migrations/20261125000300_notifications_cleanup.sql-тэй ижил жагсаалт.
+ */
+export const LEGACY_CRM_NOTIFICATION_TYPES = [
+  "crm_next_step_overdue",
+  "crm_lead_sla_breach",
+  "crm_hot_lead_inactive",
+  "crm_lead_unprotected",
+  "crm_lead_assigned",
+  "crm_offer_followup_due",
+  "crm_aml_threshold_due",
+  "crm_arrears_step",
+  "crm_monthly_record_due",
+] as const;
+
+/** CRM1-ийн устгасан сегмент → CRM2-ийн ойролцоо хэсэг (lib/crm-redirects-тэй ижил чиглэл). */
+const LEGACY_SEGMENTS: [segment: string, target: string][] = [
+  ["leads", "contacts"],
+  ["pipeline", "staff"],
+  ["deals", "staff"],
+  ["properties", "staff"],
+  ["transactions", "staff"],
+  ["listings", "staff"],
+  ["pool", "staff"],
+  ["disputes", "staff"],
+  ["commissions", "finance"],
+  ["rentals", "finance"],
+  ["aml", "finance"],
+  ["week", "calendar"],
+  ["worklists", "my-work"],
+];
+
+/**
+ * Хуучин CRM1 мэдэгдлийн холбоосыг CRM2-ийн хуудас руу шууд (next.config redirect-ийн
+ * дамжлагагүй) тааруулна. «Дараагийн алхам хоцорсон» (crm_next_step_overdue) нь ажил
+ * тул «Миний ажил» руу; бусад нь сегментийн ойролцоо хэсэг рүү. Устсан бичлэгийн id-г
+ * хаяна (CRM2-т тэр id байхгүй). CRM1 биш холбоосыг өөрчлөхгүй.
+ */
+export function legacyCrmLink(link: string, type?: string | null): string {
+  for (const base of [AGENT_BASE, OFFICE_BASE]) {
+    if (!link.startsWith(`${base}/`)) continue;
+    const segment = link.slice(base.length + 1).split(/[/?#]/, 1)[0];
+    const hit = LEGACY_SEGMENTS.find(([s]) => s === segment);
+    if (!hit) return link;
+    if (type === "crm_next_step_overdue") return `${base}/my-work`;
+    return `${base}/${hit[1]}`;
+  }
+  return link;
+}
+
+/**
+ * Мэдэгдлийн холбоос (хонх): CRM1-ийн хуучин холбоосыг CRM2 руу, `panel="office"` үед
+ * оффисын панель руу. Холбоосгүй бол null.
+ */
+export function notificationHref(
+  link: string | null | undefined,
+  type?: string | null,
+  panel?: "office"
+): string | null {
+  if (!link) return null;
+  const l = legacyCrmLink(link, type);
+  return panel === "office" ? panelLink(l, "office_admin") : l;
+}
+
+/**
  * Холбоосыг хүлээн авагчийн панельд тааруулна. Хоёр панель CRM-д ижил
  * сегменттэй тул суурь замыг солино; ялгаатай нь зөвхөн баг (агент
  * /team/monitor ↔ оффис /teams), оффисын тохиргоо ба мэдэгдлийн хуудас.
+ * CRM1-ийн устгасан сегментийг (leads, pipeline, deals …) эхлээд CRM2 руу тааруулна.
  */
-export function panelLink(link: string, profileRole: string | null | undefined): string {
+export function panelLink(rawLink: string, profileRole: string | null | undefined): string {
+  const link = legacyCrmLink(rawLink);
   if (isOfficeRole(profileRole)) {
     if (under(link, `${AGENT_BASE}/team`)) return `${OFFICE_BASE}/teams`;
     return under(link, AGENT_BASE) ? `${OFFICE_BASE}${link.slice(AGENT_BASE.length)}` : link;

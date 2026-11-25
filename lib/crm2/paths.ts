@@ -33,6 +33,13 @@ export const PROPERTY_TAB_LABEL: Record<PropertyTab, string> = {
   history: "Өөрчлөлтийн түүх",
 };
 
+/** Утсанд (sm-ээс доош) табын богино нэр — 375px-д илүү таб харагдана. */
+export const PROPERTY_TAB_SHORT_LABEL: Partial<Record<PropertyTab, string>> = {
+  info: "Үндсэн",
+  agreement: "Гэрээ",
+  history: "Түүх",
+};
+
 export function isPropertyTab(v: string | null | undefined): v is PropertyTab {
   return !!v && (PROPERTY_TABS as readonly string[]).includes(v);
 }
